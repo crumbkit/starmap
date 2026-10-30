@@ -1,14 +1,18 @@
 # The scheduled lane, which the map's `lanes` decision records (BASE-25).
-# The advisories job checks for new advisories against the locked
-# dependencies (BASE-29). The properties job runs every property test with
-# 10,000 cases, where the pull-request lane runs proptest's default of 256.
-# The report job keeps every failure on one issue. Nothing waits for this
-# lane.
+# The advisories job runs daily and checks for new advisories against the
+# locked dependencies (BASE-29). The properties job runs weekly and runs every
+# property test with 10,000 cases, where the pull-request lane runs
+# proptest's default of 256. A manual run starts both jobs. The report job
+# keeps every failure on one issue. Nothing waits for this lane.
 name: Scheduled
 
 on:
   schedule:
-    - cron: "43 6 * * *" # Daily at 06:43 UTC.
+    # Each job's `if` repeats the cron expression it runs on. A change to a
+    # cron line must change that `if` too, or the job is skipped on every
+    # scheduled run and no failure is reported.
+    - cron: "43 6 * * *" # Daily at 06:43 UTC, for advisories.
+    - cron: "17 7 * * 1" # Mondays at 07:17 UTC, for properties.
   workflow_dispatch:
 
 # Each job grants only the permissions it needs.
@@ -21,6 +25,7 @@ env:
 
 jobs:
   advisories:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '43 6 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -40,6 +45,7 @@ jobs:
   # The job has no rust-cache, because rust-cache keys include the job ID,
   # so its cache would not help the pull-request lane.
   properties:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 7 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -47,7 +53,7 @@ jobs:
     env:
       # A variable set in the job wins over the [env] table of
       # .cargo/config.toml. Each run uses a new seed, its run id, so the
-      # daily runs try different cases, and the run id reproduces a failure.
+      # weekly runs try different cases, and the run id reproduces a failure.
       PROPTEST_CASES: 10000
       PROPTEST_RNG_SEED: ${{ github.run_id }}
     steps:
@@ -64,8 +70,9 @@ jobs:
 
   # When a job of this lane fails, this job comments on the open issue titled
   # "Scheduled CI failed", or opens that issue when none is open, so failures
-  # collect in one place. It uses the gh CLI that the ubuntu-slim image
-  # includes.
+  # collect in one place. Each scheduled run starts one of the two jobs and
+  # skips the other, and a skipped job does not make failure() true. It uses
+  # the gh CLI that the ubuntu-slim image includes.
   report:
     needs: [advisories, properties]
     if: failure()
