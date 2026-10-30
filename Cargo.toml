@@ -22,6 +22,16 @@ repository = "https://github.com/crumbkit/starmap"
 # for it, so each crate enables only the features its own code needs.
 clap = { version = "4.6.7", default-features = false, features = ["std"] }
 
+# url parses the value of a variable whose type is "url" by the WHATWG URL
+# Standard, which browsers and most HTTP clients follow. Its default `std`
+# feature adds only file-path conversions and socket address lookup, which
+# starmap does not use.
+url = { version = "2.5.8", default-features = false }
+
+# proptest checks the checking constructors and the forms against generated
+# inputs, and the lanes decision sets its case counts. Only tests use it.
+proptest = { version = "1.12.0", default-features = false }
+
 # The lint table is lints/base.toml and lints/library.toml of the Rust
 # standards (BASE-1, LIB-2, LIB-3). A build with CARGO_BUILD_WARNINGS=deny
 # fails on any warning, and every package inherits the table through
