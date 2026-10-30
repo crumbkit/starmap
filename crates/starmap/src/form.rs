@@ -280,8 +280,7 @@ impl IntegerRange {
     }
 
     /// Returns whether `number` lies in the range.
-    #[must_use]
-    pub fn contains(self, number: i64) -> bool {
+    pub(crate) fn contains(self, number: i64) -> bool {
         (self.min..=self.max).contains(&number)
     }
 
@@ -308,10 +307,22 @@ impl IntegerRange {
 /// The reason two bounds do not make an [`IntegerRange`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RangeError {
-    /// The minimum that was given.
-    pub min: i64,
-    /// The maximum that was given, which is below the minimum.
-    pub max: i64,
+    min: i64,
+    max: i64,
+}
+
+impl RangeError {
+    /// Returns the minimum that was given.
+    #[must_use]
+    pub fn min(&self) -> i64 {
+        self.min
+    }
+
+    /// Returns the maximum that was given, which is below the minimum.
+    #[must_use]
+    pub fn max(&self) -> i64 {
+        self.max
+    }
 }
 
 impl fmt::Display for RangeError {
@@ -423,8 +434,7 @@ impl Choices {
     }
 
     /// Returns the choice that equals `text` exactly, if there is one.
-    #[must_use]
-    pub fn get(&self, text: &str) -> Option<&Choice> {
+    pub(crate) fn get(&self, text: &str) -> Option<&Choice> {
         self.0.iter().find(|choice| choice.as_str() == text)
     }
 }

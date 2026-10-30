@@ -5,14 +5,14 @@ use std::ffi::OsStr;
 use proptest::prelude::*;
 
 use super::{Mode, ModeRule};
-use crate::{Choice, Name};
+use crate::{Choice, Choices, Name};
 
 /// Returns the rule of the example spec: `SHELF_ENV` selects production
 /// when it is `prod` or `live`.
 fn rule() -> ModeRule {
     let variable: Name = "SHELF_ENV".parse().unwrap();
     let production = ["prod", "live"].map(|value| value.parse::<Choice>().unwrap());
-    ModeRule::new(variable, production)
+    ModeRule::new(variable, Choices::new(production).unwrap())
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn the_rule_names_its_variable() {
 #[test]
 fn the_rule_lists_its_production_values_in_order() {
     let rule = rule();
-    let values: Vec<&str> = rule.production().map(Choice::as_str).collect();
+    let values: Vec<&str> = rule.production().iter().map(Choice::as_str).collect();
 
     assert_eq!(values, ["prod", "live"]);
 }
@@ -42,13 +42,6 @@ fn each_production_value_selects_production_mode() {
 #[test]
 fn a_production_value_in_another_case_selects_local_mode() {
     assert_eq!(rule().decide(Some(OsStr::new("PROD"))), Mode::Local);
-}
-
-#[test]
-fn a_rule_without_production_values_always_selects_local_mode() {
-    let rule = ModeRule::new("SHELF_ENV".parse().unwrap(), []);
-
-    assert_eq!(rule.decide(Some(OsStr::new("prod"))), Mode::Local);
 }
 
 #[test]

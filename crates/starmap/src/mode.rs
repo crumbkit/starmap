@@ -3,7 +3,7 @@
 use std::ffi::OsStr;
 use std::fmt;
 
-use crate::{Choice, Name};
+use crate::{Choices, Name};
 
 #[cfg(test)]
 mod tests;
@@ -30,11 +30,12 @@ impl fmt::Display for Mode {
 }
 
 /// The `[mode]` table of a `starmap.toml`: the variable that selects the
-/// mode, and the values of it that select production.
+/// mode, and the values of it that select production, of which there is at
+/// least one and none repeats.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModeRule {
     variable: Name,
-    production: Vec<Choice>,
+    production: Choices,
 }
 
 impl ModeRule {
@@ -42,10 +43,10 @@ impl ModeRule {
     /// the `production` values. The spec parser checks that the variable is
     /// declared and that it is a setting or inherited variable.
     #[must_use]
-    pub fn new(variable: Name, production: impl IntoIterator<Item = Choice>) -> Self {
+    pub fn new(variable: Name, production: Choices) -> Self {
         Self {
             variable,
-            production: production.into_iter().collect(),
+            production,
         }
     }
 
@@ -57,8 +58,9 @@ impl ModeRule {
 
     /// Returns the values that select production, in the order the spec
     /// lists them.
-    pub fn production(&self) -> impl Iterator<Item = &Choice> {
-        self.production.iter()
+    #[must_use]
+    pub fn production(&self) -> &Choices {
+        &self.production
     }
 
     /// Decides the mode from the mode variable's value after defaults apply.
@@ -67,11 +69,9 @@ impl ModeRule {
     /// when the variable is unset.
     #[must_use]
     pub fn decide(&self, value: Option<&OsStr>) -> Mode {
-        let production = value.is_some_and(|value| {
-            self.production
-                .iter()
-                .any(|choice| OsStr::new(choice.as_str()) == value)
-        });
+        let production = value
+            .and_then(OsStr::to_str)
+            .is_some_and(|value| self.production.get(value).is_some());
         if production {
             Mode::Production
         } else {

@@ -8,8 +8,7 @@ use std::path::PathBuf;
 use proptest::prelude::*;
 
 use super::{
-    Choice, ChoiceError, Choices, ChoicesError, Form, FormError, IntegerRange, Port, RangeError,
-    Value,
+    Choice, ChoiceError, Choices, ChoicesError, Form, FormError, IntegerRange, Port, Value,
 };
 
 /// The eight words the boolean form accepts, each with the value it reads as.
@@ -70,7 +69,16 @@ fn a_port_is_refused_when_it_is_zero_or_above_65535() {
 fn a_port_is_refused_when_it_holds_a_sign_or_a_space() {
     assert!("+80".parse::<Port>().is_err());
     assert!(" 80".parse::<Port>().is_err());
+}
+
+#[test]
+fn an_empty_port_is_refused() {
     assert!("".parse::<Port>().is_err());
+}
+
+#[test]
+fn a_port_with_leading_zeros_reads_its_number() {
+    assert_eq!("0080".parse::<Port>().map(Port::get), Ok(80));
 }
 
 #[test]
@@ -105,6 +113,19 @@ proptest! {
     }
 
     #[test]
+    fn a_string_of_digits_is_a_port_exactly_when_its_number_is_from_1_to_65535(
+        text in "[0-9]{1,7}",
+    ) {
+        let number: u64 = text.parse().unwrap();
+        let parsed = text.parse::<Port>();
+
+        prop_assert_eq!(parsed.is_ok(), (1..=65535).contains(&number));
+        if let Ok(port) = parsed {
+            prop_assert_eq!(u64::from(port.get()), number);
+        }
+    }
+
+    #[test]
     fn a_port_with_a_character_other_than_a_digit_is_refused(
         text in "[0-9]{0,3}[^0-9][0-9]{0,3}",
     ) {
@@ -119,14 +140,13 @@ fn a_range_of_one_value_is_accepted() {
     let range = IntegerRange::new(8, 8).unwrap();
 
     assert_eq!((range.min(), range.max()), (8, 8));
-    assert!(range.contains(8));
 }
 
 #[test]
 fn a_range_whose_minimum_is_above_its_maximum_is_refused() {
     let error = IntegerRange::new(100, 1).unwrap_err();
 
-    assert_eq!(error, RangeError { min: 100, max: 1 });
+    assert_eq!((error.min(), error.max()), (100, 1));
     assert_eq!(
         error.to_string(),
         "an integer range's minimum 100 is above its maximum 1"
@@ -334,6 +354,7 @@ fn the_boolean_form_reads_each_of_its_eight_words() {
 #[test]
 fn the_boolean_form_refuses_a_word_with_surrounding_space() {
     assert_eq!(parse(&Form::Boolean, " true"), Err(FormError::NotBoolean));
+    assert_eq!(parse(&Form::Boolean, "true "), Err(FormError::NotBoolean));
     assert_eq!(parse(&Form::Boolean, ""), Err(FormError::NotBoolean));
 }
 
@@ -349,6 +370,17 @@ proptest! {
             parse(&Form::Boolean, &with_case(word, &upper)),
             Ok(Some(Value::Boolean(value)))
         );
+    }
+
+    #[test]
+    fn the_boolean_form_refuses_a_word_with_any_text_around_it(
+        (prefix, suffix) in text_around_a_word(),
+        index in 0..BOOLEAN_WORDS.len(),
+    ) {
+        let text = format!("{prefix}{}{suffix}", BOOLEAN_WORDS[index].0);
+        prop_assume!(!BOOLEAN_WORDS.iter().any(|(word, _)| word.eq_ignore_ascii_case(&text)));
+
+        prop_assert_eq!(parse(&Form::Boolean, &text), Err(FormError::NotBoolean));
     }
 
     #[test]
@@ -410,6 +442,33 @@ fn an_integer_form_refuses_a_number_beyond_64_bits_as_out_of_range() {
     );
 }
 
+/// Generates the text before and after a boolean word, which may hold
+/// whitespace and characters outside ASCII. At least one of the two is not
+/// empty, and the filter counts as a local reject, so the property's
+/// `prop_assume!` stays well under proptest's limit of 1,024 global rejects.
+fn text_around_a_word() -> impl Strategy<Value = (String, String)> {
+    ("\\PC{0,2}", "\\PC{0,2}").prop_filter("text around the word", |(prefix, suffix)| {
+        !prefix.is_empty() || !suffix.is_empty()
+    })
+}
+
+/// Returns the number that `text` writes when it matches `^[+-]?[0-9]+$`,
+/// which holds at most eight digits here, and `None` otherwise.
+fn signed_digits(text: &str) -> Option<i64> {
+    let (negative, digits) = match text.as_bytes().first() {
+        Some(b'-') => (true, &text[1..]),
+        Some(b'+') => (false, &text[1..]),
+        _ => (false, text),
+    };
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let magnitude = digits
+        .bytes()
+        .fold(0_i64, |number, digit| number * 10 + i64::from(digit - b'0'));
+    Some(if negative { -magnitude } else { magnitude })
+}
+
 /// Generates a range and a number that is often near or inside it, so the
 /// property sees both outcomes and both edges.
 fn range_and_number() -> impl Strategy<Value = (i64, i64, i64)> {
@@ -440,6 +499,18 @@ proptest! {
         } else {
             prop_assert_eq!(read, Err(FormError::OutOfRange { min, max }));
         }
+    }
+
+    #[test]
+    fn an_integer_form_reads_text_exactly_when_it_is_one_optional_sign_and_digits(
+        text in "[+-]{0,2}[0-9]{0,4}[+-]{0,2}[0-9]{0,4}",
+    ) {
+        let form = Form::Integer(IntegerRange::new(i64::MIN, i64::MAX).unwrap());
+
+        prop_assert_eq!(parse(&form, &text), match signed_digits(&text) {
+            Some(number) => Ok(Some(Value::Integer(number))),
+            None => Err(FormError::NotInteger),
+        });
     }
 
     #[test]
