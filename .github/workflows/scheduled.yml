@@ -9,7 +9,6 @@ name: Scheduled
 on:
   schedule:
     - cron: "43 6 * * *" # Daily at 06:43 UTC.
-  workflow_dispatch:
 
 # Each job grants only the permissions it needs.
 permissions: {}
