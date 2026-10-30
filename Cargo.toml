@@ -69,9 +69,7 @@ missing_panics_doc = "deny"              # LIB-2
 must_use_candidate = "deny"              # LIB-3
 
 # Arithmetic overflow panics in release builds too (BASE-27). The map's
-# release-profile decision records the other settings.
+# release-profile decision records why the other settings keep Cargo's
+# defaults.
 [profile.release]
 overflow-checks = true
-lto = "thin"
-codegen-units = 1
-strip = "symbols"

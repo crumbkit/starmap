@@ -8,7 +8,9 @@ xtask = "run --package xtask --"
 # holds the failing input instead. proptest turns persistence off whenever
 # its variable is set, whatever the value. A variable that is already set in
 # the shell wins, so `PROPTEST_RNG_SEED=7` or `PROPTEST_CASES=10000` changes
-# one local run, and the scheduled lane sets `PROPTEST_CASES=10000`.
+# one local run. The scheduled lane sets `PROPTEST_CASES=10000` and sets
+# `PROPTEST_RNG_SEED` to its run id, so each scheduled run uses a new seed
+# and the run id reproduces it.
 [env]
 PROPTEST_RNG_SEED = "1"
 PROPTEST_DISABLE_FAILURE_PERSISTENCE = "true"

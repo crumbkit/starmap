@@ -62,6 +62,8 @@ jobs:
       - uses: release-plz/action@7ef5e4d4b0420630cfcaeb182c01e13651d4c577 # v0.5.145
         with:
           command: release
+          # The release-plz version is pinned (BASE-26).
+          version: 0.4.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -103,5 +105,7 @@ jobs:
       - uses: release-plz/action@7ef5e4d4b0420630cfcaeb182c01e13651d4c577 # v0.5.145
         with:
           command: release-pr
+          # The release-plz version is pinned (BASE-26).
+          version: 0.4.0
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

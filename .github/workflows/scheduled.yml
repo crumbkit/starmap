@@ -9,6 +9,7 @@ name: Scheduled
 on:
   schedule:
     - cron: "43 6 * * *" # Daily at 06:43 UTC.
+  workflow_dispatch:
 
 # Each job grants only the permissions it needs.
 permissions: {}
@@ -45,8 +46,10 @@ jobs:
       contents: read # actions/checkout reads the repository.
     env:
       # A variable set in the job wins over the [env] table of
-      # .cargo/config.toml, which keeps the fixed seed.
+      # .cargo/config.toml. Each run uses a new seed, its run id, so the
+      # daily runs try different cases, and the run id reproduces a failure.
       PROPTEST_CASES: 10000
+      PROPTEST_RNG_SEED: ${{ github.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
