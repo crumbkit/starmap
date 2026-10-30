@@ -14,6 +14,9 @@ include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 [[bin]]
 name = "starmap"
 path = "src/main.rs"
+# The binary has no API to document, and its docs would take the crate name
+# that rustdoc gives the library docs of the workspace (LIB-2).
+doc = false
 
 [lints]
 workspace = true
