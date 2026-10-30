@@ -6,15 +6,16 @@ that [rust-standards.toml](rust-standards.toml) adopts.
 A change is ready when the pull-request lane passes:
 
 ```sh
+export CARGO_BUILD_WARNINGS=deny
 cargo fmt --check
 zizmor .
 cargo deny --locked check bans licenses sources
 cargo shear
-CARGO_BUILD_WARNINGS=deny cargo clippy --locked --workspace --all-targets --all-features
+cargo clippy --locked --workspace --all-targets --all-features
 cargo nextest run --locked --workspace --all-features
 cargo test --locked --doc --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --no-deps
-CARGO_BUILD_WARNINGS=deny cargo hack clippy --locked --workspace --each-feature --all-targets
+cargo hack clippy --locked --workspace --each-feature --all-targets
 cargo +1.89.0 check --locked --workspace --all-targets --all-features
 cargo xtask check
 ```

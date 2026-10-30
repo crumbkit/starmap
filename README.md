@@ -19,7 +19,7 @@ starmap is under construction, and no crate has been published yet.
 | [`starmap-derive`](crates/starmap-derive) | Provides `#[derive(Env)]` and `#[derive(Enumeration)]`, which `starmap` re-exports behind its `derive` feature. |
 | [`starmap-test`](crates/starmap-test) | Provides the test that keeps an application's declaration and its reads matched. |
 | [`starmap-resolve`](crates/starmap-resolve) | Turns bindings into values for the programs that start applications. Its `one-password` and `keychain` features are off by default. |
-| [`starmap-cli`](crates/starmap-cli) | Builds the `starmap` command, with `init`, `check`, `explain`, `diff` and `run`. |
+| [`starmap-cli`](crates/starmap-cli) | Builds the `starmap` command, which will have the commands `init`, `check`, `explain`, `diff` and `run`. |
 
 An application depends on `starmap` with its `derive` feature, and on
 `starmap-test` as a dev-dependency.
