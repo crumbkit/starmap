@@ -43,6 +43,23 @@ fn words_are_separated_by_any_whitespace() {
 }
 
 #[test]
+fn words_separated_by_mixed_whitespace_are_counted_against_the_limit() {
+    let agents = File {
+        path: "AGENTS.md".to_owned(),
+        contents: format!("{}last", "one\ttwo\n\nthree   four\r\n".repeat(50)),
+    };
+    assert_eq!(
+        check(&[agents]),
+        [Violation::OverLimit {
+            path: "AGENTS.md".to_owned(),
+            measured: 201,
+            unit: "words",
+            limit: 200,
+        }]
+    );
+}
+
+#[test]
 fn a_long_file_with_another_name_is_not_checked() {
     assert_eq!(check(&[file("README.md", 1000)]), []);
 }
