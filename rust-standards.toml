@@ -1,0 +1,45 @@
+# starmap's adoption map of the Rust standards (adoption.md of
+# https://github.com/crumbkit/rust-standards). The standards have no released
+# version yet, so the map names the draft and the commit it was reviewed
+# against.
+
+schema = "rust-standards/adoption/v1"
+standards = { version = "draft", commit = "7c9a7577fed4fe5ba0682960c0380af0a75dace4" }
+
+# starmap publishes library crates, builds the `starmap` command, and starts
+# other programs: `op read`, `git show` and the child of `starmap run`.
+profiles = ["base", "library", "cli", "child-process"]
+
+[[binding]]
+rule = "BASE-21"
+owners = ["xtask/src/check/rust_lines.rs"]
+checks = ["`cargo xtask check`, the `repository` step of the pull-request lane"]
+note = "The check counts the lines of each production `.rs` file that git lists, and skips `foo/tests.rs` and files under `tests/` and `benches/`."
+
+[[decision]]
+id = "lanes"
+requirement = """
+- Lane: `lane` in .github/workflows/ci.yml, on each pull request and each push to main. It runs every step of the pull-request lane in the standards' order (format, workflows, deny, shear, clippy, tests, doctests, rustdoc, features), then `msrv` (LIB-4) and `repository`, which is `cargo xtask check`. Property tests run with proptest's default of 256 cases and the fixed seed of .cargo/config.toml. Its budget is ten minutes, the job's timeout. `lane` is the required check, and a merge waits for it once the repository ruleset requires it.
+- Lane: `properties` in .github/workflows/scheduled.yml, daily at 06:43 UTC and on demand. It runs the tests with `PROPTEST_CASES=10000`, so each property runs 10,000 cases, and with `PROPTEST_RNG_SEED` set to the workflow's run id, so each run uses a new seed and the run id reproduces a failure. Nothing waits for it, and a failure comments on the open "Scheduled CI failed" issue or opens it.
+- Lane: `advisories` in .github/workflows/scheduled.yml, daily at 06:43 UTC and on demand, and again in .github/workflows/release.yml, where `publish` waits for it (BASE-29). The scheduled run reports a failure on the same issue.
+- Lane: `publish` and `pull-request` in .github/workflows/release.yml, on each push to main. Both run only while the repository variable RELEASE_ENABLED is `true`, and release-plz.toml lists the owner's steps before then.
+"""
+reason = "The pull-request lane stays within ten minutes on an empty workspace and grows with the code. A property that fails only after many cases is found by the daily 10,000-case run, and finding it after merge is safe because the failure prints the smallest failing input, which a unit test then holds, and the run id reproduces the run. A daily advisory run catches an advisory published against a dependency already on main, and finding it after merge is safe because the release lane refuses to publish until it passes."
+realizations = [
+  ".github/workflows/ci.yml",
+  ".github/workflows/scheduled.yml",
+  ".github/workflows/release.yml",
+  ".cargo/config.toml",
+]
+
+[[decision]]
+id = "release-profile"
+requirement = "`[profile.release]` sets `overflow-checks = true` and leaves `lto`, `codegen-units` and `strip` at Cargo's defaults."
+reason = "starmap ships no binary yet, so no measurement shows what a size or speed setting would gain. The release pull request (row 14 of the build plan) decides how the binary ships and records its settings here."
+realizations = ["Cargo.toml"]
+
+[[decision]]
+id = "agents-words"
+requirement = "Every `AGENTS.md` has at most 200 whitespace-separated words. `cargo xtask check` counts them and fails, naming each file over the limit."
+reason = "An agent reads AGENTS.md at the start of every session, so each word costs every session. The file holds only what no tool or other document tells the agent."
+realizations = ["xtask/src/check/agents_words.rs", "AGENTS.md"]

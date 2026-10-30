@@ -1,0 +1,111 @@
+# The release lane, which the map's `lanes` decision records. On each push to
+# main, release-plz opens or updates the release pull request, and publishes
+# to crates.io every version that crates.io does not have yet, after the
+# advisories check passes (BASE-29). release-plz.toml says which crates it
+# releases. Every job runs only in this repository, so a push to a fork's
+# main does nothing, and only while the repository variable RELEASE_ENABLED
+# is `true`, which the owner sets after publishing 0.1.0 by hand. No job uses
+# rust-cache, because a poisoned cache would reach the published crates, and
+# zizmor fails a release workflow that restores a cache.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Each job grants only the permissions it needs.
+permissions: {}
+
+jobs:
+  advisories:
+    if: github.repository == 'crumbkit/starmap' && vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # actions/checkout reads the repository.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-deny@0.20.2
+          fallback: none
+      - name: advisories
+        run: cargo deny --locked check advisories
+
+  # This job publishes the versions that the merged release pull request set,
+  # tags the release and creates its GitHub release. It has no concurrency
+  # group, because a newer push to main would cancel a publish halfway.
+  publish:
+    needs: advisories
+    if: github.repository == 'crumbkit/starmap' && vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # crates.io trusted publishing accepts a token request only from this
+    # repository, this workflow file and this environment.
+    environment: crates-io
+    permissions:
+      contents: write # release-plz pushes the release tag and creates the GitHub release.
+      pull-requests: read # release-plz finds the merged release pull request and its commits.
+      id-token: write # release-plz exchanges the job's OIDC token for a crates.io token.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # release-plz reads the history to find the commits of a release.
+          fetch-depth: 0
+          persist-credentials: false
+      # rustup installs the toolchain that rust-toolchain.toml pins, and
+      # cargo publish builds each crate with it.
+      - run: rustup toolchain install
+      - uses: release-plz/action@7ef5e4d4b0420630cfcaeb182c01e13651d4c577 # v0.5.145
+        with:
+          command: release
+          # The release-plz version is pinned (BASE-26).
+          version: 0.4.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  # This job opens or updates the release pull request, which sets the next
+  # version, moves the changelog's entries under its heading and reports
+  # cargo-semver-checks against the last published version (LIB-7). It uses
+  # a token of the release GitHub App, because GitHub runs no workflow on a
+  # pull request that the job's own token opens.
+  pull-request:
+    if: github.repository == 'crumbkit/starmap' && vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # actions/checkout reads the repository.
+    # A newer push to main waits for this run instead of cancelling it, so a
+    # half-written release branch is never left behind.
+    concurrency:
+      group: release-pull-request
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # release-plz reads the history to find the commits since the last
+          # release.
+          fetch-depth: 0
+          persist-credentials: false
+      # rustup installs the toolchain that rust-toolchain.toml pins.
+      # release-plz and cargo-semver-checks build the crates with it.
+      - run: rustup toolchain install
+      # The token can write only this repository's contents and pull
+      # requests, and the action revokes it when the job ends.
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: release-plz/action@7ef5e4d4b0420630cfcaeb182c01e13651d4c577 # v0.5.145
+        with:
+          command: release-pr
+          # The release-plz version is pinned (BASE-26).
+          version: 0.4.0
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

@@ -1,0 +1,23 @@
+[package]
+name = "xtask"
+description = "Repository checks for starmap, run with cargo xtask"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+# clap parses xtask's subcommands. xtask enables derive for its command type,
+# and help, usage and error-context so that a contributor who mistypes a
+# command sees the usage line and the reason it was refused.
+clap = { workspace = true, features = [
+    "derive",
+    "help",
+    "usage",
+    "error-context",
+] }
+
+[lints]
+workspace = true

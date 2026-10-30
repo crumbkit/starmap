@@ -1,0 +1,22 @@
+[package]
+name = "starmap-resolve"
+description = "Resolves the values of an application's declared environment variables for the program that starts it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["environment", "configuration", "secrets"]
+categories = ["config"]
+include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+# No feature is on by default (LIB-6).
+[features]
+# one-password reads a secret through the 1Password CLI's `op read`.
+one-password = []
+# keychain creates, reads and forgets generated secrets in the macOS Keychain.
+keychain = []
+
+[lints]
+workspace = true

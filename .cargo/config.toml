@@ -1,0 +1,16 @@
+[alias]
+xtask = "run --package xtask --"
+
+# proptest reads these variables when a property test starts, and cargo test
+# and cargo nextest both pass them to the tests. A fixed seed makes a CI run
+# generate the same cases on every machine. Failure persistence is off, so
+# proptest writes no regression files, because a fix adds a unit test that
+# holds the failing input instead. proptest turns persistence off whenever
+# its variable is set, whatever the value. A variable that is already set in
+# the shell wins, so `PROPTEST_RNG_SEED=7` or `PROPTEST_CASES=10000` changes
+# one local run. The scheduled lane sets `PROPTEST_CASES=10000` and sets
+# `PROPTEST_RNG_SEED` to its run id, so each scheduled run uses a new seed
+# and the run id reproduces it.
+[env]
+PROPTEST_RNG_SEED = "1"
+PROPTEST_DISABLE_FAILURE_PERSISTENCE = "true"

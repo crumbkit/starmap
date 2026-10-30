@@ -1,0 +1,18 @@
+[package]
+name = "starmap-derive"
+description = "The derive macros of starmap, which read an application's environment into a typed struct"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["environment", "configuration", "derive"]
+categories = ["config"]
+include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true

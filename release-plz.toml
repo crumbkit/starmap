@@ -1,0 +1,78 @@
+# release-plz opens the release pull request and publishes the five crates
+# through crates.io trusted publishing. `.github/workflows/release.yml` runs
+# it on each push to main. A setting that is release-plz's default is left
+# out, such as `semver_check = true`, which runs cargo-semver-checks against
+# the last published version from 0.1.1 onward (LIB-7).
+#
+# The owner's one-time steps before the first automated release. The pull
+# request that follows the last step deletes this comment. release.yml runs
+# no job until step 6 sets the RELEASE_ENABLED variable, so a merge to main
+# publishes nothing before the owner publishes 0.1.0 by hand in step 4.
+#
+# 1. Create a GitHub App for release pull requests, in the crumbkit
+#    organisation's settings under Developer settings, GitHub Apps. Give it
+#    the repository permissions Contents: Read and write and Pull requests:
+#    Read and write, and no webhook. Install it on crumbkit/starmap only.
+#    Generate a private key, and add two repository secrets: the App's
+#    client ID as RELEASE_APP_CLIENT_ID, and the private key as
+#    RELEASE_APP_PRIVATE_KEY.
+# 2. In the repository's settings, create the environment `crates-io` and
+#    limit its deployment branches to main.
+# 3. The 0.1.0 pull request sets `version = "0.1.0"` in `[workspace.package]`
+#    in the root Cargo.toml, renames `## [Unreleased]` in CHANGELOG.md to
+#    `## [0.1.0]` with the date, and adds an empty `## [Unreleased]` heading
+#    above it.
+# 4. Create a crates.io API token with the scope `publish-new` and a short
+#    expiry, run `cargo publish --workspace --dry-run`, `cargo login`,
+#    `cargo publish --workspace` and `cargo logout` on the merged main, and
+#    push the tag v0.1.0. Revoke the token on crates.io afterwards.
+# 5. On crates.io, open each of the five crates' Settings, Trusted
+#    Publishing, and add a GitHub publisher with the owner `crumbkit`, the
+#    repository `starmap`, the workflow `release.yml` and the environment
+#    `crates-io`.
+# 6. In the repository's settings under Secrets and variables, Actions,
+#    Variables, add the repository variable RELEASE_ENABLED with the value
+#    `true`.
+
+[workspace]
+# Only starmap updates the changelog and tags the release, because the five
+# crates share one CHANGELOG.md and one tag.
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
+
+# The changelog's entries are written by hand under `## [Unreleased]`.
+# release-plz inserts the body below right after that heading, so the
+# release pull request moves the hand-written entries under the new
+# version's heading and adds no entries generated from commit messages.
+[changelog]
+body = """
+## [{{ version }}]{%- if release_link -%}({{ release_link }}){% endif %} - {{ timestamp | date(format="%Y-%m-%d") }}
+"""
+
+# The five crates share one version. Each inherits the workspace version, and
+# `version_group` keeps them at one version if a crate stops inheriting it.
+[[package]]
+name = "starmap"
+version_group = "starmap"
+changelog_update = true
+changelog_path = "./CHANGELOG.md"
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+git_release_enable = true
+
+[[package]]
+name = "starmap-derive"
+version_group = "starmap"
+
+[[package]]
+name = "starmap-test"
+version_group = "starmap"
+
+[[package]]
+name = "starmap-resolve"
+version_group = "starmap"
+
+[[package]]
+name = "starmap-cli"
+version_group = "starmap"

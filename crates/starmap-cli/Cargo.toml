@@ -1,0 +1,22 @@
+[package]
+name = "starmap-cli"
+description = "The starmap command, which checks, explains, compares and runs an application's declared environment"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["environment", "configuration", "cli"]
+categories = ["command-line-utilities", "config"]
+include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[[bin]]
+name = "starmap"
+path = "src/main.rs"
+# The binary has no API to document, and its docs would take the crate name
+# that rustdoc gives the library docs of the workspace (LIB-2).
+doc = false
+
+[lints]
+workspace = true
