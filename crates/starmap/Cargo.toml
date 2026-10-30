@@ -1,0 +1,15 @@
+[package]
+name = "starmap"
+description = "Declares the environment variables an application reads, checks values against the declaration and applies them to a child process"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["environment", "configuration", "env", "variables"]
+categories = ["config"]
+include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[lints]
+workspace = true

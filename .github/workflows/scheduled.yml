@@ -1,0 +1,87 @@
+# The scheduled lane, which the map's `lanes` decision records (BASE-25).
+# The advisories job checks for new advisories against the locked
+# dependencies (BASE-29). The properties job runs every property test with
+# 10,000 cases, where the pull-request lane runs proptest's default of 256.
+# The report job keeps every failure on one issue. Nothing waits for this
+# lane.
+name: Scheduled
+
+on:
+  schedule:
+    - cron: "43 6 * * *" # Daily at 06:43 UTC.
+  workflow_dispatch:
+
+# Each job grants only the permissions it needs.
+permissions: {}
+
+env:
+  # Any compiler or Clippy warning fails the build (BASE-1).
+  CARGO_BUILD_WARNINGS: deny
+  CARGO_TERM_COLOR: always
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # actions/checkout reads the repository.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-deny@0.20.2
+          fallback: none
+      - name: advisories
+        run: cargo deny --locked check advisories
+
+  # The job has no rust-cache, because rust-cache keys include the job ID,
+  # so its cache would not help the pull-request lane.
+  properties:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read # actions/checkout reads the repository.
+    env:
+      # A variable set in the job wins over the [env] table of
+      # .cargo/config.toml, which keeps the fixed seed.
+      PROPTEST_CASES: 10000
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-nextest@0.9.140
+          fallback: none
+      - name: properties
+        run: cargo nextest run --locked --workspace --all-features
+
+  # When a job of this lane fails, this job comments on the open issue titled
+  # "Scheduled CI failed", or opens that issue when none is open, so failures
+  # collect in one place. It uses the gh CLI that the ubuntu-slim image
+  # includes.
+  report:
+    needs: [advisories, properties]
+    if: failure()
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      issues: write # gh comments on the issue or opens it.
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: Scheduled CI failed
+        run: |
+          number=$(gh issue list --state open --search "in:title $TITLE" --json number,title \
+            --jq 'map(select(.title == env.TITLE)) | .[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "This scheduled run failed: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --body "This scheduled run failed: $RUN_URL"
+          fi

@@ -1,0 +1,54 @@
+# The union of the clippy.toml fragments of the base, cli and child-process
+# profiles of the Rust standards. Each effect belongs to one owning module,
+# which suppresses the lint with #[expect] and a reason (BASE-5), and the
+# reason below names that owner.
+
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-dbg-in-tests = true
+allow-print-in-tests = true
+allow-indexing-slicing-in-tests = true
+too-many-lines-threshold = 150 # BASE-10
+max-fn-params-bools = 3 # BASE-16
+
+disallowed-methods = [
+    # BASE-6, LIB-1: an application reads its environment once, in main,
+    # through the derived Env::load(), and the starmap libraries read none.
+    { path = "std::env::var", reason = "read the environment snapshot that main captures" },
+    { path = "std::env::var_os", reason = "read the environment snapshot that main captures" },
+    { path = "std::env::vars", reason = "only the entry point captures the environment" },
+    { path = "std::env::vars_os", reason = "only the entry point captures the environment" },
+    { path = "std::env::set_var", reason = "build a snapshot in the test instead" },
+    { path = "std::env::remove_var", reason = "build a snapshot in the test instead" },
+    { path = "std::env::current_dir", reason = "read the directory from the snapshot" },
+    { path = "std::env::set_current_dir", reason = "pass the directory to the operation instead" },
+    # BASE-7
+    { path = "std::process::exit", reason = "return the exit code from main so destructors run" },
+    # BASE-11
+    { path = "std::thread::sleep", reason = "wait for an observable signal, or sleep in the clock owner" },
+    { path = "tokio::time::sleep", reason = "wait for an observable signal, or sleep in the clock owner", allow-invalid = true },
+    # CLI-1
+    { path = "std::io::stdout", reason = "write through the CLI's output module" },
+    { path = "std::io::stderr", reason = "write through the CLI's output module" },
+    { path = "std::io::stdin", reason = "read through the CLI's output module, which knows whether input is a terminal" },
+    # PROC-1
+    { path = "std::process::Command::new", reason = "start processes through the crate's process module" },
+    { path = "std::process::Command::spawn", reason = "start processes through the crate's process module" },
+    { path = "std::process::Command::status", reason = "start processes through the crate's process module" },
+    { path = "std::process::Command::output", reason = "start processes through the crate's process module" },
+    { path = "std::os::unix::process::CommandExt::exec", reason = "replacing this process bypasses the process module" },
+    { path = "tokio::process::Command::new", reason = "start processes through the crate's process module", allow-invalid = true },
+    { path = "tokio::process::Command::spawn", reason = "start processes through the crate's process module", allow-invalid = true },
+    { path = "tokio::process::Command::status", reason = "start processes through the crate's process module", allow-invalid = true },
+    { path = "tokio::process::Command::output", reason = "start processes through the crate's process module", allow-invalid = true },
+]
+
+disallowed-types = [
+    # PROC-1
+    { path = "std::process::Child", reason = "let the process module hold the child, which owns its deadline and cleanup" },
+]
+
+# BASE-7: the untyped-error macros of the project's error crates. starmap
+# depends on no error crate yet.
+disallowed-macros = []

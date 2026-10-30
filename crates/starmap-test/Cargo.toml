@@ -1,0 +1,15 @@
+[package]
+name = "starmap-test"
+description = "Tests that an application's starmap declaration matches the environment variables its code reads"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["environment", "configuration", "testing"]
+categories = ["config", "development-tools::testing"]
+include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[lints]
+workspace = true
