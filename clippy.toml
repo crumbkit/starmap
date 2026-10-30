@@ -1,7 +1,9 @@
 # The union of the clippy.toml fragments of the base, cli and child-process
 # profiles of the Rust standards. Each effect belongs to one owning module,
-# which suppresses the lint with #[expect] and a reason (BASE-5), and the
-# reason below names that owner.
+# which suppresses the lint with #[expect] and a reason (BASE-5). No owning
+# module exists yet, so each reason below states the rule. The pull request
+# that adds an owning module replaces its entries' reasons with that
+# module's path.
 
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
