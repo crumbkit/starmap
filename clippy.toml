@@ -1,9 +1,8 @@
 # The union of the clippy.toml fragments of the base, cli and child-process
 # profiles of the Rust standards. Each effect belongs to one owning module,
-# which suppresses the lint with #[expect] and a reason (BASE-5). No owning
-# module exists yet, so each reason below states the rule. The pull request
-# that adds an owning module replaces its entries' reasons with that
-# module's path.
+# which suppresses the lint with #[expect] and a reason (BASE-5). An entry
+# whose owning module exists names its path in the reason, and the others
+# state the rule until the pull request that adds their owning module.
 
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
@@ -39,20 +38,20 @@ disallowed-methods = [
     { path = "std::io::stderr", reason = "write through the CLI's output module" },
     { path = "std::io::stdin", reason = "read through the CLI's output module, which knows whether input is a terminal" },
     # PROC-1
-    { path = "std::process::Command::new", reason = "start processes through the crate's process module" },
-    { path = "std::process::Command::spawn", reason = "start processes through the crate's process module" },
-    { path = "std::process::Command::status", reason = "start processes through the crate's process module" },
-    { path = "std::process::Command::output", reason = "start processes through the crate's process module" },
+    { path = "std::process::Command::new", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
+    { path = "std::process::Command::spawn", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
+    { path = "std::process::Command::status", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
+    { path = "std::process::Command::output", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
     { path = "std::os::unix::process::CommandExt::exec", reason = "replacing this process bypasses the process module" },
-    { path = "tokio::process::Command::new", reason = "start processes through the crate's process module", allow-invalid = true },
-    { path = "tokio::process::Command::spawn", reason = "start processes through the crate's process module", allow-invalid = true },
-    { path = "tokio::process::Command::status", reason = "start processes through the crate's process module", allow-invalid = true },
-    { path = "tokio::process::Command::output", reason = "start processes through the crate's process module", allow-invalid = true },
+    { path = "tokio::process::Command::new", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read", allow-invalid = true },
+    { path = "tokio::process::Command::spawn", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read", allow-invalid = true },
+    { path = "tokio::process::Command::status", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read", allow-invalid = true },
+    { path = "tokio::process::Command::output", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read", allow-invalid = true },
 ]
 
 disallowed-types = [
     # PROC-1
-    { path = "std::process::Child", reason = "let the process module hold the child, which owns its deadline and cleanup" },
+    { path = "std::process::Child", reason = "let crates/starmap-resolve/src/process.rs hold the child, which owns its deadline and cleanup" },
 ]
 
 # BASE-7: the untyped-error macros of the project's error crates. starmap

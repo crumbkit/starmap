@@ -15,6 +15,10 @@ include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 # Resolution reads a starmap `Spec` and returns the `Bindings` that
 # `starmap::check` checks.
 starmap.workspace = true
+# zeroize zeroes the bytes that `op read` printed when they do not become a
+# secret, such as output that is not UTF-8. Only the `one-password` feature
+# uses it.
+zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
 # `std` gives the strategies that generate strings from a regular
@@ -24,7 +28,7 @@ proptest = { workspace = true, features = ["std"] }
 # No feature is on by default (LIB-6).
 [features]
 # one-password reads a secret through the 1Password CLI's `op read`.
-one-password = []
+one-password = ["dep:zeroize"]
 # keychain creates, reads and forgets generated secrets in the macOS Keychain.
 keychain = []
 
