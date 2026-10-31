@@ -16,10 +16,10 @@ max-fn-params-bools = 3 # BASE-16
 disallowed-methods = [
     # BASE-6, LIB-1: an application reads its environment once, in main,
     # through the derived Env::load(), and the starmap libraries read none.
-    { path = "std::env::var", reason = "read the environment snapshot that main captures" },
-    { path = "std::env::var_os", reason = "read the environment snapshot that main captures" },
-    { path = "std::env::vars", reason = "only the entry point captures the environment" },
-    { path = "std::env::vars_os", reason = "only the entry point captures the environment" },
+    { path = "std::env::var", reason = "only crates/starmap-cli/src/main.rs reads the environment, and the libraries read none" },
+    { path = "std::env::var_os", reason = "only crates/starmap-cli/src/main.rs reads the environment, and the libraries read none" },
+    { path = "std::env::vars", reason = "only crates/starmap-cli/src/main.rs reads the environment, and the libraries read none" },
+    { path = "std::env::vars_os", reason = "only crates/starmap-cli/src/main.rs reads the environment, and the libraries read none" },
     { path = "std::env::set_var", reason = "build a snapshot in the test instead" },
     { path = "std::env::remove_var", reason = "build a snapshot in the test instead" },
     { path = "std::env::current_dir", reason = "read the directory from the snapshot" },
@@ -34,9 +34,9 @@ disallowed-methods = [
     { path = "std::thread::sleep", reason = "wait for an observable signal, or sleep in the clock owner" },
     { path = "tokio::time::sleep", reason = "wait for an observable signal, or sleep in the clock owner", allow-invalid = true },
     # CLI-1
-    { path = "std::io::stdout", reason = "write through the CLI's output module" },
-    { path = "std::io::stderr", reason = "write through the CLI's output module" },
-    { path = "std::io::stdin", reason = "read through the CLI's output module, which knows whether input is a terminal" },
+    { path = "std::io::stdout", reason = "print through crumbkit::finish in crates/starmap-cli/src/lib.rs" },
+    { path = "std::io::stderr", reason = "print through crumbkit::finish in crates/starmap-cli/src/lib.rs" },
+    { path = "std::io::stdin", reason = "read through crumbkit's Output in crates/starmap-cli/src/lib.rs, which knows whether input is a terminal" },
     # PROC-1
     { path = "std::process::Command::new", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
     { path = "std::process::Command::spawn", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },

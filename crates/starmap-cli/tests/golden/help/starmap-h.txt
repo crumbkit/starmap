@@ -1,0 +1,19 @@
+Check and explain the environment variables that an application declares in starmap.toml
+
+Usage: starmap [OPTIONS] <COMMAND>
+
+Verbs
+  check     Check that starmap.toml follows every rule of the file
+  explain   Describe each declared variable and the value it has in this shell
+
+Commands
+  commands  Explore starmap's commands
+  self      Review starmap's own use
+
+Options:
+  -h, --help     Print help (see more with '--help')
+  -V, --version  Print version
+
+Global flags: --json, --fields <FIELD>, --long, --full. `starmap --help` describes them.
+Topics: exit-codes. `starmap help <TOPIC>` prints one.
+Next: starmap <COMMAND> -h

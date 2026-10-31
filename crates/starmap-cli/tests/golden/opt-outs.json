@@ -1,0 +1,23 @@
+{
+  "schema": "starmap/opt-outs/v1",
+  "data": [
+    {
+      "rule": "examples/run",
+      "applies_to": "starmap self usage",
+      "reason": "The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.",
+      "costs": [
+        "The examples are not run, so help can show an example that fails.",
+        "The command's output weight counts 0 bytes, so its path weight is too low."
+      ],
+      "budget": null
+    }
+  ],
+  "customisations": [
+    {
+      "declaration": "root-verbs",
+      "applies_to": "starmap check, starmap explain",
+      "declares": "Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.",
+      "reason": "starmap acts on one file, starmap.toml, so its commands need no resource word."
+    }
+  ]
+}

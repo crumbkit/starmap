@@ -5,3 +5,9 @@
 [profile.default]
 fail-fast = false
 retries = 0
+
+# An uncapped read of /dev/zero never ends. This override fails the test
+# after 10 seconds, before the read can exhaust memory (BASE-34).
+[[profile.default.overrides]]
+filter = "test(an_endless_file_is_too_large_because_the_read_stops_past_the_limit)"
+slow-timeout = { period = "5s", terminate-after = 2 }

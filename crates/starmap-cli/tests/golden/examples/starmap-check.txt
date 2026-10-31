@@ -1,0 +1,1 @@
+starmap.toml declares 9 variables.

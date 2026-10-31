@@ -1,0 +1,24 @@
+Check that starmap.toml follows every rule of the file
+
+Usage: starmap check [OPTIONS]
+
+Options:
+      --spec <FILE>
+          Read the spec from this file
+          
+          [default: starmap.toml]
+
+      --json
+          Print the result as a JSON document. The default prints text.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  starmap check
+          Check starmap.toml in the current directory
+
+  starmap check --json
+          Print the result of the check as JSON
+
+Effects: read-only, closed-world.

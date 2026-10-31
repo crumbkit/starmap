@@ -1,0 +1,11 @@
+error: guess.toml has 2 problems
+  at:    guess.toml:3:11: `variables.SHELF_PORT.purpose` is "?", the guess that starmap init wrote, and a purpose is one sentence that says what the variable is for
+  at:    guess.toml:4:8: `variables.SHELF_PORT.type` is "port?", which still ends in the ? that starmap init wrote
+     2 | [variables.SHELF_PORT]
+     3 | purpose = "?"
+       |           ^^^ `variables.SHELF_PORT.purpose` is "?", the guess that starmap init wrote, and a purpose is one sentence that says what the variable is for
+     4 | type = "port?"
+       |        ^^^^^^^ `variables.SHELF_PORT.type` is "port?", which still ends in the ? that starmap init wrote
+     5 | unset = "required"
+  help:  confirm or correct each guess and delete its ?
+  code:  starmap::spec::guess

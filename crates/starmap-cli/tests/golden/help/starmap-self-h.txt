@@ -1,0 +1,12 @@
+Review starmap's own use
+
+Usage: starmap self [OPTIONS] <COMMAND>
+
+Commands:
+  usage  Report the patterns in starmap's usage log where callers waste effort
+
+Options:
+  -h, --help  Print help (see more with '--help')
+
+Global flags: --json, --fields <FIELD>, --long, --full. `starmap self --help` describes them.
+Next: starmap self <COMMAND> -h

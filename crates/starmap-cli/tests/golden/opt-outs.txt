@@ -1,0 +1,12 @@
+starmap has 1 opt-out from the conventions.
+
+examples/run: starmap self usage
+  Reason: The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.
+  Cost: The examples are not run, so help can show an example that fails.
+  Cost: The command's output weight counts 0 bytes, so its path weight is too low.
+
+starmap declares 1 customisation.
+
+root-verbs: starmap check, starmap explain
+  Declares: Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.
+  Reason: starmap acts on one file, starmap.toml, so its commands need no resource word.

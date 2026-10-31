@@ -96,3 +96,13 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unchanged. `Keychain::forget` deletes every value of one workspace and
   returns how many it deleted. On a platform other than macOS, every call
   returns `SecretError::Unsupported`.
+- The `starmap` command, built on crumbkit. `starmap check` reads
+  `starmap.toml`, or the file that `--spec` names, and prints the number of
+  variables it declares, its digest and the mode that the shell's values
+  decide. A file that cannot be read or parsed fails with a
+  `starmap::spec::<kind>` code for its first problem and an excerpt of the
+  file at every problem. `starmap explain` prints each declared variable,
+  or each named one, with its type, unset rule, source and value in this
+  shell. A withheld value prints as eight dots whatever its length, and its
+  JSON holds only its state. `commands list` and `self usage` come from
+  crumbkit, and every run appends a line to the command's usage log.
