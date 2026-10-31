@@ -120,3 +120,21 @@ fn a_file_of_unit_tests_is_not_scanned() {
     let names: Vec<&str> = reads.keys().map(Name::as_str).collect();
     assert_eq!(names, ["M"]);
 }
+
+#[test]
+fn a_test_only_field_is_skipped_and_the_next_field_is_read() {
+    let text = "struct Env {\n    #[cfg(test)]\n    #[starmap(\"T\")]\n    t: String,\n    #[starmap(\"P\")]\n    port: u16,\n}\n";
+    assert_eq!(reads(text), [read("P", 5)]);
+}
+
+#[test]
+fn a_test_only_match_arm_is_skipped_and_the_next_arm_is_read() {
+    let text = "fn f() {\n    match x {\n        #[cfg(test)]\n        A => env::var(\"A\"),\n        B => env::var(\"B\"),\n    }\n}\n";
+    assert_eq!(reads(text), [read("B", 5)]);
+}
+
+#[test]
+fn a_module_that_starts_with_an_inner_cfg_test_is_not_read() {
+    let text = "#![cfg(test)]\nfn f() { env::var(\"A\"); }\n";
+    assert_eq!(reads(text), []);
+}

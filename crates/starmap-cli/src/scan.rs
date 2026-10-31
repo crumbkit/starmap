@@ -15,8 +15,13 @@
 //!
 //! The scan leaves out test code, because a test may read a variable that
 //! the application never reads. It skips each file named `tests.rs` or
-//! ending in `_tests.rs`, where the Rust standards put unit tests, and the
-//! item that follows `#[cfg(test)]`, up to its closing brace or semicolon.
+//! ending in `_tests.rs`, where the Rust standards put unit tests, the
+//! item that follows `#[cfg(test)]`, up to its closing brace, a semicolon
+//! or a comma, and the rest of a module after `#![cfg(test)]`. The comma
+//! ends a test-only field, variant, match arm or argument. It also ends the
+//! skip inside a test-only function's generics, such as `fn f<A, B>()`, so
+//! the reads in that function count. The skip knows only the exact
+//! attribute `cfg(test)`, so code under `cfg(all(test, unix))` counts.
 //!
 //! The scan misses a read whose name is not a literal at the call, such as
 //! `env::var(NAME)` with a constant, and every lookup in the map that
@@ -117,8 +122,10 @@ fn is_test_file(path: &Path) -> bool {
 }
 
 /// Adds each read in `tokens`, and in every bracket inside them, to
-/// `reads`. It skips the item that follows `#[cfg(test)]`.
+/// `reads`. It skips the item that follows `#[cfg(test)]`, and the rest of
+/// the stream after an inner `#![cfg(test)]`.
 fn collect(tokens: TokenStream, reads: &mut Vec<(Name, usize)>) {
+    let mut before_previous: Option<TokenTree> = None;
     let mut previous: Option<TokenTree> = None;
     let mut reader = None;
     let mut in_test_item = false;
@@ -127,12 +134,21 @@ fn collect(tokens: TokenStream, reads: &mut Vec<(Name, usize)>) {
             in_test_item = !ends_item(&token);
             continue;
         }
-        if let TokenTree::Group(group) = &token {
-            if is_punct(previous.as_ref(), '#') && is_cfg_test(group) {
+        if let TokenTree::Group(group) = &token
+            && is_cfg_test(group)
+        {
+            if is_punct(previous.as_ref(), '#') {
                 in_test_item = true;
                 previous = None;
                 continue;
             }
+            // An inner `#![cfg(test)]` makes the rest of its module test
+            // code.
+            if is_punct(previous.as_ref(), '!') && is_punct(before_previous.as_ref(), '#') {
+                return;
+            }
+        }
+        if let TokenTree::Group(group) = &token {
             if let Some(line) = reader
                 && group.delimiter() == Delimiter::Parenthesis
                 && let Some(name) = literal_name(group.stream())
@@ -150,7 +166,7 @@ fn collect(tokens: TokenStream, reads: &mut Vec<(Name, usize)>) {
             }
             _ => None,
         };
-        previous = Some(token);
+        before_previous = previous.replace(token);
     }
 }
 
@@ -165,11 +181,13 @@ fn is_cfg_test(group: &Group) -> bool {
         && group.stream().to_string().replace(' ', "") == "cfg(test)"
 }
 
-/// Reports whether `token` ends an item: its braces, or a semicolon.
+/// Reports whether `token` ends an item: its braces, a semicolon, or the
+/// comma after a field, a variant, a match arm or an argument. The end of
+/// the enclosing bracket ends the item too, because the stream ends there.
 fn ends_item(token: &TokenTree) -> bool {
     match token {
         TokenTree::Group(group) => group.delimiter() == Delimiter::Brace,
-        TokenTree::Punct(punct) => punct.as_char() == ';',
+        TokenTree::Punct(punct) => matches!(punct.as_char(), ';' | ','),
         TokenTree::Ident(_) | TokenTree::Literal(_) => false,
     }
 }

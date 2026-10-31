@@ -1,4 +1,6 @@
-Write starmap.toml with a guess for each variable that src reads
+Write starmap.toml with a guess for each variable that src reads.
+
+The scan skips test code: files named tests.rs or ending in _tests.rs, and the item after #[cfg(test)]. check scans src the same way.
 
 Usage: starmap init [OPTIONS]
 

@@ -78,6 +78,10 @@ pub const GUIDE: Guide = Guide::new()
 #[derive(Debug, Subcommand)]
 pub(crate) enum Verb {
     /// Write starmap.toml with a guess for each variable that src reads.
+    ///
+    /// The scan skips test code: files named tests.rs or ending in
+    /// _tests.rs, and the item after #[cfg(test)]. check scans src the same
+    /// way.
     Init(InitArgs),
     /// Check that starmap.toml follows every rule of the file, and that it
     /// declares every variable that src reads.
