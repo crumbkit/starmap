@@ -1,0 +1,7 @@
+# The default lies outside the integer range.
+[variables.SHELF_PAGE_SIZE]
+purpose = "How many books one page of a listing holds."
+type = { integer = { min = 1, max = 100 } }
+unset = { default = "0" }
+show = "shown"
+source = "setting"

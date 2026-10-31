@@ -1,0 +1,4 @@
+missing_field: `variables.SHELF_PORT` has no `purpose` field, and it needs one
+  at: 2:12 to 2:22, bytes 48..58
+   2 | [variables.SHELF_PORT]
+     |            ^^^^^^^^^^

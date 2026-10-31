@@ -1,0 +1,71 @@
+[mode]
+variable = "SHELF_ENV"
+production = ["prod"]
+
+[variables.SHELF_ENV]
+purpose = "Selects local or production behaviour."
+type = { enumeration = ["dev", "prod"] }
+unset = { default = "dev" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "provided"
+bind = { provided = "multiverse/port", process = "api" }
+
+[variables.SHELF_CATALOGUE_URL]
+purpose = "The base URL of the shelf app whose catalogue this checkout reads."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "provided"
+bind = { provided = "multiverse/url", app = "shelf" }
+
+[variables.SHELF_DATABASE]
+purpose = "The SQLite file that holds the catalogue."
+type = "path"
+unset = { default = "books.db" }
+show = "shown"
+source = "setting"
+bind = { path = "{workspace}/books.db" }
+
+[variables.SHELF_DEBUG]
+purpose = "Logs each catalogue query."
+type = "boolean"
+unset = { default = "false" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PAGE_SIZE]
+purpose = "How many books one page of a listing holds."
+type = { integer = { min = 1, max = 100 } }
+unset = { default = "20" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_TOKEN]
+purpose = "The token shelf sends to the catalogue mirror."
+type = "string"
+unset = { local = "optional", production = "required" }
+show = "withheld"
+source = "secret"
+bind = { one-password = "op://Personal/shelf mirror/token" }
+
+[variables.SHELF_SESSION_KEY]
+purpose = "Signs the cookies of the web view."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "generated"
+bytes = 48
+
+[variables.XDG_STATE_HOME]
+purpose = "The directory that holds shelf's state, such as the ids of removed books."
+type = { path = { absolute = true } }
+unset = "optional"
+show = "shown"
+source = "inherited"

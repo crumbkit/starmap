@@ -1,0 +1,7 @@
+# The integer range's min is above its max.
+[variables.SHELF_PAGE_SIZE]
+purpose = "How many books one page of a listing holds."
+type = { integer = { min = 100, max = 1 } }
+unset = "required"
+show = "shown"
+source = "setting"

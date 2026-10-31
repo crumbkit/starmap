@@ -1,0 +1,7 @@
+# An enumeration repeats a value.
+[variables.SHELF_ENV]
+purpose = "Selects local or production behaviour."
+type = { enumeration = ["dev", "prod", "dev"] }
+unset = "required"
+show = "shown"
+source = "setting"

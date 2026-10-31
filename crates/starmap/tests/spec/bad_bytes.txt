@@ -1,0 +1,4 @@
+bad_bytes: `variables.SHELF_SESSION_KEY.bytes` is "4096", and a generated value takes from 16 to 1024 bytes
+  at: 8:9 to 8:13, bytes 210..214
+   8 | bytes = 4096
+     |         ^^^^

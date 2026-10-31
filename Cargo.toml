@@ -28,9 +28,24 @@ clap = { version = "4.6.7", default-features = false, features = ["std"] }
 # starmap does not use.
 url = { version = "2.5.8", default-features = false }
 
+# toml_edit parses starmap.toml with the span of every key and value, and
+# writes the canonical form that `Spec::to_toml` returns.
+toml_edit = "0.25.17"
+
+# sha2 computes the SHA-256 digest of a spec's canonical form, which
+# `Spec::digest` returns. Its default features add boxed hashers (`alloc`)
+# and an object identifier (`oid`), which starmap does not use.
+sha2 = { version = "0.11.1", default-features = false }
+
 # proptest checks the checking constructors and the forms against generated
 # inputs, and the lanes decision sets its case counts. Only tests use it.
 proptest = { version = "1.12.0", default-features = false }
+
+# snapbox compares each spec problem's rendered text and span with its golden
+# file, and rewrites the golden files when SNAPSHOTS=overwrite is set, as
+# crumbkit's golden files are compared. Only tests use it, and none of its
+# features is needed.
+snapbox = { version = "1.2.2", default-features = false }
 
 # The lint table is lints/base.toml and lints/library.toml of the Rust
 # standards (BASE-1, LIB-2, LIB-3). A build with CARGO_BUILD_WARNINGS=deny

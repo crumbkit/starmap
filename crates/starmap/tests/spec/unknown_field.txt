@@ -1,0 +1,4 @@
+unknown_field: `variables.SHELF_PORT` has the field `colour`, and it takes purpose, type, unset, show, source, bind and bytes
+  at: 8:1 to 8:7, bytes 200..206
+   8 | colour = "blue"
+     | ^^^^^^

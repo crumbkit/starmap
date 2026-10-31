@@ -1,0 +1,4 @@
+mode_source: `mode.variable` is "SHELF_ENV", which is a provided variable, and the mode variable is a setting or inherited variable
+  at: 4:12 to 4:23, bytes 112..123
+   4 | variable = "SHELF_ENV"
+     |            ^^^^^^^^^^^

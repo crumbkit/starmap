@@ -19,3 +19,13 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of their forms, each through one constructor.
 - `starmap::ModeRule` decides between local and production `Mode` from the
   mode variable's value.
+- `starmap::Spec::parse` reads a `starmap.toml` of at most 256 KiB into a
+  `Spec` of `Variable`s and an optional `ModeRule`. A file that breaks a
+  rule returns a `SpecError` that lists every `SpecProblem`, each with its
+  `SpecProblemKind` and the `Span` of text it is about.
+- `starmap::Source` merges a variable's source with the bind that source
+  allows: a `PathTemplate` for a setting, a `SecretRef` for a secret,
+  `SecretBytes` for a generated value and a `ProvidedRef` for a provided
+  one.
+- `Spec::to_toml` writes a spec's canonical form, and `Spec::digest` returns
+  its SHA-256 `Digest`, which prints as `sha256:<hex>`.

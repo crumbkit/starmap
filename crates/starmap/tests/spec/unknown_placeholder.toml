@@ -1,0 +1,8 @@
+# A path template names a placeholder that does not exist.
+[variables.SHELF_DATABASE]
+purpose = "The SQLite file that holds the catalogue."
+type = "path"
+unset = "required"
+show = "shown"
+source = "setting"
+bind = { path = "{data}/books.db" }

@@ -1,0 +1,8 @@
+# A variable's table holds a key that starmap does not know.
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+colour = "blue"

@@ -1,0 +1,11 @@
+# The mode table names a variable the file does not declare.
+[mode]
+variable = "SHELF_STAGE"
+production = ["prod"]
+
+[variables.SHELF_ENV]
+purpose = "Selects local or production behaviour."
+type = { enumeration = ["dev", "prod"] }
+unset = { default = "dev" }
+show = "shown"
+source = "setting"
