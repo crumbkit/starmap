@@ -38,7 +38,8 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `starmap::check` checks bindings against a spec in one mode, after
   defaults apply, and returns `Verdict::Ready` with an `Environment`, or
   `Verdict::Refused` with `Refusals` that name each missing or invalid
-  variable.
+  variable, each value bound with the wrong kind for its variable's show,
+  and a mode variable whose bindings decide another mode.
 - `Environment::apply` sets each checked value on a `Command` and removes
   each declared variable that stays unset. `Environment::value` returns a
   shown value, and only `Environment::secret` returns a withheld one.

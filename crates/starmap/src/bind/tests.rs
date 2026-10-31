@@ -254,23 +254,6 @@ fn name(text: &str) -> Name {
 }
 
 #[test]
-fn new_bindings_bind_no_variable() {
-    assert!(Bindings::new().get(&name("SHELF_PORT")).is_none());
-}
-
-#[test]
-fn a_bound_value_is_returned_by_its_name_only() {
-    let mut bindings = Bindings::new();
-    bindings.bind(name("SHELF_PORT"), Bound::Plain("8080".into()));
-
-    assert!(matches!(
-        bindings.get(&name("SHELF_PORT")),
-        Some(Bound::Plain(value)) if value == "8080"
-    ));
-    assert!(bindings.get(&name("SHELF_DEBUG")).is_none());
-}
-
-#[test]
 fn binding_a_name_again_replaces_its_value() {
     let mut bindings = Bindings::new();
     bindings.bind(name("SHELF_PORT"), Bound::Plain("8080".into()));

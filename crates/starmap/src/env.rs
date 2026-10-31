@@ -1,10 +1,9 @@
 //! The checked environment that [`check`](crate::check) builds, and the
 //! one place in the crate that reads a secret's text.
 
-use std::ffi::OsStr;
 use std::process::Command;
 
-use crate::{Bound, Mode, Name, Secret, Value};
+use crate::{Mode, Name, Secret, Value};
 
 #[cfg(test)]
 mod tests;
@@ -67,6 +66,10 @@ impl Environment {
     /// environment, and removes each declared variable that stays unset.
     /// It leaves every other variable of `command` as it was, so the caller
     /// decides whether the child inherits the rest of the environment.
+    ///
+    /// The command keeps its own copy of each withheld value, and that copy
+    /// is not zeroed when the command is dropped, because `Command` holds
+    /// its environment in plain strings.
     #[expect(
         clippy::disallowed_methods,
         reason = "BASE-24: a withheld value leaves the program here, in the child's environment"
@@ -87,20 +90,5 @@ impl Environment {
             .iter()
             .find(|(declared, _)| declared == name)
             .and_then(|(_, held)| held.as_ref())
-    }
-}
-
-/// Returns the text of `bound`, or `None` for a withheld value that is not
-/// Unicode. `check` reads a withheld value's text only to hold it in a new
-/// [`Secret`], and a shown value's text to parse it.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "BASE-24: check copies a withheld value into the environment's own secret"
-)]
-pub(crate) fn text(bound: &Bound) -> Option<&OsStr> {
-    match bound {
-        Bound::Plain(raw) => Some(raw),
-        Bound::Secret(secret) => Some(OsStr::new(secret.expose())),
-        Bound::NotUnicode => None,
     }
 }

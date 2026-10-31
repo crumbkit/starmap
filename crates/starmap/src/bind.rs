@@ -462,8 +462,11 @@ impl Bindings {
     }
 }
 
-/// A value bound to one variable.
+/// A value bound to one variable. [`check`](crate::check) refuses a
+/// plain value bound to a withheld variable, and a secret or a
+/// [`Bound::NotUnicode`] bound to a shown one.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Bound {
     /// A value that may be shown, as the environment holds it.
     Plain(OsString),

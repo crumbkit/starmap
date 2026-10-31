@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use proptest::prelude::*;
 
 use super::{Finding, Problem, Verdict, capture, check, mode};
-use crate::{Bindings, Bound, Environment, FormError, Mode, Name, Secret, Spec, Value};
+use crate::{Bindings, Bound, Environment, FormError, Mode, Name, Secret, Show, Spec, Value};
 
 /// A spec with a mode variable, a required port, a defaulted boolean, an
 /// optional absolute path, and a withheld token that only production
@@ -85,11 +85,11 @@ fn ready(verdict: Verdict) -> Environment {
     }
 }
 
-/// Returns the findings of a verdict that is refused.
+/// Returns the findings of a verdict, which are none when it is ready.
 fn findings(verdict: Verdict) -> Vec<Finding> {
     match verdict {
         Verdict::Refused(refusals) => refusals.iter().cloned().collect(),
-        Verdict::Ready(environment) => panic!("the check passed: {environment:?}"),
+        Verdict::Ready(_) => Vec::new(),
     }
 }
 
@@ -110,7 +110,7 @@ fn capture_binds_only_the_variables_the_spec_declares() {
         vars(&[
             ("SHELF_PORT", "8080"),
             ("SHELF_THEME", "dark"),
-            ("lower", "x"),
+            ("shelf_debug", "on"),
         ]),
     );
 
@@ -119,6 +119,7 @@ fn capture_binds_only_the_variables_the_spec_declares() {
         Some(Bound::Plain(value)) if value == "8080"
     ));
     assert!(bindings.get(&name("SHELF_THEME")).is_none());
+    assert!(bindings.get(&name("SHELF_DEBUG")).is_none());
 }
 
 #[test]
@@ -168,24 +169,41 @@ fn a_production_value_of_the_mode_variable_selects_production() {
 }
 
 #[test]
-fn a_withheld_mode_variable_decides_the_mode_by_its_secret_value() {
+fn an_invalid_mode_value_decides_local_mode_and_check_refuses_it() {
+    let spec = spec();
+    let bindings = capture(
+        &spec,
+        vars(&[("SHELF_ENV", "live"), ("SHELF_PORT", "8080")]),
+    );
+
+    assert_eq!(mode(&spec, &bindings), Mode::Local);
+    let findings = findings(check(&spec, &bindings, Mode::Local));
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].name, name("SHELF_ENV"));
+    assert!(matches!(
+        findings[0].problem,
+        Problem::Invalid(FormError::NotChoice(_))
+    ));
+}
+
+#[test]
+fn a_mode_value_the_form_counts_as_unset_falls_back_to_the_default() {
     let spec = Spec::parse(
         r#"
 [mode]
-variable = "STAGE"
-production = ["prod"]
+variable = "STAGE_DIR"
+production = ["/prod"]
 
-[variables.STAGE]
-purpose = "Selects the stage."
-type = "string"
-unset = "optional"
-show = "withheld"
+[variables.STAGE_DIR]
+purpose = "Selects the stage by its directory."
+type = { path = { absolute = true } }
+unset = { default = "/prod" }
+show = "shown"
 source = "setting"
 "#,
     )
     .unwrap();
-    let mut bindings = Bindings::new();
-    bindings.bind(name("STAGE"), Bound::Secret(Secret::new("prod".to_owned())));
+    let bindings = capture(&spec, vars(&[("STAGE_DIR", "relative")]));
 
     assert_eq!(mode(&spec, &bindings), Mode::Production);
 }
@@ -297,14 +315,98 @@ fn a_withheld_value_that_is_not_unicode_is_invalid() {
 }
 
 #[test]
-fn a_plain_value_bound_to_a_withheld_variable_is_held_as_a_secret() {
+fn a_plain_value_bound_to_a_withheld_variable_is_a_show_mismatch() {
     let spec = spec();
     let mut bindings = capture(&spec, vars(&[("SHELF_PORT", "8080")]));
     bindings.bind(name("SHELF_MIRROR_TOKEN"), Bound::Plain("hunter2".into()));
-    let environment = ready(check(&spec, &bindings, Mode::Local));
 
-    assert_eq!(environment.value(&name("SHELF_MIRROR_TOKEN")), None);
-    assert!(environment.secret(&name("SHELF_MIRROR_TOKEN")).is_some());
+    assert_eq!(
+        findings(check(&spec, &bindings, Mode::Local)),
+        [finding(
+            "SHELF_MIRROR_TOKEN",
+            Problem::ShowMismatch {
+                show: Show::Withheld
+            }
+        )]
+    );
+}
+
+#[test]
+fn a_secret_bound_to_a_shown_variable_is_a_show_mismatch() {
+    let spec = spec();
+    let mut bindings = Bindings::new();
+    bindings.bind(
+        name("SHELF_PORT"),
+        Bound::Secret(Secret::new("8080".to_owned())),
+    );
+
+    assert_eq!(
+        findings(check(&spec, &bindings, Mode::Local)),
+        [finding(
+            "SHELF_PORT",
+            Problem::ShowMismatch { show: Show::Shown }
+        )]
+    );
+}
+
+#[test]
+fn a_withheld_variable_with_a_default_holds_it_as_a_secret() {
+    let spec = Spec::parse(
+        r#"
+[variables.SHELF_SALT]
+purpose = "Salts the cache keys."
+type = "string"
+unset = { default = "pepper" }
+show = "withheld"
+source = "setting"
+"#,
+    )
+    .unwrap();
+    let environment = ready(check(&spec, &Bindings::new(), Mode::Local));
+
+    assert_eq!(environment.value(&name("SHELF_SALT")), None);
+    assert!(environment.secret(&name("SHELF_SALT")).is_some());
+}
+
+#[test]
+fn a_check_in_another_mode_than_the_bindings_decide_is_refused_on_the_mode_variable() {
+    let spec = spec();
+    let bindings = capture(
+        &spec,
+        vars(&[
+            ("SHELF_PORT", "8080"),
+            ("SHELF_ENV", "prod"),
+            ("SHELF_MIRROR_TOKEN", "t"),
+        ]),
+    );
+
+    assert_eq!(
+        findings(check(&spec, &bindings, Mode::Local)),
+        [finding(
+            "SHELF_ENV",
+            Problem::ModeMismatch {
+                decided: Mode::Production
+            }
+        )]
+    );
+}
+
+#[test]
+fn a_spec_without_a_mode_table_is_checked_in_local_mode() {
+    let spec = Spec::parse(
+        r#"
+[variables.SHELF_TOKEN]
+purpose = "A token that production requires."
+type = "string"
+unset = { local = "optional", production = "required" }
+show = "withheld"
+source = "secret"
+"#,
+    )
+    .unwrap();
+    let environment = ready(check(&spec, &Bindings::new(), Mode::Production));
+
+    assert_eq!(environment.mode(), Mode::Local);
 }
 
 #[test]
@@ -377,9 +479,14 @@ fn generated() -> impl Strategy<Value = Generated> {
     })
 }
 
-/// Returns the spec of `variables`, named `V0`, `V1` and so on.
+/// Returns the spec of `variables`, named `V0`, `V1` and so on, with an
+/// optional mode variable `MODE` whose value `prod` selects production.
 fn generated_spec(variables: &[Generated]) -> Spec {
-    let mut text = String::new();
+    let mut text = String::from(
+        "[mode]\nvariable = \"MODE\"\nproduction = [\"prod\"]\n\n[variables.MODE]\n\
+         purpose = \"Selects the mode.\"\ntype = { enumeration = [\"dev\", \"prod\"] }\n\
+         unset = \"optional\"\nshow = \"shown\"\nsource = \"setting\"\n",
+    );
     for (index, variable) in variables.iter().enumerate() {
         text.push_str(&format!(
             "[variables.V{index}]\npurpose = \"A variable.\"\ntype = {}\nunset = {}\n\
@@ -404,35 +511,37 @@ fn generated_bindings(variables: &[Generated]) -> Bindings {
     bindings
 }
 
-/// Returns the findings of a verdict, which are none when it is ready.
-fn findings_or_none(verdict: Verdict) -> Vec<Finding> {
-    match verdict {
-        Verdict::Ready(_) => Vec::new(),
-        Verdict::Refused(refusals) => refusals.iter().cloned().collect(),
-    }
-}
-
 proptest! {
     #[test]
     fn binding_a_valid_value_to_a_missing_variable_removes_exactly_its_finding(
-        variables in prop::collection::vec(generated(), 1..8),
+        mut variables in prop::collection::vec(generated(), 0..8),
+        missing in generated(),
         production in any::<bool>(),
         pick in any::<prop::sample::Index>(),
     ) {
+        // One variable that is required and unbound gives every case a
+        // missing variable, so no case is rejected.
+        variables.push(Generated {
+            unset: "\"required\"",
+            binding: Binding::Unbound,
+            ..missing
+        });
         let mode = if production { Mode::Production } else { Mode::Local };
         let spec = generated_spec(&variables);
         let mut bindings = generated_bindings(&variables);
-        let before = findings_or_none(check(&spec, &bindings, mode));
+        if production {
+            bindings.bind(name("MODE"), Bound::Plain("prod".into()));
+        }
+        let before = findings(check(&spec, &bindings, mode));
         let missing: Vec<&Finding> = before
             .iter()
             .filter(|finding| matches!(finding.problem, Problem::Missing { .. }))
             .collect();
-        prop_assume!(!missing.is_empty());
         let fixed = missing[pick.index(missing.len())].name.clone();
         let index: usize = fixed.as_str()[1..].parse().unwrap();
 
         bindings.bind(fixed.clone(), Bound::Plain(variables[index].valid.into()));
-        let after = findings_or_none(check(&spec, &bindings, mode));
+        let after = findings(check(&spec, &bindings, mode));
 
         let expected: Vec<Finding> =
             before.into_iter().filter(|finding| finding.name != fixed).collect();

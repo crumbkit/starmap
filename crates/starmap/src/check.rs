@@ -3,7 +3,7 @@
 
 use std::ffi::OsString;
 
-use crate::env::{self, Held};
+use crate::env::Held;
 use crate::{
     Bindings, Bound, Environment, FormError, Mode, Name, Secret, Show, Spec, Unset, Value, Variable,
 };
@@ -30,36 +30,61 @@ pub fn capture(spec: &Spec, vars: impl IntoIterator<Item = (OsString, OsString)>
         };
         let bound = match variable.show() {
             Show::Shown => Bound::Plain(raw),
-            Show::Withheld => raw
-                .into_string()
-                .map_or(Bound::NotUnicode, |text| Bound::Secret(Secret::new(text))),
+            Show::Withheld => match raw.into_string() {
+                Ok(text) => Bound::Secret(Secret::new(text)),
+                Err(raw) => {
+                    discard(raw);
+                    Bound::NotUnicode
+                }
+            },
         };
         bindings.bind(name, bound);
     }
     bindings
 }
 
-/// Decides the mode from the mode variable's bound value, or from its
-/// local default when nothing binds it. A spec without a `[mode]` table
-/// always runs in local mode. A bound value decides the mode as it is
-/// bound, and [`check`] reports it when it does not fit the variable's
-/// form.
+/// Drops the raw value of a withheld variable that is not Unicode, zeroing
+/// its bytes first on unix.
+fn discard(raw: OsString) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt as _;
+        use zeroize::Zeroize as _;
+        raw.into_vec().zeroize();
+    }
+    // BASE-37: on other platforms `OsString` gives no access to its own
+    // bytes, so this drops the value without zeroing it. A conversion that
+    // reaches the bytes on that platform replaces this when starmap
+    // supports one.
+    #[cfg(not(unix))]
+    drop(raw);
+}
+
+/// Decides the mode from the mode variable, read as [`check`] reads it. A
+/// spec without a `[mode]` table always runs in local mode. When nothing
+/// binds the mode variable, or its value counts as unset or is not
+/// Unicode, its local default decides. Any other value that does not fit
+/// its form decides local mode, and `check` refuses it.
 #[must_use]
 pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
     let Some(rule) = spec.mode() else {
         return Mode::Local;
     };
     let name = rule.variable();
-    if let Some(bound) = bindings.get(name) {
-        return rule.decide(env::text(bound));
-    }
-    let default =
-        spec.variable(name)
-            .and_then(|variable| match variable.unset().in_mode(Mode::Local) {
-                Unset::Default(value) => Some(value.to_os_string()),
+    let Some(variable) = spec.variable(name) else {
+        return Mode::Local;
+    };
+    let value = match bindings.get(name).map(|bound| read(variable, bound)) {
+        Some(Ok(Some(Held::Shown(value)))) => Some(value),
+        None | Some(Ok(None) | Err(Problem::Invalid(FormError::NotUnicode))) => {
+            match variable.unset().in_mode(Mode::Local) {
+                Unset::Default(value) => Some(value.clone()),
                 Unset::Required | Unset::Optional => None,
-            });
-    rule.decide(default.as_deref())
+            }
+        }
+        Some(Ok(Some(Held::Withheld(_))) | Err(_)) => return Mode::Local,
+    };
+    rule.decide(value.map(|value| value.to_os_string()).as_deref())
 }
 
 /// Checks `bindings` against every variable `spec` declares, in `mode`.
@@ -68,38 +93,39 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 /// counts as unset, such as a relative path where `absolute = true`, is
 /// treated as unbound. An unbound variable takes its default in `mode`,
 /// stays unset when it is optional, and is missing when it is required.
-/// The verdict is [`Verdict::Ready`] only when no variable is missing or
-/// invalid, and otherwise [`Verdict::Refused`] with a finding for each such
-/// variable, in the spec's order (BASE-44).
+/// When the bindings decide another mode than `mode`, the mode variable has
+/// a finding too, so a ready environment fits the mode its child decides.
+/// A spec without a `[mode]` table is always checked in local mode, which
+/// is the only mode its child can decide.
+///
+/// The verdict is [`Verdict::Ready`] only when no variable has a finding,
+/// and otherwise [`Verdict::Refused`] with each finding in the spec's order
+/// and a mode mismatch last (BASE-44).
 #[must_use]
 pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
+    let mode = if spec.mode().is_some() {
+        mode
+    } else {
+        Mode::Local
+    };
     let mut entries = Vec::new();
     let mut findings = Vec::new();
     for (name, variable) in spec.variables() {
-        let read = bindings
-            .get(name)
-            .map_or(Ok(None), |bound| read(variable, bound));
-        let problem = match read {
-            Ok(Some(held)) => {
-                entries.push((name.clone(), Some(held)));
-                continue;
-            }
-            Ok(None) => match variable.unset().in_mode(mode) {
-                Unset::Required => Problem::Missing { mode },
-                Unset::Optional => {
-                    entries.push((name.clone(), None));
-                    continue;
-                }
-                Unset::Default(value) => {
-                    entries.push((name.clone(), Some(default(variable, value))));
-                    continue;
-                }
-            },
-            Err(error) => Problem::Invalid(error),
-        };
+        match hold(variable, bindings.get(name), mode) {
+            Ok(held) => entries.push((name.clone(), held)),
+            Err(problem) => findings.push(Finding {
+                name: name.clone(),
+                problem,
+            }),
+        }
+    }
+    let decided = self::mode(spec, bindings);
+    if let Some(rule) = spec.mode()
+        && decided != mode
+    {
         findings.push(Finding {
-            name: name.clone(),
-            problem,
+            name: rule.variable().clone(),
+            problem: Problem::ModeMismatch { decided },
         });
     }
     if findings.is_empty() {
@@ -109,31 +135,53 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
     }
 }
 
+/// Holds the checked value of `variable` in `mode`, or `None` when it stays
+/// unset.
+fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option<Held>, Problem> {
+    if let Some(held) = bound
+        .map(|bound| read(variable, bound))
+        .transpose()?
+        .flatten()
+    {
+        return Ok(Some(held));
+    }
+    match variable.unset().in_mode(mode) {
+        Unset::Required => Err(Problem::Missing { mode }),
+        Unset::Optional => Ok(None),
+        Unset::Default(value) => default(variable, value).map(Some),
+    }
+}
+
 /// Reads `bound` as a value of `variable`. `Ok(None)` means the value
 /// counts as unset.
-fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, FormError> {
-    let text = env::text(bound).ok_or(FormError::NotUnicode)?;
-    match variable.show() {
-        Show::Shown => Ok(variable.form().parse(text)?.map(Held::Shown)),
+fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
+    match (variable.show(), bound) {
+        (Show::Shown, Bound::Plain(raw)) => variable
+            .form()
+            .parse(raw)
+            .map(|value| value.map(Held::Shown))
+            .map_err(Problem::Invalid),
         // A withheld variable has the form string, which the spec parser
         // checks, and a string takes any text that a Secret<String> holds.
-        Show::Withheld => {
-            let text = text.to_str().ok_or(FormError::NotUnicode)?;
-            Ok(Some(Held::Withheld(Secret::new(text.to_owned()))))
-        }
+        (Show::Withheld, Bound::Secret(secret)) => Ok(Some(Held::Withheld(secret.duplicate()))),
+        (Show::Withheld, Bound::NotUnicode) => Err(Problem::Invalid(FormError::NotUnicode)),
+        (show, _) => Err(Problem::ShowMismatch { show }),
     }
 }
 
 /// Holds `variable`'s default `value`, which is a secret when the variable
 /// is withheld.
-fn default(variable: &Variable, value: &Value) -> Held {
-    match variable.show() {
-        Show::Shown => Held::Shown(value.clone()),
-        // A default is TOML text, which is Unicode, so the lossy conversion
-        // never changes it.
-        Show::Withheld => Held::Withheld(Secret::new(
-            value.to_os_string().to_string_lossy().into_owned(),
-        )),
+fn default(variable: &Variable, value: &Value) -> Result<Held, Problem> {
+    let text = match value {
+        Value::String(string) => string.to_str(),
+        _ => None,
+    };
+    match (variable.show(), text) {
+        (Show::Shown, _) => Ok(Held::Shown(value.clone())),
+        (Show::Withheld, Some(text)) => Ok(Held::Withheld(Secret::new(text.to_owned()))),
+        // The spec parser gives a withheld variable the form string, and a
+        // default is TOML text, which is Unicode, so this arm is not taken.
+        (Show::Withheld, None) => Err(Problem::Invalid(FormError::NotUnicode)),
     }
 }
 
@@ -142,7 +190,7 @@ fn default(variable: &Variable, value: &Value) -> Held {
 pub enum Verdict {
     /// Every variable fits its form and its unset rule in the mode.
     Ready(Environment),
-    /// At least one variable is missing or invalid.
+    /// At least one variable has a finding.
     Refused(Refusals),
 }
 
@@ -151,7 +199,8 @@ pub enum Verdict {
 pub struct Refusals(Vec<Finding>);
 
 impl Refusals {
-    /// Returns each finding, in the spec's order of variables.
+    /// Returns each finding, in the spec's order of variables, with a mode
+    /// mismatch last.
     pub fn iter(&self) -> impl Iterator<Item = &Finding> {
         self.0.iter()
     }
@@ -159,6 +208,7 @@ impl Refusals {
 
 /// A variable that stops a check from passing, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Finding {
     /// The variable.
     pub name: Name,
@@ -177,4 +227,17 @@ pub enum Problem {
     },
     /// The variable's value does not fit its form.
     Invalid(FormError),
+    /// The kind of bound value does not match the variable's `show`: a
+    /// plain value is bound to a withheld variable, or a secret or a
+    /// [`Bound::NotUnicode`] to a shown one.
+    ShowMismatch {
+        /// The variable's show.
+        show: Show,
+    },
+    /// The variable is the mode variable, and the bindings decide another
+    /// mode than the check ran in.
+    ModeMismatch {
+        /// The mode the bindings decide.
+        decided: Mode,
+    },
 }

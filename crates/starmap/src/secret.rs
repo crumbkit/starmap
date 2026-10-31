@@ -54,6 +54,19 @@ impl<T: Zeroize> Secret<T> {
     }
 }
 
+impl<T: Zeroize + Clone> Secret<T> {
+    /// Returns a second secret that holds a copy of the value, without the
+    /// value passing through any other type.
+    #[must_use]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "BASE-24: the copy goes straight into a new Secret"
+    )]
+    pub(crate) fn duplicate(&self) -> Self {
+        Self::new(self.0.expose_secret().clone())
+    }
+}
+
 impl<T: Zeroize> fmt::Debug for Secret<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Eight dots whatever the value, so the text does not reveal the

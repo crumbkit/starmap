@@ -179,7 +179,7 @@ impl Parser {
             }
         }
         if let Some(field) = root_field(root, "mode") {
-            spec.mode = self.mode(&field, &declared);
+            spec.mode = self.mode(&field, &declared, &spec.variables);
         }
         spec
     }
@@ -766,11 +766,12 @@ impl Parser {
     }
 
     /// Parses the `[mode]` table and checks its variable against the
-    /// declared ones and their sources.
+    /// declared ones, their sources and their shows.
     fn mode(
         &mut self,
         field: &Field<'_>,
         declared: &[(Name, Option<SourceKind>)],
+        variables: &[(Name, Variable)],
     ) -> Option<ModeRule> {
         let table = self.table(field)?;
         self.known(table, "mode", MODE_FIELDS);
@@ -802,6 +803,22 @@ impl Parser {
                          is a setting or inherited variable",
                         name.as_str(),
                         word_of(SOURCE_WORDS, kind)
+                    ),
+                )
+            }
+            // The mode is never decided from a secret, so the mode variable
+            // is shown.
+            Some(_)
+                if variables.iter().any(|(declared, variable)| {
+                    *declared == name && variable.show() == Show::Withheld
+                }) =>
+            {
+                (
+                    Kind::ModeSource,
+                    format!(
+                        "`mode.variable` is {:?}, which is withheld, and the mode variable is \
+                         shown",
+                        name.as_str()
                     ),
                 )
             }
