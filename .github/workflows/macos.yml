@@ -1,19 +1,13 @@
 # The macOS lane, which the map's `lanes` decision records (BASE-25). It
 # runs the Keychain tests of starmap-resolve, which run only on macOS, and
 # Clippy on the macOS code of the `keychain` feature, which the Linux lane
-# never compiles. A macOS runner costs more than a Linux one, so a pull
-# request runs the lane only when it changes starmap-resolve, the lockfile,
-# the toolchain or this file. Each push to main runs it, and a manual run
-# starts it. Nothing waits for it.
+# never compiles. It runs on each pull request, on each push to main and on
+# a manual run. The repository is public, so GitHub bills no minutes for
+# its macOS runners. Nothing waits for it.
 name: macOS
 
 on:
   pull_request:
-    paths:
-      - "crates/starmap-resolve/**"
-      - "Cargo.lock"
-      - "rust-toolchain.toml"
-      - ".github/workflows/macos.yml"
   push:
     branches: [main]
   workflow_dispatch:
@@ -56,7 +50,7 @@ jobs:
       - name: clippy
         run: cargo clippy --locked --package starmap-resolve --all-targets --features keychain
       # The tests create items in the runner's login keychain under the
-      # test-only service prefix `starmap-test`, and delete them when they
-      # finish.
+      # test-only service prefix `starmap.starmap-test-`, and delete them
+      # when they finish.
       - name: keychain
         run: cargo nextest run --locked --package starmap-resolve --features keychain

@@ -26,49 +26,40 @@ mod tests;
 ///
 /// On a platform other than macOS, every call returns
 /// [`SecretError::Unsupported`].
-#[derive(Debug, Clone)]
-pub struct Keychain {
-    prefix: &'static str,
-}
+#[derive(Debug, Clone, Copy, Default)]
+#[non_exhaustive]
+pub struct Keychain;
 
 impl Keychain {
     /// Returns the resolver of the login keychain.
     #[must_use]
     pub const fn new() -> Self {
-        Self { prefix: "starmap" }
-    }
-
-    /// Returns a resolver whose services start with `prefix` in place of
-    /// `starmap`, so the tests never touch a real workspace's items.
-    #[cfg(all(test, target_os = "macos"))]
-    const fn with_prefix(prefix: &'static str) -> Self {
-        Self { prefix }
+        Self
     }
 
     /// Deletes every generated value of `workspace`, and returns how many
     /// it deleted. A host calls it when it deletes the workspace.
     ///
+    /// A failure partway through can leave some of the workspace's values
+    /// deleted and others in place. Calling `forget` again deletes the
+    /// rest.
+    ///
     /// # Errors
     ///
     /// Returns [`SecretError::Unsupported`] on a platform other than
-    /// macOS, [`SecretError::Denied`] when the person refuses the
-    /// Keychain's prompt, [`SecretError::Locked`] when the keychain is
-    /// locked and cannot prompt, and [`SecretError::Program`] for any
-    /// other Keychain failure.
+    /// macOS or in a session without a login keychain,
+    /// [`SecretError::Denied`] when the person refuses the Keychain's
+    /// prompt, [`SecretError::Locked`] when the keychain is locked and
+    /// cannot prompt, and [`SecretError::Program`] for any other Keychain
+    /// failure.
     pub fn forget(&self, workspace: &WorkspaceName) -> Result<usize, SecretError> {
-        platform::forget(&self.service(workspace))
-    }
-
-    /// Returns the Keychain service that holds the values of `workspace`.
-    fn service(&self, workspace: &WorkspaceName) -> String {
-        format!("{}.{}", self.prefix, workspace.as_str())
+        platform::forget(&service(workspace))
     }
 }
 
-impl Default for Keychain {
-    fn default() -> Self {
-        Self::new()
-    }
+/// Returns the Keychain service that holds the values of `workspace`.
+fn service(workspace: &WorkspaceName) -> String {
+    format!("starmap.{}", workspace.as_str())
 }
 
 impl Resolver for Keychain {
@@ -87,7 +78,7 @@ impl Resolver for Keychain {
             return Err(SecretError::Unsupported);
         };
         let account = format!("{}/{}", app.as_str(), name.as_str());
-        platform::generated(&self.service(workspace), &account, bytes, deadline)
+        platform::generated(&service(workspace), &account, bytes, deadline)
     }
 }
 

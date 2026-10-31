@@ -1,10 +1,16 @@
 //! The Keychain calls on macOS, through security-framework.
 //!
-//! RUST-10: each call checks the deadline before it starts, and a call
-//! that has started runs to its end. A Keychain prompt that waits for the
-//! person can therefore hold a call past the deadline. Running the call on
-//! a thread that the caller abandons at the deadline would replace this,
-//! if a host needs it.
+//! BASE-37, BASE-34: a lookup checks the deadline before each Keychain
+//! call, and a call that has started runs to its end. A Keychain prompt
+//! that waits for the person can therefore hold a lookup past the
+//! deadline. `forget` takes no deadline. Running each call on a thread
+//! that the caller abandons at the deadline would bound the wait, if a
+//! host needs it.
+//!
+//! BASE-37: CoreFoundation copies a value into its own memory when it is
+//! added and when it is read, and frees those copies without zeroing them.
+//! Zeroing them would need unsafe code, which `unsafe_code = "forbid"`
+//! rules out (BASE-3). Every copy that starmap owns is zeroed.
 
 use std::io;
 use std::time::Instant;
@@ -32,6 +38,8 @@ const USER_CANCELED: i32 = -128;
 const AUTH_FAILED: i32 = -25293;
 /// The keychain is locked, and the process may not prompt to unlock it.
 const INTERACTION_NOT_ALLOWED: i32 = -25308;
+/// The session has no default keychain, as in a session without a login.
+const NO_DEFAULT_KEYCHAIN: i32 = -25307;
 
 /// Returns the generated value at `service` and `account`, and creates it
 /// from `bytes` random bytes when the Keychain holds none.
@@ -44,7 +52,19 @@ pub(super) fn generated(
     if let Some(value) = read(service, account, deadline)? {
         return Ok(value);
     }
-    let mut value = create(bytes)?;
+    store(service, account, create(bytes)?, deadline)
+}
+
+/// Adds `value` at `service` and `account`, and returns the value that the
+/// Keychain then holds. When an item already exists, the Keychain refuses
+/// the add, and the call returns the existing value unchanged. So when two
+/// processes create the same value at once, both return the first one.
+pub(super) fn store(
+    service: &str,
+    account: &str,
+    mut value: Zeroizing<String>,
+    deadline: Instant,
+) -> Result<Secret<String>, SecretError> {
     in_time(deadline)?;
     let mut item = ItemAddOptions::new(ItemAddValue::Data {
         class: ItemClass::generic_password(),
@@ -53,8 +73,6 @@ pub(super) fn generated(
     item.set_service(service).set_account_name(account);
     match item.add() {
         Ok(()) => Ok(Secret::new(std::mem::take(&mut *value))),
-        // Another process created the value first, and every caller
-        // returns the value that the Keychain holds.
         Err(error) if error.code() == DUPLICATE_ITEM => read(service, account, deadline)?
             .ok_or_else(|| SecretError::Program(io::Error::other(error))),
         Err(error) => Err(problem(error)),
@@ -63,7 +81,8 @@ pub(super) fn generated(
 
 /// Deletes every item of `service`, and returns how many it deleted. The
 /// login keychain deletes one item for each delete call, so the call
-/// lists the items and deletes each by its account.
+/// lists the items and deletes each by its account. A failed delete stops
+/// the call and leaves the remaining items, which a second call deletes.
 pub(super) fn forget(service: &str) -> Result<usize, SecretError> {
     let mut query = ItemSearchOptions::new();
     query
@@ -136,10 +155,11 @@ fn in_time(deadline: Instant) -> Result<(), SecretError> {
 }
 
 /// Maps a Keychain failure to the problem it names.
-fn problem(error: Error) -> SecretError {
+pub(super) fn problem(error: Error) -> SecretError {
     match error.code() {
         USER_CANCELED | AUTH_FAILED => SecretError::Denied,
         INTERACTION_NOT_ALLOWED => SecretError::Locked,
+        NO_DEFAULT_KEYCHAIN => SecretError::Unsupported,
         _ => SecretError::Program(io::Error::other(error)),
     }
 }

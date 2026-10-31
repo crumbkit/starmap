@@ -1,6 +1,8 @@
 //! Tests for the Keychain resolver. The tests that touch the Keychain run
-//! only on macOS, where they create items under the test-only service
-//! prefix `starmap-test` and delete them when they finish.
+//! only on macOS. Each of their workspaces is named
+//! `starmap-test-<pid>-<label>`, so their items sit under the test-only
+//! service prefix `starmap.starmap-test-`, and they delete the items when
+//! they finish.
 
 use std::time::{Duration, Instant};
 
@@ -21,7 +23,9 @@ fn name(text: &str) -> Name {
 /// Returns a workspace name that no other test process uses, so tests that
 /// run at the same time never share an item.
 fn workspace(label: &str) -> WorkspaceName {
-    format!("t{}-{label}", std::process::id()).parse().unwrap()
+    format!("starmap-test-{}-{label}", std::process::id())
+        .parse()
+        .unwrap()
 }
 
 fn app(text: &str) -> AppName {
@@ -60,9 +64,14 @@ mod macos {
     use base64::Engine as _;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
+    use security_framework::base::Error;
+    use starmap::{Name, Secret, SecretBytes};
+    use zeroize::Zeroizing;
+
+    use super::super::macos::{problem, store};
+    use super::super::service;
     use super::{Keychain, app, deadline, name, workspace};
     use crate::{AppName, Lookup, Resolver, SecretError, WorkspaceName};
-    use starmap::{Name, SecretBytes};
 
     /// Forgets the test workspaces when a test ends, whether it passed or
     /// failed, so no test leaves an item in the Keychain.
@@ -80,15 +89,15 @@ mod macos {
         SecretBytes::new(count).unwrap()
     }
 
-    fn test_keychain() -> Keychain {
-        Keychain::with_prefix("starmap-test")
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the tests check the text that a stored secret holds"
+    )]
+    fn text(secret: &Secret<String>) -> String {
+        secret.expose().clone()
     }
 
     /// Returns the generated value of `name` as text.
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "the tests check the text that a generated secret holds"
-    )]
     fn generated(
         keychain: &Keychain,
         workspace: &WorkspaceName,
@@ -102,12 +111,12 @@ mod macos {
             name,
             bytes,
         };
-        Ok(keychain.resolve(lookup, deadline())?.expose().clone())
+        Ok(text(&keychain.resolve(lookup, deadline())?))
     }
 
     #[test]
     fn a_generated_value_has_the_declared_bytes_and_is_returned_unchanged_afterwards() {
-        let keychain = test_keychain();
+        let keychain = Keychain::new();
         let shelf = workspace("generate");
         let _cleanup = Cleanup(&keychain, vec![shelf.clone()]);
         let (session, cookie) = (name("SHELF_SESSION_KEY"), name("SHELF_COOKIE_KEY"));
@@ -123,7 +132,7 @@ mod macos {
 
     #[test]
     fn forget_deletes_every_item_of_one_workspace_and_no_other() {
-        let keychain = test_keychain();
+        let keychain = Keychain::new();
         // The kept workspace's name starts with the forgotten one's name.
         let (gone, kept) = (workspace("forget"), workspace("forget-kept"));
         let _cleanup = Cleanup(&keychain, vec![gone.clone(), kept.clone()]);
@@ -144,7 +153,7 @@ mod macos {
 
     #[test]
     fn a_passed_deadline_returns_deadline_and_creates_nothing() {
-        let keychain = test_keychain();
+        let keychain = Keychain::new();
         let late = workspace("deadline");
         let _cleanup = Cleanup(&keychain, vec![late.clone()]);
         let lookup = Lookup::Generated {
@@ -158,5 +167,41 @@ mod macos {
 
         assert!(matches!(result, Err(SecretError::Deadline)));
         assert_eq!(keychain.forget(&late).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_second_store_of_the_same_item_returns_the_first_value_unchanged() {
+        let keychain = Keychain::new();
+        let raced = workspace("store");
+        let _cleanup = Cleanup(&keychain, vec![raced.clone()]);
+        let service = service(&raced);
+        let value = |text: &str| Zeroizing::new(text.to_owned());
+
+        let first = store(&service, "shelf/KEY", value("first"), deadline()).unwrap();
+        let second = store(&service, "shelf/KEY", value("second"), deadline()).unwrap();
+
+        assert_eq!(text(&first), "first");
+        assert_eq!(text(&second), "first");
+    }
+
+    #[test]
+    fn each_keychain_code_maps_to_the_problem_it_names() {
+        let cases = [
+            (-128, "denied"),
+            (-25293, "denied"),
+            (-25308, "locked"),
+            (-25307, "unsupported"),
+            (-50, "program"),
+        ];
+        for (code, expected) in cases {
+            let kind = match problem(Error::from_code(code)) {
+                SecretError::Denied => "denied",
+                SecretError::Locked => "locked",
+                SecretError::Unsupported => "unsupported",
+                SecretError::Program(_) => "program",
+                _ => "other",
+            };
+            assert_eq!(kind, expected, "code {code}");
+        }
     }
 }
