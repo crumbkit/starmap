@@ -1,0 +1,8 @@
+guess: `variables.SHELF_PORT.purpose` is "?", the guess that starmap init wrote, and a purpose is one sentence that says what the variable is for
+  at: 3:11 to 3:14, bytes 91..94
+   3 | purpose = "?"
+     |           ^^^
+guess: `variables.SHELF_PORT.type` is "port?", which still ends in the ? that starmap init wrote
+  at: 4:8 to 4:15, bytes 102..109
+   4 | type = "port?"
+     |        ^^^^^^^

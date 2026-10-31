@@ -1,0 +1,8 @@
+# A generated value asks for more than 1024 bytes.
+[variables.SHELF_SESSION_KEY]
+purpose = "Signs the cookies of the web view."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "generated"
+bytes = 4096

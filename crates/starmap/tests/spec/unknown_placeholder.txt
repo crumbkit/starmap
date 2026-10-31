@@ -1,0 +1,4 @@
+unknown_placeholder: `variables.SHELF_DATABASE.bind.path` is "{data}/books.db", and a path template names the placeholder {data}, and the placeholders are {workspace}, {checkout} and {home}
+  at: 8:17 to 8:34, bytes 223..240
+   8 | bind = { path = "{data}/books.db" }
+     |                 ^^^^^^^^^^^^^^^^^

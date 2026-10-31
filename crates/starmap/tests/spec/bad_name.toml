@@ -1,0 +1,7 @@
+# A variable name holds a lower case letter.
+[variables.shelf_port]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"

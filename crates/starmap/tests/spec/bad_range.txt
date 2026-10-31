@@ -1,0 +1,4 @@
+bad_range: `variables.SHELF_PAGE_SIZE.type.integer` has the min 100 above the max 1, and a range runs from its min up to its max
+  at: 4:20 to 4:42, bytes 147..169
+   4 | type = { integer = { min = 100, max = 1 } }
+     |                    ^^^^^^^^^^^^^^^^^^^^^^

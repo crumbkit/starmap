@@ -1,0 +1,7 @@
+# starmap init marked its guesses with ?, and two remain.
+[variables.SHELF_PORT]
+purpose = "?"
+type = "port?"
+unset = "required"
+show = "shown"
+source = "setting"

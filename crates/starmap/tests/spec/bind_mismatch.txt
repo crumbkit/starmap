@@ -1,0 +1,4 @@
+bind_mismatch: `variables.SHELF_DATABASE.bind` is a one-password bind, and a setting takes only a path bind
+  at: 8:8 to 8:57, bytes 219..268
+   8 | bind = { one-password = "op://Personal/shelf/database" }
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,0 +1,13 @@
+# The mode variable is provided, and only a setting or inherited variable
+# decides the mode.
+[mode]
+variable = "SHELF_ENV"
+production = ["prod"]
+
+[variables.SHELF_ENV]
+purpose = "Selects local or production behaviour."
+type = { enumeration = ["dev", "prod"] }
+unset = "required"
+show = "shown"
+source = "provided"
+bind = { provided = "multiverse/stage" }

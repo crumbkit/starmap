@@ -1,0 +1,4 @@
+mode_undeclared: `mode.variable` is "SHELF_STAGE", which the file does not declare
+  at: 3:12 to 3:25, bytes 79..92
+   3 | variable = "SHELF_STAGE"
+     |            ^^^^^^^^^^^^^

@@ -1,0 +1,8 @@
+# A setting has a one-password bind, which only a secret takes.
+[variables.SHELF_DATABASE]
+purpose = "The SQLite file that holds the catalogue."
+type = "path"
+unset = "required"
+show = "shown"
+source = "setting"
+bind = { one-password = "op://Personal/shelf/database" }

@@ -1,0 +1,4 @@
+empty_enumeration: `variables.SHELF_ENV.type.enumeration` lists "dev" twice, and it lists each value once
+  at: 4:40 to 4:45, bytes 146..151
+   4 | type = { enumeration = ["dev", "prod", "dev"] }
+     |                                        ^^^^^

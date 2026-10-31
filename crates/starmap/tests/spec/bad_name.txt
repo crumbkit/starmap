@@ -1,0 +1,4 @@
+bad_name: `variables.shelf_port` is not a variable name, because a variable name holds 's' at byte 0, and a name holds only upper case letters, digits and underscores and does not start with a digit
+  at: 2:12 to 2:22, bytes 56..66
+   2 | [variables.shelf_port]
+     |            ^^^^^^^^^^

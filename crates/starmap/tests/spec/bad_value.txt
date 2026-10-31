@@ -1,0 +1,4 @@
+bad_value: `variables.SHELF_PORT.show` is "visible", and it takes one of "shown" and "withheld"
+  at: 6:8 to 6:17, bytes 148..157
+   6 | show = "visible"
+     |        ^^^^^^^^^

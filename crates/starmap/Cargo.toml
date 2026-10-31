@@ -12,6 +12,8 @@ categories = ["config"]
 include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [dependencies]
+sha2.workspace = true
+toml_edit.workspace = true
 url.workspace = true
 
 [dev-dependencies]
@@ -19,6 +21,7 @@ url.workspace = true
 # generate strings from a regular expression. The default features add
 # forking, timeouts and bit-set strategies, which the tests do not use.
 proptest = { workspace = true, features = ["std"] }
+snapbox.workspace = true
 
 [lints]
 workspace = true
