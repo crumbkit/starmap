@@ -114,11 +114,26 @@ impl SpecFailure {
             | Self::NotUtf8 { .. } => None,
         }
     }
+
+    /// Returns how many problems a file that does not parse has when it
+    /// has several and each one is a guess that `starmap init` wrote.
+    fn guesses(&self) -> Option<usize> {
+        let Self::Invalid { error, .. } = self else {
+            return None;
+        };
+        let problems = error.problems();
+        let all_guesses = problems
+            .iter()
+            .all(|problem| problem.kind() == SpecProblemKind::Guess);
+        (problems.len() > 1 && all_guesses).then_some(problems.len())
+    }
 }
 
 /// Prints what failed. A file with one problem prints that problem's
-/// message, and a file with several prints how many it has, such as
-/// `starmap.toml has 2 problems`, and the labels describe each one.
+/// message. A file with several guesses and no other problem prints how
+/// many guesses it holds, and a file with several problems prints how many
+/// it has, such as `starmap.toml has 2 problems`, and the labels describe
+/// each one.
 impl fmt::Display for SpecFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -131,9 +146,13 @@ impl fmt::Display for SpecFailure {
                 formatter,
                 "{file} is not UTF-8 text at byte {at}, so it is not TOML"
             ),
-            Self::Invalid { file, error, .. } => match error.problems() {
-                [problem] => write!(formatter, "{file}: {problem}"),
-                problems => write!(formatter, "{file} has {} problems", problems.len()),
+            Self::Invalid { file, error, .. } => match (error.problems(), self.guesses()) {
+                ([problem], _) => write!(formatter, "{file}: {problem}"),
+                (_, Some(count)) => write!(
+                    formatter,
+                    "{file} still holds {count} guesses that starmap init marked with ?"
+                ),
+                (problems, None) => write!(formatter, "{file} has {} problems", problems.len()),
             },
         }
     }
@@ -157,8 +176,10 @@ impl std::error::Error for SpecFailure {
 /// Each problem of a file that does not parse is a label at its span, so the
 /// output shows every problem with the lines it is about. The label of a
 /// file's only problem is `here`, because the failure's message already
-/// states the problem. The label of each of several problems is its
-/// message. The `problems` field lists their codes.
+/// states the problem. A file whose problems are all guesses has one label,
+/// at the first guess, because each guess has the same fix. The label of
+/// each of several other problems is its message. The `problems` field
+/// lists the codes of every problem.
 impl Diagnostic for SpecFailure {
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
@@ -176,6 +197,12 @@ impl Diagnostic for SpecFailure {
         let Self::Invalid { error, .. } = self else {
             return None;
         };
+        if self.guesses().is_some() {
+            let span = error.problems().first()?.span();
+            let label =
+                LabeledSpan::new(Some("the first guess".to_owned()), span.start, span.len());
+            return Some(Box::new(std::iter::once(label)));
+        }
         let only = error.problems().len() == 1;
         Some(Box::new(error.problems().iter().map(move |problem| {
             let span = problem.span();

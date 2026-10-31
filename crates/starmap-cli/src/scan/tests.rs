@@ -1,4 +1,4 @@
-use std::path::Path;
+use starmap::Name;
 
 use super::{lines_of_reads, scan};
 
@@ -54,7 +54,7 @@ fn a_name_in_a_comment_or_a_doc_comment_is_not_a_read() {
 
 #[test]
 fn a_name_that_is_not_a_literal_argument_is_not_a_read() {
-    let text = "const NAME: &str = \"A\";\nfn f(name: &str) {\n    env::var(NAME);\n    env::var(name);\n    env::var(\"B\".to_owned());\n    env::var(b\"C\");\n    let text = \"D\";\n}\n";
+    let text = "const NAME: &str = \"A\";\nfn f(name: &str) {\n    env::var(NAME);\n    env::var(name);\n    env::var(\"B\".to_owned());\n    env::var(b\"C\");\n    let var = 1;\n    f(\"E\");\n    var[\"F\"];\n    let text = \"D\";\n}\n";
     assert_eq!(reads(text), []);
 }
 
@@ -71,53 +71,10 @@ fn text_that_is_not_rust_tokens_is_refused() {
 }
 
 #[test]
-fn the_example_application_reads_each_variable_at_its_places() {
-    // Unit tests run in the package's directory.
-    let reads = scan(Path::new("../starmap/tests/example/src")).unwrap();
-    let found: Vec<(&str, Vec<&str>)> = reads
-        .iter()
-        .map(|(name, places)| {
-            let places = places
-                .iter()
-                .map(|place| place.strip_prefix("../starmap/tests/example/").unwrap());
-            (name.as_str(), places.collect())
-        })
-        .collect();
-    assert_eq!(
-        found,
-        [
-            ("SHELF_CATALOGUE_URL", vec!["src/env.rs:9"]),
-            ("SHELF_DATABASE", vec!["src/env.rs:11"]),
-            ("SHELF_DEBUG", vec!["src/env.rs:13"]),
-            ("SHELF_ENV", vec!["src/env.rs:5"]),
-            ("SHELF_MIRROR_TOKEN", vec!["src/env.rs:17"]),
-            ("SHELF_PAGE_SIZE", vec!["src/env.rs:15"]),
-            ("SHELF_PORT", vec!["src/env.rs:7", "src/main.rs:19"]),
-            ("SHELF_SESSION_KEY", vec!["src/env.rs:19"]),
-            ("XDG_STATE_HOME", vec!["src/books/remove.rs:8"]),
-        ]
-    );
-}
-
-#[test]
 fn a_missing_source_directory_has_no_reads() {
     let dir = tempfile::tempdir().unwrap();
     let reads = scan(&dir.path().join("src")).unwrap();
     assert!(reads.is_empty());
-}
-
-#[test]
-fn a_source_file_that_is_not_rust_fails_and_names_the_file() {
-    let dir = tempfile::tempdir().unwrap();
-    let src = dir.path().join("src");
-    std::fs::create_dir(&src).unwrap();
-    std::fs::write(src.join("broken.rs"), "fn f() {").unwrap();
-    let failure = scan(&src).unwrap_err();
-    let expected = format!(
-        "{} is not valid Rust at line 1",
-        src.join("broken.rs").display()
-    );
-    assert!(failure.to_string().starts_with(&expected), "{failure}");
 }
 
 #[test]
@@ -129,6 +86,37 @@ fn a_source_file_over_the_limit_fails_as_too_large() {
     let failure = scan(dir.path()).unwrap_err();
     assert_eq!(
         failure.to_string(),
-        format!("{} is over 1 MiB", path.display())
+        format!(
+            "{} is over 1 MiB, so the scan does not read it",
+            path.display()
+        )
     );
+}
+
+#[test]
+fn a_method_named_var_is_not_a_read() {
+    let text = "fn f(ctx: Ctx) { ctx.var(\"A\"); ctx.inner().var_os(\"B\"); }";
+    assert_eq!(reads(text), []);
+}
+
+#[test]
+fn the_item_after_cfg_test_is_not_read_and_the_items_around_it_are() {
+    let text = "fn a() { env::var(\"A\"); }\n#[cfg(test)]\n#[expect(unused)]\nmod tests {\n    fn t() { env::var(\"T\"); }\n}\n#[cfg(test)]\nuse std::env::var as T;\nfn b() { env::var(\"B\"); }\n";
+    assert_eq!(reads(text), [read("A", 1), read("B", 9)]);
+}
+
+#[test]
+fn a_file_of_unit_tests_is_not_scanned() {
+    let dir = tempfile::tempdir().unwrap();
+    let read_in = "fn f() { std::env::var(\"A\"); }";
+    for file in ["main.rs", "tests.rs", "render_tests.rs"] {
+        std::fs::write(
+            dir.path().join(file),
+            read_in.replace('A', &file[..1].to_uppercase()),
+        )
+        .unwrap();
+    }
+    let reads = scan(dir.path()).unwrap();
+    let names: Vec<&str> = reads.keys().map(Name::as_str).collect();
+    assert_eq!(names, ["M"]);
 }

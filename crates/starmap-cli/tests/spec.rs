@@ -34,7 +34,7 @@ fn code(output: &[u8]) -> String {
 }
 
 #[test]
-fn a_file_with_two_guesses_prints_one_failure_that_points_at_each() {
+fn a_file_with_two_guesses_prints_one_failure_that_counts_them_and_points_at_the_first() {
     let state = tempfile::tempdir().unwrap();
     starmap(
         SPEC_FIXTURES,

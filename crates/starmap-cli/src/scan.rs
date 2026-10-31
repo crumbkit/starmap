@@ -8,13 +8,24 @@
 //! `std::env::var("SHELF_PORT")` or the derive's field attribute
 //! `#[starmap("SHELF_PORT")]`. It looks inside every bracket, so a read
 //! inside a macro call counts, and comments are not tokens, so a name in a
-//! comment does not. A full parse with syn would add nothing that this
-//! shape needs, because the scan never asks what an expression means.
+//! comment does not. A word after a `.` is a method of some other type, so
+//! `ctx.var("X")` does not count. A full parse with syn would add nothing
+//! that this shape needs, because the scan never asks what an expression
+//! means.
+//!
+//! The scan leaves out test code, because a test may read a variable that
+//! the application never reads. It skips each file named `tests.rs` or
+//! ending in `_tests.rs`, where the Rust standards put unit tests, and the
+//! item that follows `#[cfg(test)]`, up to its closing brace or semicolon.
 //!
 //! The scan misses a read whose name is not a literal at the call, such as
 //! `env::var(NAME)` with a constant, and every lookup in the map that
-//! `std::env::vars_os` returns. `starmap check` then reports such a
-//! variable as declared and unread, and the application's own
+//! `std::env::vars_os` returns. It also misses a variable that a library
+//! reads for the application, such as clap's `#[arg(env = "X")]`, and a
+//! reader that matches names by prefix. It counts any call of a function
+//! named `var` or `var_os` with a literal name, including one from another
+//! crate. `starmap check` then reports a missed variable as declared and
+//! unread, and a miscounted one as undeclared. The application's own
 //! `starmap_test::check` test still compares the derived struct with the
 //! spec.
 
@@ -24,8 +35,8 @@ use std::io;
 use std::path::Path;
 use std::str::FromStr as _;
 
-use crumbkit::Failure;
-use proc_macro2::{Delimiter, TokenStream, TokenTree};
+use crumbkit::{Failure, Recovery};
+use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use starmap::Name;
 
 use crate::codes::SOURCE_UNREADABLE;
@@ -34,9 +45,10 @@ use crate::files;
 #[cfg(test)]
 mod tests;
 
-/// The most bytes of one source file that the scan reads. A larger file
-/// fails with `starmap::source::unreadable`, so a stray generated file
-/// costs at most this much memory (BASE-34).
+/// The most bytes of one source file that the scan reads. A larger file,
+/// such as generated bindings, fails with `starmap::source::unreadable`,
+/// so it costs at most this much memory (BASE-34). The scan does not skip
+/// such a file, because a skipped file could hide a read.
 const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 
 /// The words that read a variable when a string literal in parentheses
@@ -63,11 +75,11 @@ pub(crate) fn scan(src: &Path) -> Result<Reads, SourceFailure> {
         Err(error) => return Err(SourceFailure::new(src, format!("cannot be read: {error}"))),
     };
     let mut reads = Reads::new();
-    for path in paths {
+    for path in paths.into_iter().filter(|path| !is_test_file(path)) {
         let bytes = files::read_capped(&path, MAX_SOURCE_BYTES + 1)
             .map_err(|error| SourceFailure::new(&path, format!("cannot be read: {error}")))?;
         if bytes.len() > MAX_SOURCE_BYTES {
-            return Err(SourceFailure::new(&path, "is over 1 MiB".to_owned()));
+            return Err(SourceFailure::too_large(&path));
         }
         let text = String::from_utf8(bytes)
             .map_err(|_| SourceFailure::new(&path, "is not UTF-8 text".to_owned()))?;
@@ -96,12 +108,31 @@ fn lines_of_reads(text: &str) -> Result<Vec<(Name, usize)>, proc_macro2::LexErro
     Ok(reads)
 }
 
+/// Reports whether `path` names a file of unit tests: `tests.rs`, or a
+/// name that ends in `_tests.rs`.
+fn is_test_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "tests.rs" || name.ends_with("_tests.rs"))
+}
+
 /// Adds each read in `tokens`, and in every bracket inside them, to
-/// `reads`.
+/// `reads`. It skips the item that follows `#[cfg(test)]`.
 fn collect(tokens: TokenStream, reads: &mut Vec<(Name, usize)>) {
+    let mut previous: Option<TokenTree> = None;
     let mut reader = None;
+    let mut in_test_item = false;
     for token in tokens {
+        if in_test_item {
+            in_test_item = !ends_item(&token);
+            continue;
+        }
         if let TokenTree::Group(group) = &token {
+            if is_punct(previous.as_ref(), '#') && is_cfg_test(group) {
+                in_test_item = true;
+                previous = None;
+                continue;
+            }
             if let Some(line) = reader
                 && group.delimiter() == Delimiter::Parenthesis
                 && let Some(name) = literal_name(group.stream())
@@ -111,11 +142,35 @@ fn collect(tokens: TokenStream, reads: &mut Vec<(Name, usize)>) {
             collect(group.stream(), reads);
         }
         reader = match &token {
-            TokenTree::Ident(word) if READERS.iter().any(|reader| word == reader) => {
+            TokenTree::Ident(word)
+                if READERS.iter().any(|reader| word == reader)
+                    && !is_punct(previous.as_ref(), '.') =>
+            {
                 Some(word.span().start().line)
             }
             _ => None,
         };
+        previous = Some(token);
+    }
+}
+
+/// Reports whether `token` is the punctuation `character`.
+fn is_punct(token: Option<&TokenTree>, character: char) -> bool {
+    matches!(token, Some(TokenTree::Punct(punct)) if punct.as_char() == character)
+}
+
+/// Reports whether an attribute's brackets hold `cfg(test)`.
+fn is_cfg_test(group: &Group) -> bool {
+    group.delimiter() == Delimiter::Bracket
+        && group.stream().to_string().replace(' ', "") == "cfg(test)"
+}
+
+/// Reports whether `token` ends an item: its braces, or a semicolon.
+fn ends_item(token: &TokenTree) -> bool {
+    match token {
+        TokenTree::Group(group) => group.delimiter() == Delimiter::Brace,
+        TokenTree::Punct(punct) => punct.as_char() == ';',
+        TokenTree::Ident(_) | TokenTree::Literal(_) => false,
     }
 }
 
@@ -146,22 +201,38 @@ fn literal_name(tokens: TokenStream) -> Option<Name> {
 #[derive(Debug, Failure)]
 #[failure(
     code = SOURCE_UNREADABLE,
-    hint = "fix {file} so that cargo builds it, or move it out of src",
+    recovery = Recovery::Hint(next.clone()),
     field(file = file.as_str()),
 )]
 pub(crate) struct SourceFailure {
     /// The path, as the scan found it.
     file: String,
-    /// What is wrong with it, such as `is over 1 MiB`.
+    /// What is wrong with it, such as `is not valid Rust at line 3`.
     problem: String,
+    /// The next step.
+    next: String,
 }
 
 impl SourceFailure {
     /// Returns the failure of the file at `path`, which `problem` states.
     fn new(path: &Path, problem: String) -> Self {
+        let file = path.display().to_string();
+        let next = format!("fix {file} so that cargo builds it, or move it out of src");
+        Self {
+            file,
+            problem,
+            next,
+        }
+    }
+
+    /// Returns the failure of the file at `path`, which is over 1 MiB.
+    /// Such a file is usually generated and builds, so its next step is to
+    /// move it.
+    fn too_large(path: &Path) -> Self {
         Self {
             file: path.display().to_string(),
-            problem,
+            problem: "is over 1 MiB, so the scan does not read it".to_owned(),
+            next: "move generated code out of src".to_owned(),
         }
     }
 }

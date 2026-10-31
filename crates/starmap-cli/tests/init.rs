@@ -82,6 +82,10 @@ fn a_dry_run_prints_the_guesses_and_writes_nothing() {
 fn check_refuses_every_guess_in_the_file_that_init_wrote() {
     let dir = checkout();
     starmap(dir.path(), &["init"]).success();
+    starmap(dir.path(), &["check"])
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/init/check-guesses.stderr"]);
     let run = starmap(dir.path(), &["check", "--json"]).code(1);
     let failure: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
     assert_eq!(failure["code"], "starmap::spec::guess");
@@ -97,6 +101,11 @@ fn init_keeps_a_spec_that_exists_and_writes_nothing() {
     let dir = checkout();
     fs::write(dir.path().join("starmap.toml"), "# mine\n").unwrap();
     starmap(dir.path(), &["init"])
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/init/starmap-init-exists.stderr"]);
+    // A dry run refuses the existing file too, before it scans src.
+    starmap(dir.path(), &["init", "--dry-run"])
         .code(1)
         .stdout_eq("")
         .stderr_eq(file!["golden/init/starmap-init-exists.stderr"]);

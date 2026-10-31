@@ -53,7 +53,9 @@ pub(crate) fn rust_files(dir: &Path) -> io::Result<Vec<PathBuf>> {
 }
 
 /// Writes `text` to a new file at `path`, and keeps a file that is already
-/// there unchanged.
+/// there unchanged. When the write fails after the file is created, such
+/// as on a full disk, it removes the partial file, so a later run does not
+/// find a truncated spec in its place.
 ///
 /// # Errors
 ///
@@ -61,7 +63,12 @@ pub(crate) fn rust_files(dir: &Path) -> io::Result<Vec<PathBuf>> {
 /// `AlreadyExists` when `path` names an existing file.
 pub(crate) fn write_new(path: &Path, text: &str) -> io::Result<()> {
     let mut file = File::options().write(true).create_new(true).open(path)?;
-    file.write_all(text.as_bytes())
+    file.write_all(text.as_bytes()).inspect_err(|_| {
+        drop(file);
+        // The write error is what the caller needs, so a failed removal
+        // is not reported in its place.
+        let _ = fs::remove_file(path);
+    })
 }
 
 /// Reports whether anything is at `path`. A path that cannot be checked,
