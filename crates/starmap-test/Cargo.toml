@@ -11,5 +11,19 @@ keywords = ["environment", "configuration", "testing"]
 categories = ["config", "development-tools::testing"]
 include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
+[dependencies]
+# The check parses the spec and compares it with the fields of a struct
+# that implements `starmap::Env`.
+starmap.workspace = true
+
+[dev-dependencies]
+# The tests derive `Env` and `Enumeration` for the structs they check.
+starmap = { workspace = true, features = ["derive"] }
+# url is the type of a URL field in the tests' structs.
+url.workspace = true
+# snapbox compares each disagreement report with its golden file, and
+# rewrites the golden files when SNAPSHOTS=overwrite is set.
+snapbox.workspace = true
+
 [lints]
 workspace = true

@@ -58,6 +58,25 @@ proptest = { version = "1.12.0", default-features = false }
 # features is needed.
 snapbox = { version = "1.2.2", default-features = false }
 
+# starmap re-exports the derives of starmap-derive behind its `derive`
+# feature, and starmap-test checks a derived struct against a spec. Each
+# entry gives a version beside the path, because cargo-deny treats a path
+# dependency without a version as a wildcard, and the release pull request
+# moves both versions with the workspace version.
+starmap = { version = "0.0.0", path = "crates/starmap" }
+starmap-derive = { version = "0.0.0", path = "crates/starmap-derive" }
+
+# syn, quote and proc-macro2 build starmap-derive, the `Env` and
+# `Enumeration` derives behind starmap's `derive` feature. The entries enable
+# no feature, and starmap-derive enables the ones it uses.
+syn = { version = "3.0.6", default-features = false }
+quote = { version = "1.0.47", default-features = false }
+proc-macro2 = { version = "1.0.107", default-features = false }
+
+# trybuild compiles the derive's misuses and compares each compile error with
+# its golden `.stderr` file. Only tests use it.
+trybuild = "1.0.122"
+
 # The lint table is lints/base.toml and lints/library.toml of the Rust
 # standards (BASE-1, LIB-2, LIB-3). A build with CARGO_BUILD_WARNINGS=deny
 # fails on any warning, and every package inherits the table through

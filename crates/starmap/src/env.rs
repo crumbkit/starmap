@@ -84,6 +84,11 @@ impl Environment {
         }
     }
 
+    /// Whether the declared variable `name` has a value.
+    pub(crate) fn is_set(&self, name: &Name) -> bool {
+        self.held(name).is_some()
+    }
+
     /// Returns the checked value of `name`, if it has one.
     fn held(&self, name: &Name) -> Option<&Held> {
         self.entries
