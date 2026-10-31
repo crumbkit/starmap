@@ -879,6 +879,11 @@ dependencies = [
 [[package]]
 name = "starmap-resolve"
 version = "0.0.0"
+dependencies = [
+ "proptest",
+ "starmap",
+ "zeroize",
+]
 
 [[package]]
 name = "starmap-test"

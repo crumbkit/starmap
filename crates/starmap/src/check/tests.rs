@@ -146,6 +146,26 @@ fn capture_binds_a_withheld_value_that_is_not_unicode_as_not_unicode() {
     ));
 }
 
+#[test]
+#[cfg(unix)]
+fn a_variable_binds_one_raw_value_by_its_show() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let spec = spec();
+    let port = spec.variable(&name("SHELF_PORT")).unwrap();
+    let token = spec.variable(&name("SHELF_MIRROR_TOKEN")).unwrap();
+
+    assert!(matches!(
+        port.capture("8080".into()),
+        Bound::Plain(value) if value == "8080"
+    ));
+    assert!(matches!(token.capture("hunter2".into()), Bound::Secret(_)));
+    assert!(matches!(
+        token.capture(OsString::from_vec(vec![0xff, 0xfe])),
+        Bound::NotUnicode
+    ));
+}
+
 // mode
 
 #[test]

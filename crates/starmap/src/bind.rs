@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::{Name, Secret};
@@ -217,11 +218,52 @@ impl PathTemplate {
 
     /// Returns the placeholders the template names, in order.
     pub fn placeholders(&self) -> impl Iterator<Item = Placeholder> + '_ {
-        self.0
-            .split('{')
-            .skip(1)
-            .filter_map(|after| after.split_once('}'))
-            .filter_map(|(name, _)| Placeholder::named(name))
+        self.pieces().filter_map(|(placeholder, _)| placeholder)
+    }
+
+    /// Returns the path the template names when `place` gives the
+    /// directory of each placeholder. The rest of the template is kept as
+    /// it is written.
+    ///
+    /// ```
+    /// use std::path::{Path, PathBuf};
+    ///
+    /// let template: starmap::PathTemplate = "{checkout}/books.db".parse()?;
+    /// let path = template.fill(|_| Some(Path::new("/src/shelf")));
+    /// assert_eq!(path, Ok(PathBuf::from("/src/shelf/books.db")));
+    /// # Ok::<(), starmap::PathTemplateError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns the first placeholder for which `place` gives no directory.
+    pub fn fill<'p>(
+        &self,
+        mut place: impl FnMut(Placeholder) -> Option<&'p Path>,
+    ) -> Result<PathBuf, Placeholder> {
+        self.pieces()
+            .try_fold(OsString::new(), |mut path, (placeholder, text)| {
+                if let Some(placeholder) = placeholder {
+                    path.push(place(placeholder).ok_or(placeholder)?);
+                }
+                path.push(text);
+                Ok(path)
+            })
+            .map(PathBuf::from)
+    }
+
+    /// Returns each piece of the template in order: the text before the
+    /// first placeholder, then each placeholder with the text that follows
+    /// it. [`FromStr`] has checked that every `{` opens a known
+    /// placeholder that `}` closes.
+    fn pieces(&self) -> impl Iterator<Item = (Option<Placeholder>, &str)> + '_ {
+        let mut pieces = self.0.split('{');
+        let before = pieces.next().unwrap_or_default();
+        let rest = pieces.filter_map(|piece| {
+            let (name, after) = piece.split_once('}')?;
+            Some((Some(Placeholder::named(name)?), after))
+        });
+        std::iter::once((None, before)).chain(rest)
     }
 }
 
