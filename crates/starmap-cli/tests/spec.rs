@@ -100,7 +100,7 @@ fn a_file_of_exactly_256_kib_is_read_and_parsed() {
     fs::write(dir.path().join("starmap.toml"), text).unwrap();
     starmap(dir.path(), dir.path(), &["check"])
         .success()
-        .stdout_eq("starmap.toml declares 0 variables.\n");
+        .stdout_eq("starmap.toml declares 0 variables, and src reads none of them.\n");
 }
 
 #[test]

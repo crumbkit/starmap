@@ -1,0 +1,10 @@
+NAME                 TYPE     UNSET      SOURCE      READ_AT
+SHELF_CATALOGUE_URL  url?     required?  setting?    src/env.rs:9
+SHELF_DATABASE       string?  required?  setting?    src/env.rs:11
+SHELF_DEBUG          string?  required?  setting?    src/env.rs:13
+SHELF_ENV            string?  required?  setting?    src/env.rs:5
+SHELF_MIRROR_TOKEN   string?  optional?  secret?     src/env.rs:17
+SHELF_PAGE_SIZE      string?  required?  setting?    src/env.rs:15
+SHELF_PORT           port?    required?  setting?    src/env.rs:7 src/main.rs:19
+SHELF_SESSION_KEY    string?  optional?  secret?     src/env.rs:19
+XDG_STATE_HOME       path?    optional?  inherited?  src/books/remove.rs:8

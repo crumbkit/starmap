@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "starmap/check/v1",
-  "description": "A spec that follows every rule of the file: its path, digest, number of variables and mode.",
+  "description": "A spec that follows every rule of the file: its path, digest, number of variables, the reads in src and the mode.",
   "type": "object",
   "properties": {
     "data": {
@@ -408,9 +408,22 @@
           "description": "The mode that this shell's values decide.",
           "$ref": "#/$defs/ModeWord"
         },
+        "read": {
+          "description": "How many of the declared variables src reads.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
         "spec": {
           "description": "The path of the spec, as the caller gave it.",
           "type": "string"
+        },
+        "undeclared": {
+          "description": "The variables that src reads and the spec does not declare, each of which is also a failure.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "variables": {
           "description": "How many variables the spec declares.",
@@ -423,6 +436,8 @@
         "spec",
         "digest",
         "variables",
+        "read",
+        "undeclared",
         "mode"
       ]
     },

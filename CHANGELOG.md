@@ -77,3 +77,14 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shell. A withheld value prints as eight dots whatever its length, and its
   JSON holds only its state. `commands list` and `self usage` come from
   crumbkit, and every run appends a line to the command's usage log.
+- `starmap init` scans the `.rs` files under `src` for each variable that
+  the code reads by a literal name, through `std::env::var`,
+  `std::env::var_os` or the `#[starmap("NAME")]` field attribute, and
+  writes `starmap.toml` with a guess for each field of each variable. Each
+  guess ends in `?`, and `--dry-run` prints the guesses and writes nothing.
+  init refuses to replace an existing file with `starmap::spec::exists`.
+- `starmap check` also scans `src`. Its text says how many of the declared
+  variables `src` reads, its JSON gains the fields `read` and
+  `undeclared`, and each variable that `src` reads and the file does not
+  declare fails with `starmap::variable::undeclared`. A missing spec's next
+  step is now `starmap init`.

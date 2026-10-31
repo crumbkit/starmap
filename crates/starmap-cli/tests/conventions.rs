@@ -4,10 +4,11 @@
 //!
 //! They live in an integration test so that the example check can run the
 //! built binary, whose path cargo sets only for integration tests. Each
-//! example runs in `crates/starmap/tests/example`, which holds the build
-//! plan's illustrative `starmap.toml`, and each spec failure runs in
+//! example runs in a fresh copy of `crates/starmap/tests/example`, which
+//! holds the build plan's illustrative `starmap.toml` and the source of an
+//! application that reads its variables. Each spec failure runs in
 //! `crates/starmap/tests/spec`, which holds one file for each kind of spec
-//! problem. `SNAPSHOTS=overwrite cargo test` writes, rewrites and deletes the
+//! problem, and each source failure runs in `tests/fixtures`. `SNAPSHOTS=overwrite cargo test` writes, rewrites and deletes the
 //! golden files.
 
 #![cfg(test)]
@@ -28,13 +29,25 @@ const EXAMPLE: &str = "../starmap/tests/example";
 /// problem, relative to this package.
 const SPEC_FIXTURES: &str = "../starmap/tests/spec";
 
+/// The directory that holds an application for each failure of its
+/// source, relative to this package.
+const SOURCE_FIXTURES: &str = "tests/fixtures";
+
+/// The reason that the examples of `init` do not run in the example
+/// directory.
+const INIT_RUNS_ELSEWHERE: &str = "The example directory holds starmap.toml, which init refuses to replace, so tests/init.rs runs init in a checkout without one and pins its output.";
+
 /// The `starmap` command's opt-outs from crumbkit's conventions, which
 /// every check below reads.
-const ALLOW: &[Allow] = &[Allow::new(
-    Rule::Examples,
-    "self usage",
-    "The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.",
-)];
+const ALLOW: &[Allow] = &[
+    Allow::new(
+        Rule::Examples,
+        "self usage",
+        "The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.",
+    ),
+    Allow::example("init", &[], INIT_RUNS_ELSEWHERE),
+    Allow::example("init", &["--dry-run"], INIT_RUNS_ELSEWHERE),
+];
 
 /// The budgets of the `-h` pages, which are crumbkit's defaults.
 const BUDGETS: Budgets = Budgets::new();
@@ -55,7 +68,7 @@ const ENV: &[(&str, &str)] = &[
 const EXAMPLES: Examples<'_> =
     Examples::new(env!("CARGO_BIN_EXE_starmap"), "tests/golden/examples")
         .env(ENV)
-        .current_dir(EXAMPLE)
+        .fresh_dir(EXAMPLE)
         .allow(ALLOW);
 
 #[test]
@@ -165,11 +178,19 @@ const fn spec(code: &'static Code, words: &'static [&'static str]) -> Failing<'s
     Failing::new(code, words).dir(SPEC_FIXTURES)
 }
 
+/// Returns the command line `words`, which runs in [`SOURCE_FIXTURES`] and
+/// fails with `code`.
+const fn source(code: &'static Code, words: &'static [&'static str]) -> Failing<'static> {
+    Failing::new(code, words).dir(SOURCE_FIXTURES)
+}
+
 /// The command lines that fail, one for each declared code that a command
 /// line provokes. Each spec failure checks one fixture of
-/// [`SPEC_FIXTURES`], whose first problem has the failure's kind.
+/// [`SPEC_FIXTURES`], whose first problem has the failure's kind. The
+/// failures that lead to `init` run in a fresh copy of [`EXAMPLE`], so the
+/// file that init writes is gone after the chain.
 const STARTS: &[Failing<'static>] = &[
-    spec(&codes::SPEC_NOT_FOUND, &["check", "--spec", "missing.toml"]),
+    Failing::new(&codes::SPEC_NOT_FOUND, &["check", "--spec", "missing.toml"]),
     spec(&codes::SPEC_UNREADABLE, &["check", "--spec", "."]),
     spec(&codes::SPEC_SYNTAX, &["check", "--spec", "syntax.toml"]),
     spec(
@@ -227,6 +248,19 @@ const STARTS: &[Failing<'static>] = &[
         &["check", "--spec", "mode_source.toml"],
     ),
     Failing::new(&codes::VARIABLE_UNKNOWN, &["explain", "SHELF_THEME"]),
+    Failing::new(&codes::SPEC_EXISTS, &["init", "--spec", "starmap.toml"]),
+    Failing::new(
+        &codes::SPEC_UNWRITABLE,
+        &["init", "--spec", "missing/starmap.toml"],
+    ),
+    source(
+        &codes::VARIABLE_UNDECLARED,
+        &["check", "--spec", "undeclared/starmap.toml"],
+    ),
+    source(
+        &codes::SOURCE_UNREADABLE,
+        &["check", "--spec", "unreadable/starmap.toml"],
+    ),
 ];
 
 /// The declared codes that no command line in this file provokes.
@@ -249,10 +283,22 @@ fn every_recovery_leads_to_a_command_that_runs() {
 /// same command with the valid example file in place of the fixture.
 const VALID: &[&str] = &["check", "--spec", "../example/starmap.toml"];
 
+/// The line that each source failure's twin runs in [`SOURCE_FIXTURES`]:
+/// the same command with the example application in place of the fixture.
+const VALID_SOURCE: &[&str] = &[
+    "check",
+    "--spec",
+    "../../../starmap/tests/example/starmap.toml",
+];
+
+/// The line that each refused `init` twins with in a fresh copy of
+/// [`EXAMPLE`]: init with a spec path that is free and writable.
+const NEW_SPEC: &[&str] = &["init", "--spec", "new.toml"];
+
 /// One twin for each start. Each differs from its refused line in one
 /// word, so that word is the reason for the refusal (TEST-1).
 const PAIRS: &[Twin<'static>] = &[
-    Twin::new(STARTS[0], VALID),
+    Twin::new(STARTS[0], &["check", "--spec", "starmap.toml"]),
     Twin::new(STARTS[1], VALID),
     Twin::new(STARTS[2], VALID),
     Twin::new(STARTS[3], VALID),
@@ -271,6 +317,10 @@ const PAIRS: &[Twin<'static>] = &[
     Twin::new(STARTS[16], VALID),
     Twin::new(STARTS[17], VALID),
     Twin::new(STARTS[18], &["explain", "SHELF_PORT"]),
+    Twin::new(STARTS[19], NEW_SPEC),
+    Twin::new(STARTS[20], NEW_SPEC),
+    Twin::new(STARTS[21], VALID_SOURCE),
+    Twin::new(STARTS[22], VALID_SOURCE),
 ];
 
 /// The settings of the twin check.

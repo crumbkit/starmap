@@ -111,6 +111,12 @@ serde_json = { version = "1.0.151", default-features = false }
 # it removes when the test ends. Only tests use it.
 tempfile = { version = "3.27.0", default-features = false }
 
+# cargo shear reports a .rs file that no target builds. These files are the
+# application source that `starmap init` and `starmap check` scan in the
+# tests, and Cargo never builds them.
+[workspace.metadata.cargo-shear]
+ignored-paths = ["crates/starmap/tests/example/src/**/*.rs", "crates/starmap-cli/tests/fixtures/**/*.rs"]
+
 # The lint table is lints/base.toml and lints/library.toml of the Rust
 # standards (BASE-1, LIB-2, LIB-3). A build with CARGO_BUILD_WARNINGS=deny
 # fails on any warning, and every package inherits the table through

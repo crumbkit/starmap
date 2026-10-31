@@ -1,0 +1,75 @@
+# starmap init wrote this file from the variables that the source reads.
+# Each value that ends in ? is a guess. Confirm or correct each one, delete
+# its ?, and write each purpose. starmap check refuses the file until then.
+
+[variables.SHELF_CATALOGUE_URL]
+# Read at src/env.rs:9.
+purpose = "?"
+type = "url?"
+unset = "required?"
+show = "shown?"
+source = "setting?"
+
+[variables.SHELF_DATABASE]
+# Read at src/env.rs:11.
+purpose = "?"
+type = "string?"
+unset = "required?"
+show = "shown?"
+source = "setting?"
+
+[variables.SHELF_DEBUG]
+# Read at src/env.rs:13.
+purpose = "?"
+type = "string?"
+unset = "required?"
+show = "shown?"
+source = "setting?"
+
+[variables.SHELF_ENV]
+# Read at src/env.rs:5.
+purpose = "?"
+type = "string?"
+unset = "required?"
+show = "shown?"
+source = "setting?"
+
+[variables.SHELF_MIRROR_TOKEN]
+# Read at src/env.rs:17.
+purpose = "?"
+type = "string?"
+unset = "optional?"
+show = "withheld?"
+source = "secret?"
+
+[variables.SHELF_PAGE_SIZE]
+# Read at src/env.rs:15.
+purpose = "?"
+type = "string?"
+unset = "required?"
+show = "shown?"
+source = "setting?"
+
+[variables.SHELF_PORT]
+# Read at src/env.rs:7, src/main.rs:19.
+purpose = "?"
+type = "port?"
+unset = "required?"
+show = "shown?"
+source = "setting?"
+
+[variables.SHELF_SESSION_KEY]
+# Read at src/env.rs:19.
+purpose = "?"
+type = "string?"
+unset = "optional?"
+show = "withheld?"
+source = "secret?"
+
+[variables.XDG_STATE_HOME]
+# Read at src/books/remove.rs:8.
+purpose = "?"
+type = "path?"
+unset = "optional?"
+show = "shown?"
+source = "inherited?"

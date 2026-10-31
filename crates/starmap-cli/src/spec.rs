@@ -9,6 +9,7 @@ use crumbkit::{Code, Failure, Field, FieldValue, Recovery};
 use miette::{Diagnostic, LabeledSpan, NamedSource, SourceCode};
 use starmap::{Spec, SpecError, SpecProblemKind};
 
+use crate::cli::SpecFile;
 use crate::codes;
 use crate::files;
 
@@ -57,6 +58,18 @@ pub(crate) enum SpecFailure {
         /// The path, as the caller gave it.
         file: String,
     },
+    /// `init` finds a file at the path already, and keeps it.
+    Exists {
+        /// The path, as the caller gave it.
+        file: String,
+    },
+    /// `init` cannot create or write the file.
+    Unwritable {
+        /// The path, as the caller gave it.
+        file: String,
+        /// Why it cannot be written.
+        error: io::Error,
+    },
     /// The file exists and cannot be read.
     Unreadable {
         /// The path, as the caller gave it.
@@ -94,6 +107,8 @@ impl SpecFailure {
         match self {
             Self::Invalid { error, .. } => error.problems().first().map(|problem| problem.kind()),
             Self::NotFound { .. }
+            | Self::Exists { .. }
+            | Self::Unwritable { .. }
             | Self::Unreadable { .. }
             | Self::TooLarge { .. }
             | Self::NotUtf8 { .. } => None,
@@ -108,6 +123,8 @@ impl fmt::Display for SpecFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound { file } => write!(formatter, "{file} does not exist"),
+            Self::Exists { file } => write!(formatter, "{file} exists already"),
+            Self::Unwritable { file, .. } => write!(formatter, "{file} cannot be written"),
             Self::Unreadable { file, .. } => write!(formatter, "{file} cannot be read"),
             Self::TooLarge { file } => write!(formatter, "{file} is over 256 KiB"),
             Self::NotUtf8 { file, at } => write!(
@@ -127,8 +144,9 @@ impl fmt::Display for SpecFailure {
 impl std::error::Error for SpecFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Unreadable { error, .. } => Some(error),
+            Self::Unreadable { error, .. } | Self::Unwritable { error, .. } => Some(error),
             Self::NotFound { .. }
+            | Self::Exists { .. }
             | Self::TooLarge { .. }
             | Self::NotUtf8 { .. }
             | Self::Invalid { .. } => None,
@@ -146,6 +164,8 @@ impl Diagnostic for SpecFailure {
         match self {
             Self::Invalid { source, .. } => Some(source),
             Self::NotFound { .. }
+            | Self::Exists { .. }
+            | Self::Unwritable { .. }
             | Self::Unreadable { .. }
             | Self::TooLarge { .. }
             | Self::NotUtf8 { .. } => None,
@@ -173,6 +193,8 @@ impl Failure for SpecFailure {
     fn code(&self) -> &'static Code {
         match self {
             Self::NotFound { .. } => &codes::SPEC_NOT_FOUND,
+            Self::Exists { .. } => &codes::SPEC_EXISTS,
+            Self::Unwritable { .. } => &codes::SPEC_UNWRITABLE,
             Self::Unreadable { .. } => &codes::SPEC_UNREADABLE,
             Self::TooLarge { .. } => &codes::SPEC_TOO_LARGE,
             Self::NotUtf8 { .. } => &codes::SPEC_SYNTAX,
@@ -181,9 +203,11 @@ impl Failure for SpecFailure {
     }
 
     fn recovery(&self) -> Recovery {
-        Recovery::Hint(match self {
-            Self::NotFound { file } => {
-                format!("create {file}, or pass --spec the file that holds the spec")
+        let hint = match self {
+            Self::NotFound { file } => return Recovery::Run(SpecFile::call(&["init"], file)),
+            Self::Exists { file } => return Recovery::Run(SpecFile::call(&["check"], file)),
+            Self::Unwritable { file, .. } => {
+                format!("make the directory of {file} writable, or pass --spec another file")
             }
             Self::Unreadable { file, .. } => {
                 format!("make {file} readable, or pass --spec another file")
@@ -191,12 +215,15 @@ impl Failure for SpecFailure {
             Self::TooLarge { .. } => hint(SpecProblemKind::TooLarge).to_owned(),
             Self::NotUtf8 { file, .. } => format!("save {file} as UTF-8 text"),
             Self::Invalid { .. } => self.first_kind().map_or("", hint).to_owned(),
-        })
+        };
+        Recovery::Hint(hint)
     }
 
     fn fields(&self) -> Vec<Field<'_>> {
         match self {
             Self::NotFound { file }
+            | Self::Exists { file }
+            | Self::Unwritable { file, .. }
             | Self::Unreadable { file, .. }
             | Self::TooLarge { file }
             | Self::NotUtf8 { file, .. } => {

@@ -859,6 +859,7 @@ dependencies = [
  "crumbkit-test",
  "crumbkit-usage",
  "miette",
+ "proc-macro2",
  "schemars",
  "serde",
  "serde_json",
