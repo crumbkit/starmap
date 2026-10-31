@@ -70,11 +70,16 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `starmap_resolve::resolve` resolves each variable of a spec in one mode
   from a `Context` of the caller's values, the `Places` of path templates,
   a `Provider` for each provided kind and a list of `Resolver`s. A caller
-  value wins for a setting or inherited variable, and for a provided one
-  when no provider of its kind is registered. A caller value for a secret
-  or generated variable is ignored and listed in `Resolution::ignored`.
-  Every provider and resolver is asked under one deadline, and the
-  `Resolution` lists a `ResolveFailure` for each variable it could not
-  resolve.
+  value wins for a setting, an inherited variable or a secret without a
+  bind, and for a provided one when no provider of its kind is registered.
+  A caller value for a secret with a bind or a generated variable is
+  ignored and listed in `Resolution::ignored`. Every provider and resolver
+  is asked under one deadline, and the `Resolution` lists a
+  `ResolveFailure` for each variable it could not resolve.
+  `Resolution::new` and `ResolveFailure::new` build them for a host's own
+  tests.
 - `starmap_resolve::expand` fills a path template's placeholders from
   `Places`, and names the first placeholder that has no place.
+- `Variable::capture` binds one raw value by the variable's show, as
+  `starmap::capture` binds each value. `PathTemplate::fill` returns the path
+  a template names when a function gives each placeholder's directory.

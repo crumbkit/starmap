@@ -28,7 +28,19 @@ pub fn capture(spec: &Spec, vars: impl IntoIterator<Item = (OsString, OsString)>
         let Some(variable) = spec.variable(&name) else {
             continue;
         };
-        let bound = match variable.show() {
+        bindings.bind(name, variable.capture(raw));
+    }
+    bindings
+}
+
+impl Variable {
+    /// Binds the raw value `raw` by the variable's show, as [`capture`]
+    /// binds each value it keeps: a withheld value as a [`Secret<String>`],
+    /// or as [`Bound::NotUnicode`] when it is not Unicode, and a shown value
+    /// as it is.
+    #[must_use]
+    pub fn capture(&self, raw: OsString) -> Bound {
+        match self.show() {
             Show::Shown => Bound::Plain(raw),
             Show::Withheld => match raw.into_string() {
                 Ok(text) => Bound::Secret(Secret::new(text)),
@@ -37,10 +49,8 @@ pub fn capture(spec: &Spec, vars: impl IntoIterator<Item = (OsString, OsString)>
                     Bound::NotUnicode
                 }
             },
-        };
-        bindings.bind(name, bound);
+        }
     }
-    bindings
 }
 
 /// Drops the raw value of a withheld variable that is not Unicode, zeroing

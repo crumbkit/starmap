@@ -6,9 +6,11 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use starmap::{Bindings, Bound, Mode, Name, ProvidedRef, ProviderKind, Secret, Spec};
+use starmap::{
+    Bindings, Bound, Mode, Name, Placeholder, ProvidedRef, ProviderKind, Secret, Spec, Verdict,
+};
 
-use super::{Context, Resolution, resolve};
+use super::{Context, Resolution, ResolveFailure, ResolveProblem, resolve};
 use crate::{Lookup, Places, Provider, ProviderError, Resolver, SecretError};
 
 /// A spec with every source kind: a mode setting, a required and an
@@ -131,18 +133,22 @@ fn bound(resolution: &Resolution, variable: &str) -> Option<String> {
     }
 }
 
-/// Returns each failure as its variable's name and its problem's `Debug`.
-fn failures(resolution: &Resolution) -> Vec<(String, String)> {
+/// Returns the name of each variable that failed, in order.
+fn failed(resolution: &Resolution) -> Vec<&str> {
     resolution
         .failures
         .iter()
-        .map(|failure| {
-            (
-                failure.name.as_str().to_owned(),
-                format!("{:?}", failure.problem),
-            )
-        })
+        .map(|failure| failure.name.as_str())
         .collect()
+}
+
+/// Returns the problem of the variable `variable`, if it failed.
+fn problem<'r>(resolution: &'r Resolution, variable: &str) -> Option<&'r ResolveProblem> {
+    resolution
+        .failures
+        .iter()
+        .find(|failure| failure.name.as_str() == variable)
+        .map(|failure| &failure.problem)
 }
 
 /// A provider that answers every request with one value or one error, and
@@ -150,6 +156,7 @@ fn failures(resolution: &Resolution) -> Vec<(String, String)> {
 struct FakeProvider {
     kind: ProviderKind,
     answer: Result<&'static str, ProviderError>,
+    waits_out_deadline: bool,
     asked: RefCell<Vec<Request>>,
 }
 
@@ -166,11 +173,21 @@ impl FakeProvider {
         Self::new(kind, Ok(value))
     }
 
+    /// Returns a provider of `kind` that answers `value` only once the
+    /// deadline it receives has passed.
+    fn waiting(kind: &str, value: &'static str) -> Self {
+        Self {
+            waits_out_deadline: true,
+            ..Self::answering(kind, value)
+        }
+    }
+
     /// Returns a provider of `kind` with `answer`.
     fn new(kind: &str, answer: Result<&'static str, ProviderError>) -> Self {
         Self {
             kind: kind.parse().unwrap(),
             answer,
+            waits_out_deadline: false,
             asked: RefCell::new(Vec::new()),
         }
     }
@@ -196,6 +213,10 @@ impl Provider for FakeProvider {
             qualifiers,
             deadline,
         });
+        // The deadline itself is the signal this provider waits for.
+        while self.waits_out_deadline && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
         self.answer.clone().map(OsString::from)
     }
 }
@@ -331,11 +352,7 @@ fn a_path_bind_without_its_place_leaves_an_optional_setting_to_its_default() {
         &Context::new(places, &caller, later()),
     );
     assert_eq!(bound(&resolution, "SHELF_DATABASE"), None);
-    assert!(
-        !failures(&resolution)
-            .iter()
-            .any(|(variable, _)| variable == "SHELF_DATABASE")
-    );
+    assert!(problem(&resolution, "SHELF_DATABASE").is_none());
 }
 
 #[test]
@@ -384,23 +401,18 @@ fn a_required_provided_variable_without_a_provider_or_caller_value_fails() {
         &Context::new(places(), &caller, later()),
     );
 
-    let failures = failures(&resolution);
-    assert!(failures.contains(&(
-        "SHELF_PORT".to_owned(),
-        "NoProvider(ProviderKind(\"multiverse/port\"))".to_owned()
-    )));
+    assert!(matches!(
+        problem(&resolution, "SHELF_PORT"),
+        Some(ResolveProblem::NoProvider(kind)) if kind.as_str() == "multiverse/port"
+    ));
     // The optional provided variable stays unbound, and check leaves it
     // unset.
-    assert!(
-        !failures
-            .iter()
-            .any(|(variable, _)| variable == "SHELF_CATALOGUE_URL")
-    );
+    assert!(problem(&resolution, "SHELF_CATALOGUE_URL").is_none());
     assert_eq!(bound(&resolution, "SHELF_CATALOGUE_URL"), None);
 }
 
 #[test]
-fn a_caller_value_for_a_secret_or_generated_variable_is_ignored_with_a_note() {
+fn a_caller_value_for_a_bound_secret_or_a_generated_variable_is_ignored_with_a_note() {
     let caller = caller(&[
         ("SHELF_MIRROR_TOKEN", "token-from-shell"),
         ("SHELF_SESSION_KEY", "key-from-shell"),
@@ -463,16 +475,33 @@ fn resolvers_are_asked_in_order_until_one_supports_the_lookup() {
 }
 
 #[test]
-fn a_lookup_that_no_resolver_supports_fails_as_unsupported() {
+fn a_lookup_that_no_resolver_supports_fails_a_required_variable_as_unsupported() {
+    let caller = Bindings::new();
+    let unsupported = FakeResolver::failing(|| SecretError::Unsupported);
+    let context = Context::new(places(), &caller, later()).resolver(&unsupported);
+    let resolution = resolve(&spec(), Mode::Production, &context);
+
+    for variable in ["SHELF_MIRROR_TOKEN", "SHELF_SESSION_KEY"] {
+        assert!(
+            matches!(
+                problem(&resolution, variable),
+                Some(ResolveProblem::Secret(SecretError::Unsupported))
+            ),
+            "{variable}"
+        );
+    }
+}
+
+#[test]
+fn a_lookup_that_no_resolver_supports_leaves_an_optional_variable_unbound() {
     let caller = Bindings::new();
     let unsupported = FakeResolver::failing(|| SecretError::Unsupported);
     let context = Context::new(places(), &caller, later()).resolver(&unsupported);
     let resolution = resolve(&spec(), Mode::Local, &context);
 
-    assert!(failures(&resolution).contains(&(
-        "SHELF_MIRROR_TOKEN".to_owned(),
-        "Secret(Unsupported)".to_owned()
-    )));
+    assert_eq!(unsupported.lookups().len(), 2);
+    assert!(problem(&resolution, "SHELF_MIRROR_TOKEN").is_none());
+    assert_eq!(bound(&resolution, "SHELF_MIRROR_TOKEN"), None);
 }
 
 #[test]
@@ -489,9 +518,11 @@ fn a_secret_without_a_resolver_fails_only_where_the_mode_requires_it() {
         &Context::new(places(), &caller, later()),
     );
 
-    let no_resolver = ("SHELF_MIRROR_TOKEN".to_owned(), "NoResolver".to_owned());
-    assert!(!failures(&local).contains(&no_resolver));
-    assert!(failures(&production).contains(&no_resolver));
+    assert!(problem(&local, "SHELF_MIRROR_TOKEN").is_none());
+    assert!(matches!(
+        problem(&production, "SHELF_MIRROR_TOKEN"),
+        Some(ResolveProblem::NoResolver)
+    ));
 }
 
 #[test]
@@ -502,10 +533,10 @@ fn a_generated_value_without_a_workspace_fails_on_the_workspace_placeholder() {
     let context = Context::new(places, &caller, later()).resolver(&resolver);
     let resolution = resolve(&spec(), Mode::Local, &context);
 
-    assert!(failures(&resolution).contains(&(
-        "SHELF_SESSION_KEY".to_owned(),
-        "Placeholder(Workspace)".to_owned()
-    )));
+    assert!(matches!(
+        problem(&resolution, "SHELF_SESSION_KEY"),
+        Some(ResolveProblem::Placeholder(Placeholder::Workspace))
+    ));
 }
 
 #[test]
@@ -546,12 +577,14 @@ fn a_passed_deadline_fails_each_variable_that_needs_a_provider_or_resolver() {
     let resolution = resolve(&spec(), Mode::Local, &context);
 
     assert_eq!(
-        failures(&resolution),
-        vec![
-            ("SHELF_PORT".to_owned(), "Deadline".to_owned()),
-            ("SHELF_MIRROR_TOKEN".to_owned(), "Deadline".to_owned()),
-            ("SHELF_SESSION_KEY".to_owned(), "Deadline".to_owned()),
-        ]
+        failed(&resolution),
+        ["SHELF_PORT", "SHELF_MIRROR_TOKEN", "SHELF_SESSION_KEY"]
+    );
+    assert!(
+        resolution
+            .failures
+            .iter()
+            .all(|failure| matches!(failure.problem, ResolveProblem::Deadline))
     );
     assert!(ports.asked.borrow().is_empty());
     assert!(resolver.asked.borrow().is_empty());
@@ -583,19 +616,22 @@ fn one_call_reports_every_failure_against_its_own_variable() {
     let resolution = resolve(&spec(), Mode::Local, &context);
 
     assert_eq!(
-        failures(&resolution),
-        vec![
-            (
-                "SHELF_PORT".to_owned(),
-                "Provider(ProviderError { message: \"the port pool is empty\" })".to_owned()
-            ),
-            ("SHELF_MIRROR_TOKEN".to_owned(), "Secret(Locked)".to_owned()),
-            (
-                "SHELF_SESSION_KEY".to_owned(),
-                "Placeholder(Workspace)".to_owned()
-            ),
-        ]
+        failed(&resolution),
+        ["SHELF_PORT", "SHELF_MIRROR_TOKEN", "SHELF_SESSION_KEY"]
     );
+    assert!(matches!(
+        problem(&resolution, "SHELF_PORT"),
+        Some(ResolveProblem::Provider(error))
+            if *error == ProviderError::new("the port pool is empty")
+    ));
+    assert!(matches!(
+        problem(&resolution, "SHELF_MIRROR_TOKEN"),
+        Some(ResolveProblem::Secret(SecretError::Locked))
+    ));
+    assert!(matches!(
+        problem(&resolution, "SHELF_SESSION_KEY"),
+        Some(ResolveProblem::Placeholder(Placeholder::Workspace))
+    ));
     assert_eq!(
         bound(&resolution, "SHELF_CATALOGUE_URL").as_deref(),
         Some("plain:http://shelf.test/")
@@ -637,6 +673,97 @@ fn a_resolution_without_failures_passes_check() {
     assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
     assert!(matches!(
         starmap::check(&spec(), &resolution.bindings, Mode::Production),
-        starmap::Verdict::Ready(_)
+        Verdict::Ready(_)
     ));
+}
+
+#[test]
+fn a_deadline_that_passes_partway_fails_each_later_variable_without_asking_its_provider_or_resolver()
+ {
+    let caller = Bindings::new();
+    let ports = FakeProvider::waiting("multiverse/port", "9090");
+    let urls = FakeProvider::answering("multiverse/url", "http://shelf.test/");
+    let resolver = FakeResolver::answering();
+    let context = Context::new(
+        places(),
+        &caller,
+        Instant::now() + Duration::from_millis(50),
+    )
+    .provider(&ports)
+    .provider(&urls)
+    .resolver(&resolver);
+    let resolution = resolve(&spec(), Mode::Local, &context);
+
+    // The port's provider was asked in time and answered after the
+    // deadline, so its value stands and every later step fails.
+    assert_eq!(
+        bound(&resolution, "SHELF_PORT").as_deref(),
+        Some("plain:9090")
+    );
+    assert_eq!(
+        failed(&resolution),
+        [
+            "SHELF_CATALOGUE_URL",
+            "SHELF_MIRROR_TOKEN",
+            "SHELF_SESSION_KEY"
+        ]
+    );
+    assert!(
+        resolution
+            .failures
+            .iter()
+            .all(|failure| matches!(failure.problem, ResolveProblem::Deadline))
+    );
+    assert!(urls.asked.borrow().is_empty());
+    assert!(resolver.asked.borrow().is_empty());
+}
+
+/// A spec whose secret has no bind, so only the caller can supply it.
+const UNBOUND_SECRET: &str = r#"
+[variables.SHELF_UPSTREAM_TOKEN]
+purpose = "The token shelf sends to the upstream catalogue."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+"#;
+
+#[test]
+fn a_caller_value_supplies_a_secret_without_a_bind_and_passes_check() {
+    let spec = Spec::parse(UNBOUND_SECRET).unwrap();
+    let caller = starmap::capture(
+        &spec,
+        [(
+            OsString::from("SHELF_UPSTREAM_TOKEN"),
+            OsString::from("token-from-shell"),
+        )],
+    );
+    let resolver = FakeResolver::answering();
+    let context = Context::new(places(), &caller, later()).resolver(&resolver);
+    let resolution = resolve(&spec, Mode::Production, &context);
+
+    assert_eq!(
+        bound(&resolution, "SHELF_UPSTREAM_TOKEN").as_deref(),
+        Some("secret:token-from-shell")
+    );
+    assert!(resolution.ignored.is_empty());
+    assert!(resolution.failures.is_empty());
+    assert!(resolver.lookups().is_empty());
+    assert!(matches!(
+        starmap::check(&spec, &resolution.bindings, Mode::Production),
+        Verdict::Ready(_)
+    ));
+}
+
+#[test]
+fn a_host_builds_a_resolution_and_a_failure_for_its_own_tests() {
+    let failure = ResolveFailure::new(name("SHELF_PORT"), ResolveProblem::Deadline);
+    let resolution = Resolution::new(Bindings::new(), vec![failure], vec![name("SHELF_ENV")]);
+
+    assert_eq!(failed(&resolution), ["SHELF_PORT"]);
+    assert!(matches!(
+        problem(&resolution, "SHELF_PORT"),
+        Some(ResolveProblem::Deadline)
+    ));
+    assert_eq!(resolution.ignored, [name("SHELF_ENV")]);
 }

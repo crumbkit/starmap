@@ -2,7 +2,6 @@
 //! and expanding a template.
 
 use std::error::Error;
-use std::ffi::OsString;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -91,15 +90,7 @@ impl Places {
 ///
 /// Returns the first placeholder of the template that has no place.
 pub fn expand(template: &PathTemplate, places: &Places) -> Result<PathBuf, Placeholder> {
-    let mut pieces = template.as_str().split('{');
-    let mut path = OsString::from(pieces.next().unwrap_or_default());
-    // A template's every `{` opens a placeholder that `}` closes, so the
-    // pieces after the first pair up with the placeholders in order.
-    for (piece, placeholder) in pieces.zip(template.placeholders()) {
-        path.push(places.place(placeholder).ok_or(placeholder)?);
-        path.push(piece.split_once('}').map_or("", |(_, after)| after));
-    }
-    Ok(PathBuf::from(path))
+    template.fill(|placeholder| places.place(placeholder))
 }
 
 /// The name of the workspace an app runs in, such as `shelf-dev`. It
@@ -154,6 +145,11 @@ impl FromStr for AppName {
 
 /// Returns `text` when it starts with a lower case ASCII letter and holds
 /// only lower case ASCII letters, digits and hyphens.
+///
+/// starmap's provider kinds follow the same rule in a private function.
+/// The names here are this crate's own type, and sharing the rule would add
+/// a public function to starmap that only this crate calls, so the rule is
+/// written twice. If starmap ever makes it public, this calls that instead.
 fn label(text: &str) -> Result<String, LabelError> {
     let mut characters = text.chars();
     let fits = characters

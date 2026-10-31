@@ -47,7 +47,7 @@ fn expand_names_the_first_placeholder_that_has_no_place() {
 }
 
 #[test]
-fn a_workspace_or_app_name_is_a_lower_case_word() {
+fn a_workspace_or_app_name_holds_lower_case_letters_digits_and_hyphens_and_never_a_slash() {
     for good in ["shelf", "shelf-dev", "a1"] {
         assert!(good.parse::<WorkspaceName>().is_ok(), "{good}");
         assert!(good.parse::<AppName>().is_ok(), "{good}");

@@ -1,6 +1,7 @@
 //! Tests for the binds a variable's source takes.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use proptest::prelude::*;
 
@@ -103,6 +104,31 @@ fn a_path_template_without_placeholders_is_a_plain_path() {
     let template: PathTemplate = "/var/lib/shelf".parse().unwrap();
 
     assert_eq!(template.placeholders().count(), 0);
+}
+
+#[test]
+fn a_path_template_fills_each_placeholder_from_its_place() {
+    let template: PathTemplate = "{home}/.cache/{workspace}/books.db".parse().unwrap();
+    let path = template.fill(|placeholder| match placeholder {
+        Placeholder::Home => Some(Path::new("/home/luke")),
+        Placeholder::Workspace => Some(Path::new("/workspace")),
+        _ => None,
+    });
+
+    assert_eq!(
+        path,
+        Ok(PathBuf::from("/home/luke/.cache//workspace/books.db"))
+    );
+}
+
+#[test]
+fn a_path_template_fills_to_the_first_placeholder_that_has_no_place() {
+    let template: PathTemplate = "{checkout}/{home}/{workspace}".parse().unwrap();
+    let path = template.fill(|placeholder| {
+        (placeholder == Placeholder::Checkout).then_some(Path::new("/checkout"))
+    });
+
+    assert_eq!(path, Err(Placeholder::Home));
 }
 
 #[test]

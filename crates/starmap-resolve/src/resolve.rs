@@ -1,7 +1,6 @@
 //! Resolving each variable of a spec from the caller's values, the path
 //! binds, the providers and the resolvers, under one deadline.
 
-use std::ffi::OsString;
 use std::fmt;
 use std::time::Instant;
 
@@ -59,9 +58,9 @@ impl<'a> Context<'a> {
         self
     }
 
-    /// Registers `resolver`. A secret or generated variable asks each
-    /// resolver in the order they were registered, until one handles the
-    /// lookup.
+    /// Registers `resolver`. A secret with a bind or a generated variable
+    /// asks each resolver in the order they were registered, until one
+    /// handles the lookup.
     #[must_use]
     pub fn resolver(mut self, resolver: &'a dyn Resolver) -> Self {
         self.resolvers.push(resolver);
@@ -78,12 +77,12 @@ impl<'a> Context<'a> {
     }
 
     /// Asks each resolver for `lookup` until one handles it.
-    fn ask(&self, lookup: Lookup<'_>) -> Result<Option<Found>, ResolveProblem> {
+    fn ask(&self, lookup: Lookup<'_>) -> Result<Option<Bound>, ResolveProblem> {
         let mut problem = ResolveProblem::NoResolver;
         for resolver in &self.resolvers {
             self.in_time()?;
             match resolver.resolve(lookup, self.deadline) {
-                Ok(secret) => return Ok(Some(Found::Bound(Bound::Secret(secret)))),
+                Ok(secret) => return Ok(Some(Bound::Secret(secret))),
                 Err(SecretError::Unsupported) => {
                     problem = ResolveProblem::Secret(SecretError::Unsupported);
                 }
@@ -105,11 +104,25 @@ pub struct Resolution {
     pub bindings: Bindings,
     /// Each variable that could not be resolved, in the spec's order.
     pub failures: Vec<ResolveFailure>,
-    /// Each secret or generated variable that the caller gave a value,
-    /// in the spec's order. Resolution ignores such a value and uses the
-    /// variable's bind, and the host reports a note that names the
-    /// variable.
+    /// Each generated variable, and each secret variable with a bind, that
+    /// the caller gave a value, in the spec's order. Resolution ignores
+    /// such a value and uses the variable's bind, and the host reports a
+    /// note that names the variable. A caller value for a secret without a
+    /// bind supplies it and is not listed.
     pub ignored: Vec<Name>,
+}
+
+impl Resolution {
+    /// Returns a resolution of `bindings`, `failures` and `ignored`, such
+    /// as a fake that a host's own tests build.
+    #[must_use]
+    pub fn new(bindings: Bindings, failures: Vec<ResolveFailure>, ignored: Vec<Name>) -> Self {
+        Self {
+            bindings,
+            failures,
+            ignored,
+        }
+    }
 }
 
 /// A variable that could not be resolved, and why.
@@ -120,6 +133,15 @@ pub struct ResolveFailure {
     pub name: Name,
     /// Why it could not be resolved.
     pub problem: ResolveProblem,
+}
+
+impl ResolveFailure {
+    /// Returns the failure of the variable `name` with `problem`, such as
+    /// a fake that a host's own tests build.
+    #[must_use]
+    pub fn new(name: Name, problem: ResolveProblem) -> Self {
+        Self { name, problem }
+    }
 }
 
 /// Why a variable could not be resolved.
@@ -147,33 +169,30 @@ pub enum ResolveProblem {
 impl ResolveProblem {
     /// Whether the problem is an input the host did not give, which fails
     /// only a variable that is required in the mode. A variable that may
-    /// stay unset falls back to its default or stays unset.
+    /// stay unset falls back to its default or stays unset. Resolvers that
+    /// all leave a lookup unsupported count as no resolver, so registering
+    /// one more resolver never fails an optional variable.
     fn lacks_input(&self) -> bool {
         matches!(
             self,
-            Self::NoProvider(_) | Self::NoResolver | Self::Placeholder(_)
+            Self::NoProvider(_)
+                | Self::NoResolver
+                | Self::Secret(SecretError::Unsupported)
+                | Self::Placeholder(_)
         )
     }
-}
-
-/// A value that resolution found for one variable.
-enum Found {
-    /// A raw value, which [`starmap::capture`] binds by the variable's show.
-    Raw(OsString),
-    /// A value already bound as the variable's show needs.
-    Bound(Bound),
 }
 
 /// Resolves the value of each variable `spec` declares, in `mode`, from
 /// `context`.
 ///
-/// A caller value wins for a setting or an inherited variable. A setting
-/// without one expands its path bind. A provided variable asks the provider
-/// of its kind, and takes the caller value only when no provider of that
-/// kind is registered. A secret variable asks the resolvers for its
-/// reference, and a generated variable asks them with
-/// [`Lookup::Generated`]. A caller value for a secret or generated
-/// variable is ignored and listed in [`Resolution::ignored`].
+/// A caller value wins for a setting, an inherited variable and a secret
+/// without a bind. A setting without one expands its path bind. A provided
+/// variable asks the provider of its kind, and takes the caller value only
+/// when no provider of that kind is registered. A secret with a bind asks
+/// the resolvers for its reference, and a generated variable asks them
+/// with [`Lookup::Generated`]. A caller value for either is ignored and
+/// listed in [`Resolution::ignored`].
 ///
 /// A missing provider, resolver or place fails only a variable that is
 /// required in `mode`. Every provider and resolver is asked under the
@@ -181,8 +200,7 @@ enum Found {
 /// variable, so one call reports every problem.
 #[must_use]
 pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
-    let mut raw = Vec::new();
-    let mut bound = Vec::new();
+    let mut bindings = Bindings::new();
     let mut failures = Vec::new();
     let mut ignored = Vec::new();
     for (name, variable) in spec.variables() {
@@ -190,14 +208,13 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
         if caller.is_some()
             && matches!(
                 variable.source(),
-                Source::Secret { .. } | Source::Generated { .. }
+                Source::Secret { bind: Some(_) } | Source::Generated { .. }
             )
         {
             ignored.push(name.clone());
         }
-        match find(name, variable, caller.and_then(copy), context) {
-            Ok(Some(Found::Raw(value))) => raw.push((OsString::from(name.as_str()), value)),
-            Ok(Some(Found::Bound(value))) => bound.push((name.clone(), value)),
+        match find(name, variable, caller, context) {
+            Ok(Some(value)) => bindings.bind(name.clone(), value),
             Ok(None) => {}
             Err(problem) if problem.lacks_input() && !required(variable, mode) => {}
             Err(problem) => failures.push(ResolveFailure {
@@ -205,10 +222,6 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
                 problem,
             }),
         }
-    }
-    let mut bindings = starmap::capture(spec, raw);
-    for (name, value) in bound {
-        bindings.bind(name, value);
     }
     Resolution {
         bindings,
@@ -218,20 +231,22 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
 }
 
 /// Finds the value of `variable` from its source, where `caller` is the
-/// caller's value.
+/// caller's value. The caller's value is copied only when it is used.
 fn find(
     name: &Name,
     variable: &Variable,
-    caller: Option<Found>,
+    caller: Option<&Bound>,
     context: &Context<'_>,
-) -> Result<Option<Found>, ResolveProblem> {
+) -> Result<Option<Bound>, ResolveProblem> {
     match variable.source() {
         Source::Setting {
             bind: Some(template),
         } if caller.is_none() => expand(template, &context.places)
-            .map(|path| Some(Found::Raw(path.into_os_string())))
+            .map(|path| Some(variable.capture(path.into_os_string())))
             .map_err(ResolveProblem::Placeholder),
-        Source::Setting { .. } | Source::Inherited => Ok(caller),
+        Source::Setting { .. } | Source::Inherited | Source::Secret { bind: None } => {
+            Ok(caller.and_then(|bound| copy(variable, bound)))
+        }
         Source::Provided(reference) => {
             let kind = reference.kind();
             match context.providers.iter().find(|p| p.kind() == kind) {
@@ -239,10 +254,10 @@ fn find(
                     context.in_time()?;
                     provider
                         .provide(name, reference, context.deadline)
-                        .map(|value| Some(Found::Raw(value)))
+                        .map(|value| Some(variable.capture(value)))
                         .map_err(ResolveProblem::Provider)
                 }
-                None if caller.is_some() => Ok(caller),
+                None if caller.is_some() => Ok(caller.and_then(|bound| copy(variable, bound))),
                 None => Err(ResolveProblem::NoProvider(kind.clone())),
             }
         }
@@ -262,25 +277,23 @@ fn find(
                 bytes: *bytes,
             })
         }
-        // A secret without a bind has no value to resolve, and a source
-        // that a later version of starmap adds resolves to nothing until
-        // this crate learns it.
+        // A source that a later version of starmap adds resolves to
+        // nothing until this crate learns it.
         _ => Ok(None),
     }
 }
 
-/// Returns a copy of the caller's value `bound`.
+/// Returns a copy of the caller's value `bound` for `variable`. A plain
+/// value is bound again by the variable's show.
 #[expect(
     clippy::disallowed_methods,
     reason = "BASE-24: a caller's withheld value is copied straight into a new Secret"
 )]
-fn copy(bound: &Bound) -> Option<Found> {
+fn copy(variable: &Variable, bound: &Bound) -> Option<Bound> {
     match bound {
-        Bound::Plain(raw) => Some(Found::Raw(raw.clone())),
-        Bound::Secret(secret) => Some(Found::Bound(Bound::Secret(Secret::new(
-            secret.expose().clone(),
-        )))),
-        Bound::NotUnicode => Some(Found::Bound(Bound::NotUnicode)),
+        Bound::Plain(raw) => Some(variable.capture(raw.clone())),
+        Bound::Secret(secret) => Some(Bound::Secret(Secret::new(secret.expose().clone()))),
+        Bound::NotUnicode => Some(Bound::NotUnicode),
         // A kind of bound value that a later version of starmap adds is
         // not copied until this crate learns it.
         _ => None,
