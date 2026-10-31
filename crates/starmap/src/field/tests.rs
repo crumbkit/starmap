@@ -1,21 +1,13 @@
-//! Tests for the fields of a derived struct and the types they hold.
+//! Tests for the fields of a derived struct and the types they hold. The
+//! integration test tests/derive.rs reads the example struct through them.
 
 use std::ffi::OsString;
-use std::path::PathBuf;
 
-use super::{Field, FieldError, FieldType, Presence, Shape};
-use crate::{Environment, Mode, Port, Secret, Show, Spec, Verdict, capture, check};
+use super::{Field, FieldError, FieldProblem, FieldType, Presence, ReadField as _, Shape};
+use crate::{Environment, Mode, Secret, Spec, Verdict, capture, check};
 
-/// A spec with a port, a path, a string, an optional integer and a
-/// withheld token.
+/// A spec with a path, a string and a withheld token.
 const SPEC: &str = r#"
-[variables.SHELF_PORT]
-purpose = "The port the api process listens on."
-type = "port"
-unset = { default = "8080" }
-show = "shown"
-source = "setting"
-
 [variables.SHELF_DATABASE]
 purpose = "The SQLite file that holds the catalogue."
 type = "path"
@@ -30,13 +22,6 @@ unset = { default = "Shelf" }
 show = "shown"
 source = "setting"
 
-[variables.SHELF_PAGE_SIZE]
-purpose = "How many books one page of a listing holds."
-type = { integer = { min = 1, max = 1000 } }
-unset = "optional"
-show = "shown"
-source = "setting"
-
 [variables.SHELF_MIRROR_TOKEN]
 purpose = "The token shelf sends to the catalogue mirror."
 type = "string"
@@ -45,30 +30,27 @@ show = "withheld"
 source = "secret"
 "#;
 
-/// Checks `pairs` against [`SPEC`] in local mode.
-fn environment(pairs: &[(&str, &str)]) -> Environment {
+/// Checks `vars` against [`SPEC`] in local mode.
+fn environment(vars: Vec<(OsString, OsString)>) -> Environment {
     let spec = Spec::parse(SPEC).unwrap();
-    let vars = pairs
-        .iter()
-        .map(|(key, value)| (OsString::from(key), OsString::from(value)));
     match check(&spec, &capture(&spec, vars), Mode::Local) {
         Verdict::Ready(environment) => environment,
         Verdict::Refused(refusals) => panic!("the check refused: {refusals:?}"),
     }
 }
 
-/// Reads the variable `name` from `environment` as a field of type `T`.
-fn read<T: FieldType>(
-    environment: &Environment,
-    name: &'static str,
-) -> Result<Option<T>, FieldError> {
-    Field::new::<T>(name, "T", Presence::Maybe).read(environment)
-}
-
 /// Reads the variable `name` from `environment` as a field of type `T`
 /// that the variable must have.
-fn require<T: FieldType>(environment: &Environment, name: &'static str) -> Result<T, FieldError> {
+fn required<T: FieldType>(environment: &Environment, name: &'static str) -> Result<T, FieldError> {
     Field::new::<T>(name, "T", Presence::Always).require(environment)
+}
+
+/// The text `SHELF_TITLE` holds in the tests of a value that is not
+/// Unicode.
+#[cfg(unix)]
+fn not_unicode() -> Vec<(OsString, OsString)> {
+    use std::os::unix::ffi::OsStringExt as _;
+    vec![("SHELF_TITLE".into(), OsString::from_vec(vec![b'S', 0xff]))]
 }
 
 #[test]
@@ -78,14 +60,6 @@ fn an_integer_type_gives_its_bounds_clamped_to_those_of_i64() {
         Shape::Integer {
             min: -128,
             max: 127
-        }
-    );
-    assert_eq!(u16::SHAPE, Shape::Integer { min: 0, max: 65535 });
-    assert_eq!(
-        i64::SHAPE,
-        Shape::Integer {
-            min: i64::MIN,
-            max: i64::MAX
         }
     );
     assert_eq!(
@@ -98,38 +72,11 @@ fn an_integer_type_gives_its_bounds_clamped_to_those_of_i64() {
 }
 
 #[test]
-fn only_a_secret_holds_a_withheld_value() {
-    assert_eq!(<Secret<String>>::SHAPE, Shape::String);
-    assert_eq!(<Secret<String>>::SHOW, Show::Withheld);
-    assert_eq!(String::SHOW, Show::Shown);
-}
-
-#[test]
-fn a_field_reads_the_checked_value_of_its_variable() {
-    let environment = environment(&[("SHELF_PAGE_SIZE", "250")]);
+fn an_os_string_field_reads_a_path_variable() {
+    let environment = environment(Vec::new());
 
     assert_eq!(
-        require(&environment, "SHELF_PORT"),
-        Ok(Port::try_from(8080).unwrap())
-    );
-    assert_eq!(
-        require(&environment, "SHELF_DATABASE"),
-        Ok(PathBuf::from("books.db"))
-    );
-    assert_eq!(require(&environment, "SHELF_TITLE"), Ok("Shelf".to_owned()));
-    assert_eq!(read(&environment, "SHELF_PAGE_SIZE"), Ok(Some(250_u8)));
-}
-
-#[test]
-fn an_os_string_field_reads_a_string_or_a_path_variable() {
-    let environment = environment(&[]);
-
-    assert_eq!(
-        require(&environment, "SHELF_TITLE"),
-        Ok(OsString::from("Shelf"))
-    );
-    assert_eq!(
-        require(&environment, "SHELF_DATABASE"),
+        required(&environment, "SHELF_DATABASE"),
         Ok(OsString::from("books.db"))
     );
 }
@@ -139,44 +86,36 @@ fn an_os_string_field_reads_a_string_or_a_path_variable() {
     clippy::disallowed_methods,
     reason = "the test checks the secret that the field reads"
 )]
-fn a_secret_field_reads_a_copy_of_the_withheld_value() {
-    let environment = environment(&[]);
+fn a_secret_field_reads_a_copy_of_the_withheld_default() {
+    let environment = environment(Vec::new());
 
-    let secret: Secret<String> = require(&environment, "SHELF_MIRROR_TOKEN").unwrap();
+    let secret: Secret<String> = required(&environment, "SHELF_MIRROR_TOKEN").unwrap();
 
     assert_eq!(secret.expose(), "anonymous");
 }
 
 #[test]
-fn an_unset_variable_reads_as_none_and_a_required_read_refuses_it() {
-    let environment = environment(&[]);
-    let refused = Err(FieldError {
-        name: "SHELF_PAGE_SIZE",
-    });
+#[cfg(unix)]
+fn an_os_string_field_reads_a_value_that_is_not_unicode() {
+    use std::os::unix::ffi::OsStrExt as _;
+    let environment = environment(not_unicode());
 
-    assert_eq!(read::<u16>(&environment, "SHELF_PAGE_SIZE"), Ok(None));
-    assert_eq!(require::<u16>(&environment, "SHELF_PAGE_SIZE"), refused);
+    let field = Field::new::<OsString>("SHELF_TITLE", "OsString", Presence::Maybe);
+    let title: OsString = field.read(&environment).unwrap().unwrap();
+
+    assert_eq!(title.as_bytes(), [b'S', 0xff]);
 }
 
 #[test]
-fn a_field_whose_type_cannot_hold_the_value_refuses_it() {
-    let environment = environment(&[("SHELF_PAGE_SIZE", "300")]);
-    let refused = |name| FieldError { name };
+#[cfg(unix)]
+fn a_string_field_refuses_a_value_that_is_not_unicode_without_claiming_a_disagreement() {
+    let environment = environment(not_unicode());
 
+    let error = required::<String>(&environment, "SHELF_TITLE").unwrap_err();
+
+    assert_eq!(error.problem(), FieldProblem::NotUnicode);
     assert_eq!(
-        read::<u8>(&environment, "SHELF_PAGE_SIZE").unwrap_err(),
-        refused("SHELF_PAGE_SIZE")
-    );
-    assert_eq!(
-        read::<PathBuf>(&environment, "SHELF_PORT").unwrap_err(),
-        refused("SHELF_PORT")
-    );
-    assert_eq!(
-        read::<String>(&environment, "SHELF_MIRROR_TOKEN").unwrap_err(),
-        refused("SHELF_MIRROR_TOKEN")
-    );
-    assert_eq!(
-        read::<u8>(&environment, "not a name").unwrap_err(),
-        refused("not a name")
+        error.to_string(),
+        "the field that reads SHELF_TITLE holds unicode text, and the value is not unicode"
     );
 }

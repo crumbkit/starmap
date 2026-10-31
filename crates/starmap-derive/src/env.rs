@@ -43,7 +43,9 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
             ::starmap::Field::new::<#inner>(#name, #rust_type, ::starmap::Presence::#presence)
         };
         let member = &field.ident;
-        reads.push(quote! { #member: #description.#method::<#inner>(environment)? });
+        reads.push(quote! {
+            #member: #description.#method::<#inner>(environment)?
+        });
         described.push(description);
     }
     Ok(quote! {
@@ -55,6 +57,8 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
             ));
             const FIELDS: &'static [::starmap::Field] = &[#(#described),*];
 
+            // rustc does not report an unfulfilled expectation in an external
+            // macro's output, so an app whose clippy.toml allows vars_os builds clean.
             #[expect(
                 clippy::disallowed_methods,
                 reason = "BASE-6: Env::load is the one place an application reads its environment"
@@ -66,6 +70,9 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
             fn from_environment(
                 environment: &::starmap::Environment,
             ) -> ::core::result::Result<Self, ::starmap::FieldError> {
+                // Method syntax lets rustc report an unsupported field type
+                // once, at Field::new, and not again at the read.
+                use ::starmap::__private::ReadField as _;
                 ::core::result::Result::Ok(Self { #(#reads),* })
             }
         }

@@ -41,8 +41,9 @@ enum Stage {
 #[derive(Debug, PartialEq, Eq, starmap::Enumeration)]
 enum Speed {
     DryRun,
+    HTTPServer,
     #[starmap("full")]
-    AtFullSpeed,
+    Flat,
 }
 
 /// Returns `pairs` as the variables of an environment.
@@ -234,15 +235,13 @@ fn a_field_that_cannot_hold_a_checked_value_refuses_the_read() {
 }
 
 #[test]
-fn an_enumeration_variant_reads_as_its_kebab_case_name_or_its_rename() {
-    assert_eq!(Speed::VALUES, ["dry-run", "full"]);
+fn an_enumeration_variant_reads_as_its_kebab_case_name_with_a_run_of_capitals_as_one_word_or_its_rename()
+ {
+    assert_eq!(Speed::VALUES, ["dry-run", "http-server", "full"]);
     let choice = |value: &str| value.parse::<starmap::Choice>().expect("a choice");
     assert_eq!(Speed::from_choice(&choice("dry-run")), Some(Speed::DryRun));
-    assert_eq!(
-        Speed::from_choice(&choice("full")),
-        Some(Speed::AtFullSpeed)
-    );
-    assert_eq!(Speed::from_choice(&choice("at-full-speed")), None);
+    assert_eq!(Speed::from_choice(&choice("full")), Some(Speed::Flat));
+    assert_eq!(Speed::from_choice(&choice("flat")), None);
 }
 
 #[test]

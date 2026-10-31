@@ -50,7 +50,12 @@ impl Field {
             show: T::SHOW,
         }
     }
+}
 
+/// Reads a [`Field`]'s value from an [`Environment`]. The derive's
+/// generated code calls its methods with method syntax, because rustc then
+/// reports an unsupported field type once, at `Field::new`.
+pub trait ReadField {
     /// Reads the field's value from `environment` as a `T`. It returns
     /// `Ok(None)` when the variable stays unset.
     ///
@@ -59,25 +64,39 @@ impl Field {
     /// Returns [`FieldError`] when the field's name is not a variable name,
     /// or when `T` cannot hold the variable's checked value, such as a `u8`
     /// for the value 300.
-    pub fn read<T: FieldType>(&self, environment: &Environment) -> Result<Option<T>, FieldError> {
-        let error = FieldError { name: self.name };
-        let name: Name = self.name.parse().map_err(|_| error)?;
-        if !environment.is_set(&name) {
-            return Ok(None);
-        }
-        T::read(environment, &name).map(Some).ok_or(error)
-    }
+    fn read<T: FieldType>(&self, environment: &Environment) -> Result<Option<T>, FieldError>;
 
     /// Reads the field's value from `environment` as a `T`, which the
     /// variable must have.
     ///
     /// # Errors
     ///
-    /// Returns [`FieldError`] when [`Field::read`] does, or when the
+    /// Returns [`FieldError`] when [`ReadField::read`] does, or when the
     /// variable stays unset.
-    pub fn require<T: FieldType>(&self, environment: &Environment) -> Result<T, FieldError> {
-        self.read(environment)?
-            .ok_or(FieldError { name: self.name })
+    fn require<T: FieldType>(&self, environment: &Environment) -> Result<T, FieldError>;
+}
+
+impl ReadField for Field {
+    fn read<T: FieldType>(&self, environment: &Environment) -> Result<Option<T>, FieldError> {
+        let error = |problem| FieldError {
+            name: self.name,
+            problem,
+        };
+        let name: Name = self
+            .name
+            .parse()
+            .map_err(|_| error(FieldProblem::Disagreement))?;
+        if !environment.is_set(&name) {
+            return Ok(None);
+        }
+        T::read(environment, &name).map(Some).map_err(error)
+    }
+
+    fn require<T: FieldType>(&self, environment: &Environment) -> Result<T, FieldError> {
+        self.read(environment)?.ok_or(FieldError {
+            name: self.name,
+            problem: FieldProblem::Disagreement,
+        })
     }
 }
 
@@ -125,8 +144,7 @@ pub enum Presence {
 
 /// A type that a field of a struct that derives [`Env`](crate::Env) holds,
 /// inside an `Option` or not. starmap implements it for each type the
-/// derive reads, and for every type that derives
-/// [`Enumeration`](crate::Enumeration).
+/// derive reads, and `#[derive(Enumeration)]` implements it for its enum.
 #[diagnostic::on_unimplemented(
     message = "starmap cannot read a variable into `{Self}`",
     label = "this field type is not one that starmap reads",
@@ -138,22 +156,29 @@ pub trait FieldType: Sized {
     /// Whether the type holds a withheld value.
     const SHOW: Show;
 
-    /// Reads the checked value of `name` from `environment`. It returns
-    /// `None` when the variable is unset or the type cannot hold its value.
-    fn read(environment: &Environment, name: &Name) -> Option<Self>;
+    /// Reads the checked value of `name`, which is set, from
+    /// `environment`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`FieldProblem`] when the type cannot hold the value.
+    fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem>;
 }
 
 /// Implements [`FieldType`] for a shown type that reads one kind of
-/// [`Value`].
+/// [`Value`], where `$read` returns `None` for a value the type cannot hold.
 macro_rules! shown {
     ($type:ty, $shape:expr, |$value:ident| $read:expr) => {
         impl FieldType for $type {
             const SHAPE: Shape = $shape;
             const SHOW: Show = Show::Shown;
 
-            fn read(environment: &Environment, name: &Name) -> Option<Self> {
-                let $value = environment.value(name)?;
-                $read
+            fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
+                let read = |$value: &Value| -> Option<Self> { $read };
+                environment
+                    .value(name)
+                    .and_then(read)
+                    .ok_or(FieldProblem::Disagreement)
             }
         }
     };
@@ -173,10 +198,6 @@ shown!(Url, Shape::Url, |value| match value {
 });
 shown!(bool, Shape::Boolean, |value| match value {
     Value::Boolean(boolean) => Some(*boolean),
-    _ => None,
-});
-shown!(String, Shape::String, |value| match value {
-    Value::String(string) => string.clone().into_string().ok(),
     _ => None,
 });
 shown!(OsString, Shape::OsString, |value| match value {
@@ -217,33 +238,57 @@ const fn clamp(bound: i128) -> i64 {
     }
 }
 
-impl<E: Enumeration> FieldType for E {
-    const SHAPE: Shape = Shape::Enumeration(E::VALUES);
+impl FieldType for String {
+    const SHAPE: Shape = Shape::String;
     const SHOW: Show = Show::Shown;
 
-    fn read(environment: &Environment, name: &Name) -> Option<Self> {
-        match environment.value(name)? {
-            Value::Choice(choice) => E::from_choice(choice),
-            _ => None,
+    fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
+        match environment.value(name) {
+            Some(Value::String(string)) => string
+                .clone()
+                .into_string()
+                .map_err(|_| FieldProblem::NotUnicode),
+            _ => Err(FieldProblem::Disagreement),
         }
     }
+}
+
+/// Reads the checked value of `name` from `environment` as the enum `E`.
+/// The `FieldType` impl that `#[derive(Enumeration)]` writes calls it.
+///
+/// # Errors
+///
+/// Returns [`FieldProblem::Disagreement`] when the value is not one of
+/// `E`'s values.
+pub fn read_choice<E: Enumeration>(
+    environment: &Environment,
+    name: &Name,
+) -> Result<E, FieldProblem> {
+    match environment.value(name) {
+        Some(Value::Choice(choice)) => E::from_choice(choice),
+        _ => None,
+    }
+    .ok_or(FieldProblem::Disagreement)
 }
 
 impl FieldType for Secret<String> {
     const SHAPE: Shape = Shape::String;
     const SHOW: Show = Show::Withheld;
 
-    fn read(environment: &Environment, name: &Name) -> Option<Self> {
-        environment.secret(name).map(Secret::duplicate)
+    fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
+        environment
+            .secret(name)
+            .map(Secret::duplicate)
+            .ok_or(FieldProblem::Disagreement)
     }
 }
 
 /// A field of a struct that derives [`Env`](crate::Env) cannot hold its
-/// variable's checked value, because the struct and its `starmap.toml`
-/// disagree. `starmap_test::check` reports each disagreement.
+/// variable's checked value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldError {
     name: &'static str,
+    problem: FieldProblem,
 }
 
 impl FieldError {
@@ -252,15 +297,39 @@ impl FieldError {
     pub fn name(&self) -> &'static str {
         self.name
     }
+
+    /// Returns why the field cannot hold the value.
+    #[must_use]
+    pub fn problem(&self) -> FieldProblem {
+        self.problem
+    }
+}
+
+/// Why a field cannot hold its variable's checked value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum FieldProblem {
+    /// The struct and its `starmap.toml` disagree about the variable, which
+    /// `starmap_test::check` reports.
+    Disagreement,
+    /// The field is a `String`, and the value is not Unicode. An
+    /// `OsString` field holds such a value.
+    NotUnicode,
 }
 
 impl fmt::Display for FieldError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "the field that reads {} cannot hold its checked value, because the struct and starmap.toml disagree",
-            self.name
-        )
+        let name = self.name;
+        match self.problem {
+            FieldProblem::Disagreement => write!(
+                formatter,
+                "the field that reads {name} cannot hold its checked value, because the struct and starmap.toml disagree"
+            ),
+            FieldProblem::NotUnicode => write!(
+                formatter,
+                "the field that reads {name} holds unicode text, and the value is not unicode"
+            ),
+        }
     }
 }
 

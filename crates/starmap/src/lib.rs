@@ -49,7 +49,7 @@ pub use bind::{
 };
 pub use check::{Finding, Problem, Refusals, Verdict, capture, check, mode};
 pub use env::Environment;
-pub use field::{Field, FieldError, FieldType, Presence, Shape};
+pub use field::{Field, FieldError, FieldProblem, Presence, Shape};
 pub use form::{
     Choice, ChoiceError, Choices, ChoicesError, Form, FormError, IntegerRange, Port, PortError,
     RangeError, Value,
@@ -78,6 +78,13 @@ pub use starmap_derive::Enumeration;
 /// compile.
 #[cfg(feature = "derive")]
 pub use starmap_derive::Env;
+
+/// The items that the derives' generated code names. They are not part of
+/// starmap's public API, and any release may change them (LIB-7).
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::field::{FieldType, ReadField, read_choice};
+}
 
 /// A struct that holds an application's environment, which
 /// `#[derive(Env)]` implements. Each field reads one variable that the
@@ -131,11 +138,6 @@ pub trait Env: Sized {
 
 /// An enum whose values an enumeration variable takes, which
 /// `#[derive(Enumeration)]` implements.
-#[diagnostic::on_unimplemented(
-    message = "starmap cannot read a variable into `{Self}`",
-    label = "this field type is not one that starmap reads",
-    note = "a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option"
-)]
 pub trait Enumeration: Sized {
     /// The value of each variant, in the order the enum lists them.
     const VALUES: &'static [&'static str];

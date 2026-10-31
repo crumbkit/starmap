@@ -33,3 +33,15 @@ error: starmap::Enumeration derives only for an enum of unit variants
    |
 29 | struct NotAnEnum;
    |        ^^^^^^^^^
+
+error: two variants read as the value "dev", and each value must be distinct
+  --> tests/compile_fail/misuse.rs:34:15
+   |
+34 |     #[starmap("dev")]
+   |               ^^^^^
+
+error: an enumeration value is not empty and holds no whitespace
+  --> tests/compile_fail/misuse.rs:40:15
+   |
+40 |     #[starmap("local dev")]
+   |               ^^^^^^^^^^^

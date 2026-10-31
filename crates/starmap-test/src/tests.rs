@@ -160,19 +160,25 @@ show = "shown"
 source = "inherited"
 "#
     );
-    check_allowing::<Shelf>(
-        &spec,
-        &[Allow {
-            name: "XDG_CONFIG_HOME",
-            reason: "only a dependency reads it",
-        }],
-    );
+    let allow = [Allow {
+        name: "XDG_CONFIG_HOME",
+        reason: "only a dependency reads it",
+    }];
+    assert_eq!(compare("Shelf", Shelf::FIELDS, &spec, &allow), Ok(()));
 }
 
 #[test]
-#[should_panic(expected = "disagree in 3 places:\n  SHELF_MIRROR_TOKEN  starmap.toml withholds it")]
+#[should_panic(expected = "disagree in 13 places:\n  SHELF_COLOUR        starmap.toml shows it")]
 fn check_panics_with_the_report() {
-    check::<Stale>(&EXAMPLE.replace("max = 100 }", "max = 1000 }"));
+    check_allowing::<EveryKind>(EVERY_KIND, EVERY_KIND_ALLOW);
+}
+
+#[test]
+#[should_panic(
+    expected = "the spec text the test passes differs from the starmap.toml that starmap_test::tests::Shelf embeds"
+)]
+fn check_panics_when_the_test_passes_another_spec_than_the_struct_embeds() {
+    check::<Shelf>(EVERY_KIND);
 }
 
 #[test]

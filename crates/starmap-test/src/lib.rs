@@ -33,8 +33,7 @@ pub struct Allow {
 ///
 /// # Panics
 ///
-/// Panics with every disagreement at once when the spec does not parse or
-/// the struct and the spec disagree.
+/// Panics as [`check_allowing`] does.
 pub fn check<E: Env>(spec: &str) {
     check_allowing::<E>(spec, &[]);
 }
@@ -52,14 +51,22 @@ pub fn check<E: Env>(spec: &str) {
 ///
 /// # Panics
 ///
-/// Panics with every disagreement at once when the spec does not parse or
-/// the struct and the spec disagree.
+/// Panics when `spec` differs from the text `E` embeds, which happens when
+/// the test reads another file than the derive names. Otherwise it panics
+/// with every disagreement at once when the spec does not parse or the
+/// struct and the spec disagree.
 #[expect(
     clippy::panic,
     reason = "a failed check fails the test that calls it, as an assertion does"
 )]
 pub fn check_allowing<E: Env>(spec: &str, allow: &[Allow]) {
-    if let Err(report) = compare(std::any::type_name::<E>(), E::FIELDS, spec, allow) {
+    let type_name = std::any::type_name::<E>();
+    if spec != E::SPEC {
+        panic!(
+            "the spec text the test passes differs from the starmap.toml that {type_name} embeds, so the test reads another file than the derive names"
+        );
+    }
+    if let Err(report) = compare(type_name, E::FIELDS, spec, allow) {
         panic!("{report}");
     }
 }

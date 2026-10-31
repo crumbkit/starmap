@@ -28,4 +28,17 @@ enum WithData {
 #[derive(starmap::Enumeration)]
 struct NotAnEnum;
 
+#[derive(starmap::Enumeration)]
+enum Duplicate {
+    Dev,
+    #[starmap("dev")]
+    Development,
+}
+
+#[derive(starmap::Enumeration)]
+enum Whitespace {
+    #[starmap("local dev")]
+    Dev,
+}
+
 fn main() {}
