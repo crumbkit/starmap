@@ -43,3 +43,24 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Environment::apply` sets each checked value on a `Command` and removes
   each declared variable that stays unset. `Environment::value` returns a
   shown value, and only `Environment::secret` returns a withheld one.
+- `#[derive(starmap::Env)]`, behind starmap's `derive` feature, embeds an
+  application's `starmap.toml` and implements `starmap::Env` for a struct
+  whose fields each read one variable. `Env::load` reads the process
+  environment, and `Env::from_vars` reads a fixed set of variables. Both
+  return `ReadError` when the spec does not parse, a variable is refused,
+  or a field cannot hold its checked value.
+- `#[derive(starmap::Enumeration)]` reads an enumeration variable into an
+  enum of unit variants, each named in kebab case or renamed with
+  `#[starmap("...")]`.
+- A field's type is `PathBuf`, `Port`, `url::Url`, `bool`, an integer type
+  of at most 64 bits, `String`, `OsString`, `Secret<String>` or an
+  `Enumeration`, each inside an `Option` or not. `starmap::FieldType`
+  marks these types, and any other type fails to compile with a message
+  that lists them. `starmap::Field` describes each field with its `Shape`,
+  `Presence` and `Show`.
+- `starmap_test::check` and `check_allowing` compare a derived struct with
+  its `starmap.toml` and panic with every disagreement at once: names the
+  struct reads that the spec does not declare and the reverse, field types
+  that cannot hold the variable's type or range, fields whose `Option`
+  does not match the unset rule in either mode, fields whose show differs,
+  and `Allow` entries that excuse nothing.

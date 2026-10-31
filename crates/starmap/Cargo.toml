@@ -12,6 +12,9 @@ categories = ["config"]
 include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [dependencies]
+# The `derive` feature re-exports `#[derive(Env)]` and
+# `#[derive(Enumeration)]`.
+starmap-derive = { workspace = true, optional = true }
 secrecy.workspace = true
 sha2.workspace = true
 toml_edit.workspace = true
@@ -24,6 +27,18 @@ zeroize.workspace = true
 # forking, timeouts and bit-set strategies, which the tests do not use.
 proptest = { workspace = true, features = ["std"] }
 snapbox.workspace = true
+trybuild.workspace = true
+
+[features]
+# `derive` is off by default (LIB-6), so a host that only checks and
+# resolves a spec builds no syn. An application turns it on to derive `Env`
+# and `Enumeration`, which it re-exports beside the traits of the same names.
+derive = ["dep:starmap-derive"]
 
 [lints]
 workspace = true
+
+# trybuild compiles each file under tests/compile_fail as a crate of its own,
+# so no target links them, and cargo-shear would report them as unlinked.
+[package.metadata.cargo-shear]
+ignored-paths = ["tests/compile_fail/*.rs"]

@@ -1,0 +1,35 @@
+error: starmap::Env derives only for a struct with named fields
+ --> tests/compile_fail/misuse.rs:3:8
+  |
+3 | struct Tuple(String);
+  |        ^^^^^
+
+error: each field names its variable with one #[starmap("NAME")]
+ --> tests/compile_fail/misuse.rs:7:5
+  |
+7 |     port: starmap::Port,
+  |     ^^^^
+
+error: the struct takes one #[starmap(spec = "path")]
+  --> tests/compile_fail/misuse.rs:11:11
+   |
+11 | #[starmap(path = "starmap.toml")]
+   |           ^^^^
+
+error: starmap::Env derives only for a struct without generic parameters
+  --> tests/compile_fail/misuse.rs:18:15
+   |
+18 | struct Generic<T> {
+   |               ^
+
+error: starmap::Enumeration derives only for an enum of unit variants
+  --> tests/compile_fail/misuse.rs:25:5
+   |
+25 |     Dev(String),
+   |     ^^^
+
+error: starmap::Enumeration derives only for an enum of unit variants
+  --> tests/compile_fail/misuse.rs:29:8
+   |
+29 | struct NotAnEnum;
+   |        ^^^^^^^^^

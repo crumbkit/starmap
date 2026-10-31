@@ -182,6 +182,16 @@ pub enum Show {
     Withheld,
 }
 
+impl fmt::Display for Show {
+    /// Writes the word a `starmap.toml` uses: `shown` or `withheld`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Shown => "shown",
+            Self::Withheld => "withheld",
+        })
+    }
+}
+
 /// What happens when a variable has no value, in each mode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnsetRule {
