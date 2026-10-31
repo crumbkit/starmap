@@ -1,0 +1,10 @@
+NAME                 TYPE              UNSET                          SOURCE                    VALUE
+SHELF_ENV            one of dev, prod  default dev                    setting                   dev (default)
+SHELF_PORT           port              required                       provided multiverse/port  8080
+SHELF_CATALOGUE_URL  url               optional                       provided multiverse/url   unset
+SHELF_DATABASE       path              default books.db               setting, path bind        books.db (default)
+SHELF_DEBUG          boolean           default false                  setting                   false (default)
+SHELF_PAGE_SIZE      integer 1..=100   default 20                     setting                   20 (default)
+SHELF_MIRROR_TOKEN   string            optional; production required  secret, 1Password         ••••••••
+SHELF_SESSION_KEY    string            required                       generated                 unset
+XDG_STATE_HOME       absolute path     optional                       inherited                 [XDG_STATE_HOME]

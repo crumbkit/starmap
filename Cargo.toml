@@ -77,6 +77,40 @@ proc-macro2 = { version = "1.0.107", default-features = false }
 # its golden `.stderr` file. Only tests use it.
 trybuild = "1.0.122"
 
+# crumbkit holds the command-line conventions of the `starmap` command
+# (the cli profile of the Rust standards): `parse` and `finish`, documents,
+# failures with codes and next steps, and the help guide. The workspace entry
+# enables no feature, and starmap-cli enables the ones it uses.
+crumbkit = { version = "0.1.0", default-features = false }
+
+# crumbkit-usage keeps the `starmap` command's local usage log and adds
+# `self usage` (CLI-7).
+crumbkit-usage = "0.1.0"
+
+# crumbkit-test checks the `starmap` command against crumbkit's conventions
+# (CLI-6). Only tests use it.
+crumbkit-test = "0.1.0"
+
+# miette describes a spec problem as a diagnostic whose labels point into
+# starmap.toml, which crumbkit's `miette` feature prints with an excerpt of
+# the file. The CLI implements `Diagnostic` by hand and needs no miette
+# feature.
+miette = { version = "7.6.0", default-features = false }
+
+# serde and schemars describe the documents that the `starmap` command
+# prints, as crumbkit's results require. The workspace entries enable no
+# feature, and starmap-cli enables `derive`.
+serde = { version = "1.0.229", default-features = false }
+schemars = { version = "1.2.2", default-features = false }
+
+# serde_json reads the JSON documents that the CLI's tests compare. Only
+# tests use it.
+serde_json = { version = "1.0.151", default-features = false }
+
+# tempfile gives each CLI test that writes a file its own directory, which
+# it removes when the test ends. Only tests use it.
+tempfile = { version = "3.27.0", default-features = false }
+
 # The lint table is lints/base.toml and lints/library.toml of the Rust
 # standards (BASE-1, LIB-2, LIB-3). A build with CARGO_BUILD_WARNINGS=deny
 # fails on any warning, and every package inherits the table through

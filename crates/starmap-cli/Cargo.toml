@@ -11,12 +11,51 @@ keywords = ["environment", "configuration", "cli"]
 categories = ["command-line-utilities", "config"]
 include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
+# The library holds the whole command, so the integration tests can pass its
+# parser and guide to crumbkit-test's checks beside the built binary. It is
+# not an API for other crates, so it has no docs.
+[lib]
+name = "starmap_cli"
+path = "src/lib.rs"
+doc = false
+
 [[bin]]
 name = "starmap"
 path = "src/main.rs"
 # The binary has no API to document, and its docs would take the crate name
 # that rustdoc gives the library docs of the workspace (LIB-2).
 doc = false
+
+[dependencies]
+# The CLI parses, checks and describes starmap.toml with the core crate.
+starmap = { workspace = true }
+# `derive` writes the `Failure` impls of the CLI's failures from their
+# `#[failure(...)]` attributes, and `miette` prints a spec problem with an
+# excerpt of starmap.toml.
+crumbkit = { workspace = true, features = ["derive", "miette"] }
+# The CLI is a binary, so it chooses clap's user-facing features: help, usage
+# lines, error context, suggestions for mistyped commands, and colour when the
+# output goes to a terminal. These are clap's default features.
+clap = { workspace = true, features = [
+    "derive",
+    "help",
+    "usage",
+    "error-context",
+    "suggestions",
+    "color",
+] }
+crumbkit-usage = { workspace = true }
+miette = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+schemars = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+crumbkit-test = { workspace = true }
+# `cmd` runs the built `starmap` binary in the end-to-end tests.
+snapbox = { workspace = true, features = ["cmd"] }
+# `std` reads the JSON documents that the binary prints.
+serde_json = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

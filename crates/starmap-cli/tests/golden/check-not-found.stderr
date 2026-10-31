@@ -1,0 +1,3 @@
+error: starmap.toml does not exist
+  help:  create starmap.toml beside the application's Cargo.toml, or pass --spec the file that holds the spec
+  code:  starmap::spec::not_found

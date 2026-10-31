@@ -1,0 +1,81 @@
+starmap check --spec missing.toml
+  fails with starmap::spec::not_found
+  hint
+
+starmap check --spec .
+  fails with starmap::spec::unreadable
+  hint
+
+starmap check --spec syntax.toml
+  fails with starmap::spec::syntax
+  hint
+
+starmap check --spec unknown_field.toml
+  fails with starmap::spec::unknown_field
+  hint
+
+starmap check --spec missing_field.toml
+  fails with starmap::spec::missing_field
+  hint
+
+starmap check --spec bad_value.toml
+  fails with starmap::spec::bad_value
+  hint
+
+starmap check --spec bad_name.toml
+  fails with starmap::spec::bad_name
+  hint
+
+starmap check --spec guess.toml
+  fails with starmap::spec::guess
+  hint
+
+starmap check --spec bad_default.toml
+  fails with starmap::spec::bad_default
+  hint
+
+starmap check --spec bad_range.toml
+  fails with starmap::spec::bad_range
+  hint
+
+starmap check --spec empty_enumeration.toml
+  fails with starmap::spec::empty_enumeration
+  hint
+
+starmap check --spec shown_secret.toml
+  fails with starmap::spec::shown_secret
+  hint
+
+starmap check --spec secret_form.toml
+  fails with starmap::spec::secret_form
+  hint
+
+starmap check --spec bind_mismatch.toml
+  fails with starmap::spec::bind_mismatch
+  hint
+
+starmap check --spec bad_bytes.toml
+  fails with starmap::spec::bad_bytes
+  hint
+
+starmap check --spec unknown_placeholder.toml
+  fails with starmap::spec::unknown_placeholder
+  hint
+
+starmap check --spec mode_undeclared.toml
+  fails with starmap::spec::mode_undeclared
+  hint
+
+starmap check --spec mode_source.toml
+  fails with starmap::spec::mode_source
+  hint
+
+starmap explain SHELF_THEME
+  fails with starmap::variable::unknown
+  run starmap explain
+    exits 0
+
+codes that no start provokes:
+  starmap::spec::too_large: Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.
+
+codes whose recoveries the check did not follow, because no declared code spells them: 0

@@ -1,0 +1,12 @@
+Explore starmap's commands
+
+Usage: starmap commands [OPTIONS] <COMMAND>
+
+Commands:
+  list  List a branch of starmap's commands with their arguments, examples and columns
+
+Options:
+  -h, --help  Print help (see more with '--help')
+
+Global flags: --json, --fields <FIELD>, --long, --full. `starmap commands --help` describes them.
+Next: starmap commands <COMMAND> -h

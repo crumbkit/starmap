@@ -1,0 +1,2 @@
+NAME                TYPE    UNSET                          SOURCE             VALUE
+SHELF_MIRROR_TOKEN  string  optional; production required  secret, 1Password  ••••••••
