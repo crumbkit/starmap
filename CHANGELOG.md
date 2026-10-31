@@ -88,3 +88,11 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Variable::capture` binds one raw value by the variable's show, as
   `starmap::capture` binds each value. `PathTemplate::fill` returns the path
   a template names when a function gives each placeholder's directory.
+- starmap-resolve's `keychain` feature adds `Keychain`, a `Resolver` that
+  keeps each generated value as a generic password in the macOS login
+  keychain, under the service `starmap.<workspace>` and the account
+  `<app>/<NAME>`. The first lookup creates the value from the variable's
+  random bytes, written as base64url, and later lookups return it
+  unchanged. `Keychain::forget` deletes every value of one workspace and
+  returns how many it deleted. On a platform other than macOS, every call
+  returns `SecretError::Unsupported`.

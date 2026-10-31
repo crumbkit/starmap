@@ -16,8 +16,10 @@ include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 # `starmap::check` checks.
 starmap.workspace = true
 # zeroize zeroes the bytes that `op read` printed when they do not become a
-# secret, such as output that is not UTF-8. Only the `one-password` feature
-# uses it.
+# secret, such as output that is not UTF-8, for the `one-password` feature.
+# For the `keychain` feature, it zeroes the random bytes of a generated value
+# once they are written as text, and the bytes a Keychain item held when they
+# are not UTF-8.
 zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -25,12 +27,27 @@ zeroize = { workspace = true, optional = true }
 # expression, which the expand property uses.
 proptest = { workspace = true, features = ["std"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# security-framework is the maintained binding of Apple's Security
+# framework, which reads, adds and deletes Keychain items and gives
+# cryptographically secure random bytes. Only the `keychain` feature uses
+# it, and only on macOS. Its default features add TLS options that starmap
+# does not use.
+security-framework = { version = "3.7.0", default-features = false, optional = true }
+# core-foundation builds the `CFData` that holds a new item's value, which
+# security-framework's add call takes. security-framework already depends
+# on it.
+core-foundation = { version = "0.10.1", optional = true }
+# base64 writes a generated value's random bytes as base64url text. Its
+# `alloc` feature encodes into a `String`.
+base64 = { version = "0.23.1", default-features = false, features = ["alloc"], optional = true }
+
 # No feature is on by default (LIB-6).
 [features]
 # one-password reads a secret through the 1Password CLI's `op read`.
 one-password = ["dep:zeroize"]
 # keychain creates, reads and forgets generated secrets in the macOS Keychain.
-keychain = []
+keychain = ["dep:security-framework", "dep:core-foundation", "dep:base64", "dep:zeroize"]
 
 [lints]
 workspace = true

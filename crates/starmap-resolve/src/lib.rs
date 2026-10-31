@@ -10,10 +10,12 @@
 //! variable that could not be resolved. [`expand`] fills one path template.
 //!
 //! The `one-password` feature adds `OnePassword`, which reads secrets
-//! through the 1Password CLI, and the `keychain` feature will keep
-//! generated secrets in the macOS Keychain. Neither feature is on by
-//! default.
+//! through the 1Password CLI, and the `keychain` feature adds `Keychain`,
+//! which keeps generated secrets in the macOS Keychain. Neither feature is
+//! on by default.
 
+#[cfg(feature = "keychain")]
+mod keychain;
 #[cfg(feature = "one-password")]
 mod one_password;
 mod places;
@@ -22,6 +24,8 @@ mod process;
 mod resolve;
 mod traits;
 
+#[cfg(feature = "keychain")]
+pub use keychain::Keychain;
 #[cfg(feature = "one-password")]
 pub use one_password::OnePassword;
 
