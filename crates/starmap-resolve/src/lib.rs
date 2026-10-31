@@ -10,13 +10,17 @@
 //! variable that could not be resolved. [`expand`] fills one path template.
 //!
 //! The `one-password` feature reads secrets through the 1Password CLI, and
-//! the `keychain` feature keeps generated secrets in the macOS Keychain.
-//! Neither feature is on by default, and neither adds an item yet.
+//! the `keychain` feature adds `Keychain`, which keeps generated secrets in
+//! the macOS Keychain. Neither feature is on by default.
 
+#[cfg(feature = "keychain")]
+mod keychain;
 mod places;
 mod resolve;
 mod traits;
 
+#[cfg(feature = "keychain")]
+pub use keychain::Keychain;
 pub use places::{AppName, LabelError, Places, WorkspaceName, expand};
 pub use resolve::{Context, Resolution, ResolveFailure, ResolveProblem, resolve};
 pub use traits::{Lookup, Provider, ProviderError, Resolver, SecretError};

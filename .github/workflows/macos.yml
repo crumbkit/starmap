@@ -1,0 +1,62 @@
+# The macOS lane, which the map's `lanes` decision records (BASE-25). It
+# runs the Keychain tests of starmap-resolve, which run only on macOS, and
+# Clippy on the macOS code of the `keychain` feature, which the Linux lane
+# never compiles. A macOS runner costs more than a Linux one, so a pull
+# request runs the lane only when it changes starmap-resolve, the lockfile,
+# the toolchain or this file. Each push to main runs it, and a manual run
+# starts it. Nothing waits for it.
+name: macOS
+
+on:
+  pull_request:
+    paths:
+      - "crates/starmap-resolve/**"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/macos.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Each job grants only the permissions it needs.
+permissions: {}
+
+# A new push cancels the run for the previous push, because the newer run
+# checks the same changes and more.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Any compiler or Clippy warning fails the build (BASE-1).
+  CARGO_BUILD_WARNINGS: deny
+  CARGO_TERM_COLOR: always
+
+jobs:
+  keychain:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # actions/checkout reads the repository.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # rustup installs the version and components that rust-toolchain.toml
+      # names (BASE-26).
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-nextest@0.9.140
+          fallback: none
+      # Only a run on main saves the cache.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: clippy
+        run: cargo clippy --locked --package starmap-resolve --all-targets --features keychain
+      # The tests create items in the runner's login keychain under the
+      # test-only service prefix `starmap-test`, and delete them when they
+      # finish.
+      - name: keychain
+        run: cargo nextest run --locked --package starmap-resolve --features keychain
