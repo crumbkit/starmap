@@ -17,10 +17,10 @@ max-fn-params-bools = 3 # BASE-16
 disallowed-methods = [
     # BASE-6, LIB-1: an application reads its environment once, in main,
     # through the derived Env::load(), and the starmap libraries read none.
-    { path = "std::env::var", reason = "read the environment snapshot that crates/starmap-cli/src/main.rs captures" },
-    { path = "std::env::var_os", reason = "read the environment snapshot that crates/starmap-cli/src/main.rs captures" },
-    { path = "std::env::vars", reason = "only crates/starmap-cli/src/main.rs captures the environment" },
-    { path = "std::env::vars_os", reason = "only crates/starmap-cli/src/main.rs captures the environment" },
+    { path = "std::env::var", reason = "only crates/starmap-cli/src/main.rs reads the environment, and the libraries read none" },
+    { path = "std::env::var_os", reason = "only crates/starmap-cli/src/main.rs reads the environment, and the libraries read none" },
+    { path = "std::env::vars", reason = "only crates/starmap-cli/src/main.rs reads the environment, and the libraries read none" },
+    { path = "std::env::vars_os", reason = "only crates/starmap-cli/src/main.rs reads the environment, and the libraries read none" },
     { path = "std::env::set_var", reason = "build a snapshot in the test instead" },
     { path = "std::env::remove_var", reason = "build a snapshot in the test instead" },
     { path = "std::env::current_dir", reason = "read the directory from the snapshot" },

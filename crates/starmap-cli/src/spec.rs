@@ -16,13 +16,13 @@ use crate::files;
 mod tests;
 
 /// Reads and parses the spec at `path`. The read stops one byte past
-/// [`Spec::MAX_BYTES`], because `Spec::parse` checks the size of text that
-/// is already read (BASE-34).
+/// [`Spec::MAX_BYTES`], so a larger file costs no more memory and fails as
+/// too large without being parsed (BASE-34).
 ///
 /// # Errors
 ///
-/// Returns [`SpecFailure`] when the file is missing, cannot be read, is not
-/// UTF-8 text, or does not parse.
+/// Returns [`SpecFailure`] when the file is missing, cannot be read, is over
+/// 256 KiB, is not UTF-8 text, or does not parse.
 pub(crate) fn load(path: &Path) -> Result<Spec, SpecFailure> {
     let file = path.display().to_string();
     let bytes = files::read_capped(path, Spec::MAX_BYTES + 1).map_err(|error| {
@@ -35,17 +35,13 @@ pub(crate) fn load(path: &Path) -> Result<Spec, SpecFailure> {
             }
         }
     })?;
-    let text = if bytes.len() > Spec::MAX_BYTES {
-        // The read may stop inside a character. Each replacement character
-        // is at least as long as the bytes it replaces, so the text stays
-        // over the limit and `Spec::parse` refuses it as too large.
-        String::from_utf8_lossy(&bytes).into_owned()
-    } else {
-        String::from_utf8(bytes).map_err(|error| SpecFailure::NotUtf8 {
-            file: file.clone(),
-            at: error.utf8_error().valid_up_to(),
-        })?
-    };
+    if bytes.len() > Spec::MAX_BYTES {
+        return Err(SpecFailure::TooLarge { file });
+    }
+    let text = String::from_utf8(bytes).map_err(|error| SpecFailure::NotUtf8 {
+        file: file.clone(),
+        at: error.utf8_error().valid_up_to(),
+    })?;
     Spec::parse(&text).map_err(|error| SpecFailure::Invalid {
         source: NamedSource::new(file.clone(), text),
         file,
@@ -67,6 +63,11 @@ pub(crate) enum SpecFailure {
         file: String,
         /// Why it cannot be read.
         error: io::Error,
+    },
+    /// The file is over [`Spec::MAX_BYTES`], so it is not parsed.
+    TooLarge {
+        /// The path, as the caller gave it.
+        file: String,
     },
     /// The file is not UTF-8 text, which TOML requires.
     NotUtf8 {
@@ -92,25 +93,30 @@ impl SpecFailure {
     fn first_kind(&self) -> Option<SpecProblemKind> {
         match self {
             Self::Invalid { error, .. } => error.problems().first().map(|problem| problem.kind()),
-            Self::NotFound { .. } | Self::Unreadable { .. } | Self::NotUtf8 { .. } => None,
+            Self::NotFound { .. }
+            | Self::Unreadable { .. }
+            | Self::TooLarge { .. }
+            | Self::NotUtf8 { .. } => None,
         }
     }
 }
 
-/// Prints what failed, such as `starmap.toml has 2 problems`. The labels
-/// of a file that does not parse describe each problem.
+/// Prints what failed. A file with one problem prints that problem's
+/// message, and a file with several prints how many it has, such as
+/// `starmap.toml has 2 problems`, and the labels describe each one.
 impl fmt::Display for SpecFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound { file } => write!(formatter, "{file} does not exist"),
             Self::Unreadable { file, .. } => write!(formatter, "{file} cannot be read"),
+            Self::TooLarge { file } => write!(formatter, "{file} is over 256 KiB"),
             Self::NotUtf8 { file, at } => write!(
                 formatter,
                 "{file} is not UTF-8 text at byte {at}, so it is not TOML"
             ),
-            Self::Invalid { file, error, .. } => match error.problems().len() {
-                1 => write!(formatter, "{file} has 1 problem"),
-                count => write!(formatter, "{file} has {count} problems"),
+            Self::Invalid { file, error, .. } => match error.problems() {
+                [problem] => write!(formatter, "{file}: {problem}"),
+                problems => write!(formatter, "{file} has {} problems", problems.len()),
             },
         }
     }
@@ -122,19 +128,28 @@ impl std::error::Error for SpecFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unreadable { error, .. } => Some(error),
-            Self::NotFound { .. } | Self::NotUtf8 { .. } | Self::Invalid { .. } => None,
+            Self::NotFound { .. }
+            | Self::TooLarge { .. }
+            | Self::NotUtf8 { .. }
+            | Self::Invalid { .. } => None,
         }
     }
 }
 
-/// Each problem of a file that does not parse is a label at its span, whose
-/// text is the problem's message, so the output shows every problem with
-/// the lines it is about. The `problems` field lists their codes.
+/// Each problem of a file that does not parse is a label at its span, so the
+/// output shows every problem with the lines it is about. The label of a
+/// file's only problem is the word `here`, because the failure's message
+/// already states the problem. A problem holds no shorter name for the
+/// field it is about than its message. The label of each of several problems is its
+/// message. The `problems` field lists their codes.
 impl Diagnostic for SpecFailure {
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
             Self::Invalid { source, .. } => Some(source),
-            Self::NotFound { .. } | Self::Unreadable { .. } | Self::NotUtf8 { .. } => None,
+            Self::NotFound { .. }
+            | Self::Unreadable { .. }
+            | Self::TooLarge { .. }
+            | Self::NotUtf8 { .. } => None,
         }
     }
 
@@ -142,9 +157,15 @@ impl Diagnostic for SpecFailure {
         let Self::Invalid { error, .. } = self else {
             return None;
         };
-        Some(Box::new(error.problems().iter().map(|problem| {
+        let only = error.problems().len() == 1;
+        Some(Box::new(error.problems().iter().map(move |problem| {
             let span = problem.span();
-            LabeledSpan::new(Some(problem.to_string()), span.start, span.len())
+            let text = if only {
+                "here".to_owned()
+            } else {
+                problem.to_string()
+            };
+            LabeledSpan::new(Some(text), span.start, span.len())
         })))
     }
 }
@@ -154,27 +175,31 @@ impl Failure for SpecFailure {
         match self {
             Self::NotFound { .. } => &codes::SPEC_NOT_FOUND,
             Self::Unreadable { .. } => &codes::SPEC_UNREADABLE,
+            Self::TooLarge { .. } => &codes::SPEC_TOO_LARGE,
             Self::NotUtf8 { .. } => &codes::SPEC_SYNTAX,
             Self::Invalid { .. } => self.first_kind().map_or(&codes::SPEC_SYNTAX, code),
         }
     }
 
     fn recovery(&self) -> Recovery {
-        let hint = match self {
-            Self::NotFound { .. } => {
-                "create starmap.toml beside the application's Cargo.toml, or pass --spec the file that holds the spec"
+        Recovery::Hint(match self {
+            Self::NotFound { file } => {
+                format!("create {file}, or pass --spec the file that holds the spec")
             }
-            Self::Unreadable { .. } => "make the file readable, or pass --spec another file",
-            Self::NotUtf8 { .. } => "save the file as UTF-8 text",
-            Self::Invalid { .. } => self.first_kind().map_or("", hint),
-        };
-        Recovery::Hint(hint.to_owned())
+            Self::Unreadable { file, .. } => {
+                format!("make {file} readable, or pass --spec another file")
+            }
+            Self::TooLarge { .. } => hint(SpecProblemKind::TooLarge).to_owned(),
+            Self::NotUtf8 { file, .. } => format!("save {file} as UTF-8 text"),
+            Self::Invalid { .. } => self.first_kind().map_or("", hint).to_owned(),
+        })
     }
 
     fn fields(&self) -> Vec<Field<'_>> {
         match self {
             Self::NotFound { file }
             | Self::Unreadable { file, .. }
+            | Self::TooLarge { file }
             | Self::NotUtf8 { file, .. } => {
                 vec![Field::new("file", file)]
             }

@@ -6,27 +6,6 @@ use starmap::Spec;
 
 use super::{SpecFailure, load};
 
-/// The directory that holds a `starmap.toml` fixture for each kind of spec
-/// problem, relative to this package.
-const SPEC_FIXTURES: &str = "../starmap/tests/spec";
-
-#[test]
-fn each_spec_problem_reports_the_code_of_its_kind() {
-    let mut checked = 0;
-    for entry in fs::read_dir(SPEC_FIXTURES).unwrap() {
-        let path = entry.unwrap().path();
-        if path.extension().is_none_or(|extension| extension != "toml") {
-            continue;
-        }
-        let kind = path.file_stem().unwrap().to_str().unwrap().to_owned();
-        let failure = load(&path).unwrap_err();
-        assert_eq!(failure.code().area(), "spec", "{kind}");
-        assert_eq!(failure.code().reason(), kind, "{kind}");
-        checked += 1;
-    }
-    assert!(checked >= 16, "only {checked} fixtures were checked");
-}
-
 #[test]
 fn a_file_over_the_limit_that_ends_inside_a_character_is_too_large() {
     let dir = tempfile::tempdir().unwrap();
@@ -36,6 +15,27 @@ fn a_file_over_the_limit_that_ends_inside_a_character_is_too_large() {
     text.push('é');
     fs::write(&path, text).unwrap();
     assert_eq!(load(&path).unwrap_err().code().reason(), "too_large");
+}
+
+// An uncapped read of /dev/zero never ends, so this test fails by hanging
+// or running out of memory when the read loses its cap (BASE-34).
+#[cfg(unix)]
+#[test]
+fn an_endless_file_is_too_large_because_the_read_stops_past_the_limit() {
+    let failure = load(Path::new("/dev/zero")).unwrap_err();
+    assert!(matches!(failure, SpecFailure::TooLarge { .. }));
+    assert_eq!(failure.to_string(), "/dev/zero is over 256 KiB");
+}
+
+#[test]
+fn a_file_with_one_problem_states_the_problem_in_its_message() {
+    let failure = load(Path::new("../starmap/tests/spec/bad_default.toml")).unwrap_err();
+    assert!(
+        failure
+            .to_string()
+            .starts_with("../starmap/tests/spec/bad_default.toml: `variables.SHELF_PAGE_SIZE"),
+        "{failure}"
+    );
 }
 
 #[test]

@@ -13,7 +13,7 @@ use starmap::{
     Bindings, Bound, Form, Mode, Name, SecretRef, Show, Source, Spec, Unset, Value, Variable,
 };
 
-use crate::cli::ExplainArgs;
+use crate::cli::{ExplainArgs, SpecFile};
 use crate::codes::VARIABLE_UNKNOWN;
 use crate::mode;
 use crate::spec::{self, SpecFailure};
@@ -129,18 +129,33 @@ crumbkit::shown!(Cell);
 #[derive(Debug, Failure)]
 #[failure(
     code = VARIABLE_UNKNOWN,
-    recovery = Recovery::Run(Call::new(&["explain"])),
+    recovery = list_again(file),
     field(name = name.as_str()),
+    field(file = file.as_str()),
 )]
 pub(crate) struct UnknownVariable {
     /// The name.
     name: Name,
+    /// The spec file, as the caller gave it.
+    file: String,
 }
 
 impl fmt::Display for UnknownVariable {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "the spec does not declare {}", self.name)
+        write!(formatter, "{} does not declare {}", self.file, self.name)
     }
+}
+
+/// Returns the recovery of an unknown name, which explains every variable
+/// of the same spec file. The call passes `--spec` only when `file` is not
+/// the default, so the usual recovery stays `starmap explain`.
+fn list_again(file: &str) -> Recovery {
+    let call = Call::new(&["explain"]);
+    Recovery::Run(if file == SpecFile::DEFAULT {
+        call
+    } else {
+        call.value("spec", file)
+    })
 }
 
 impl std::error::Error for UnknownVariable {}
@@ -159,6 +174,7 @@ pub(crate) fn explain(
     vars: Vec<(OsString, OsString)>,
 ) -> Result<Batch<Explained, UnknownVariable>, SpecFailure> {
     let spec = spec::load(&args.file.spec)?;
+    let file = args.file.spec.display().to_string();
     let bindings = starmap::capture(&spec, vars);
     let names: Vec<Name> = if args.names.is_empty() {
         spec.variables().map(|(name, _)| name.clone()).collect()
@@ -170,16 +186,24 @@ pub(crate) fn explain(
         "{note} Values come from this shell, and explain resolves no bind."
     ));
     for name in names {
-        batch.push(row(&spec, &bindings, name));
+        batch.push(row(&spec, &file, &bindings, name));
     }
     Ok(batch)
 }
 
 /// Returns the row of the variable `name`, or the failure of a name that
-/// `spec` does not declare.
-fn row(spec: &Spec, bindings: &Bindings, name: Name) -> Result<Explained, UnknownVariable> {
+/// `spec`, read from `file`, does not declare.
+fn row(
+    spec: &Spec,
+    file: &str,
+    bindings: &Bindings,
+    name: Name,
+) -> Result<Explained, UnknownVariable> {
     let Some(variable) = spec.variable(&name) else {
-        return Err(UnknownVariable { name });
+        return Err(UnknownVariable {
+            name,
+            file: file.to_owned(),
+        });
     };
     Ok(Explained {
         kind: form_text(variable.form()),

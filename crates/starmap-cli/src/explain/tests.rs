@@ -20,7 +20,7 @@ fn columns(name: &str, vars: &[(&str, &str)]) -> [String; 5] {
         .map(|(name, value)| (OsString::from(name), OsString::from(value)));
     let bindings = starmap::capture(&spec, vars);
     let name: Name = name.parse().unwrap();
-    let row = row(&spec, &bindings, name).unwrap();
+    let row = row(&spec, "starmap.toml", &bindings, name).unwrap();
     [
         row.name,
         row.kind,
@@ -105,8 +105,46 @@ fn a_value_that_does_not_fit_its_type_is_marked_invalid() {
 fn a_name_the_spec_does_not_declare_is_a_failure_of_that_name() {
     let spec = example();
     let bindings = starmap::capture(&spec, Vec::new());
-    let failure = row(&spec, &bindings, "SHELF_THEME".parse().unwrap()).unwrap_err();
-    assert_eq!(failure.to_string(), "the spec does not declare SHELF_THEME");
+    let failure = row(
+        &spec,
+        "starmap.toml",
+        &bindings,
+        "SHELF_THEME".parse().unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        failure.to_string(),
+        "starmap.toml does not declare SHELF_THEME"
+    );
+}
+
+#[test]
+fn a_withheld_variable_with_a_default_hides_the_default_in_every_column() {
+    let spec = Spec::parse(
+        r#"
+[variables.SHELF_SALT]
+purpose = "Salts the catalogue's cache keys."
+type = "string"
+unset = { default = "pepper" }
+show = "withheld"
+source = "setting"
+"#,
+    )
+    .unwrap();
+    let bindings = starmap::capture(&spec, Vec::new());
+    let row = row(
+        &spec,
+        "starmap.toml",
+        &bindings,
+        "SHELF_SALT".parse().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(row.unset, "default ••••••••");
+    assert_eq!(row.value.to_string(), "•••••••• (default)");
+    assert_eq!(
+        serde_json::to_value(&row.value.0).unwrap(),
+        serde_json::json!({ "state": "default" })
+    );
 }
 
 #[test]

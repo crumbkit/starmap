@@ -103,8 +103,13 @@ pub(crate) enum SelfCommand {
 #[derive(Debug, Args)]
 pub(crate) struct SpecFile {
     /// Read the spec from this file
-    #[arg(long, value_name = "FILE", default_value = "starmap.toml")]
+    #[arg(long, value_name = "FILE", default_value = SpecFile::DEFAULT)]
     pub(crate) spec: PathBuf,
+}
+
+impl SpecFile {
+    /// The file that `--spec` names when it is not passed.
+    pub(crate) const DEFAULT: &str = "starmap.toml";
 }
 
 /// The arguments of `starmap check`.

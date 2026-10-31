@@ -4,10 +4,12 @@
 //! The library holds the whole command, and the `starmap` binary calls
 //! [`run`]. It exports the parser, the guide and the failure codes, so the
 //! integration tests can pass them to crumbkit-test's checks beside the
-//! built binary. It is not an API for other crates.
+//! built binary. It is not an API for other crates, so each public item is
+//! hidden from the documentation and outside the semver promise.
 
 mod check;
 mod cli;
+#[doc(hidden)]
 pub mod codes;
 mod explain;
 mod files;
@@ -19,12 +21,9 @@ use std::process::ExitCode;
 
 use clap::CommandFactory as _;
 
+#[doc(hidden)]
 pub use crate::cli::{Cli, GUIDE};
 use crate::cli::{CommandsCommand, SelfCommand, Verb};
-
-/// Every failure code that the `starmap` command declares, which the tests
-/// pass to crumbkit-test's codes, recovery and twin checks.
-pub const CODES: &[&crumbkit::Code] = codes::ALL;
 
 /// Parses `args`, runs the command and returns the process's exit code. The
 /// first argument is the program's name. `vars` is the process environment,
@@ -34,6 +33,7 @@ pub const CODES: &[&crumbkit::Code] = codes::ALL;
 /// `crumbkit::parse_from` prints help or a refused command line and returns
 /// the exit code. `crumbkit::finish` prints the result or the failure in
 /// the format that the output flags choose, and returns the exit code.
+#[doc(hidden)]
 #[must_use]
 pub fn run<I, T>(args: I, vars: Vec<(OsString, OsString)>) -> ExitCode
 where

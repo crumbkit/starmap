@@ -18,7 +18,7 @@ use crumbkit_test::{
     Allow, Budgets, Examples, Failing, Pages, PathBudgets, Recoveries, Rule, Twin, Twins,
     Unprovoked,
 };
-use starmap_cli::{CODES, Cli, GUIDE, codes};
+use starmap_cli::{Cli, GUIDE, codes};
 
 /// The directory that holds the build plan's illustrative `starmap.toml`,
 /// relative to this package.
@@ -95,7 +95,7 @@ fn every_exit_code_meets_the_exit_code_rules() {
 
 #[test]
 fn every_failure_code_is_declared_once_and_spelled_by_the_rules() {
-    crumbkit_test::check_codes(&GUIDE, &[CODES]);
+    crumbkit_test::check_codes(&GUIDE, &[codes::ALL]);
 }
 
 #[test]
@@ -236,7 +236,7 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[Unprovoked::new(
 )];
 
 /// The settings of the recovery check.
-const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, &[CODES])
+const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, &[codes::ALL])
     .starts(STARTS)
     .unprovoked(UNPROVOKED);
 
@@ -274,7 +274,7 @@ const PAIRS: &[Twin<'static>] = &[
 ];
 
 /// The settings of the twin check.
-const TWINS: Twins<'_> = Twins::new(EXAMPLES, &[CODES])
+const TWINS: Twins<'_> = Twins::new(EXAMPLES, &[codes::ALL])
     .pairs(PAIRS)
     .unprovoked(UNPROVOKED);
 

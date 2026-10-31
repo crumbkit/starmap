@@ -65,7 +65,18 @@ fn a_file_over_256_kib_fails_as_too_large_without_being_parsed() {
     text.push_str("\n[variables.NOT TOML");
     fs::write(dir.path().join("starmap.toml"), text).unwrap();
     let run = starmap(dir.path(), dir.path(), &["check", "--json"]).code(1);
-    assert_eq!(code(&run.get_output().stdout), "starmap::spec::too_large");
+    let json = &run.get_output().stdout;
+    assert_eq!(code(json), "starmap::spec::too_large");
+    assert!(
+        json.len() < 1000,
+        "the JSON failure has {} bytes",
+        json.len()
+    );
+    // A parsed file would carry an excerpt of its text, so a short failure
+    // shows that the file was refused before parsing.
+    let run = starmap(dir.path(), dir.path(), &["check"]).code(1);
+    let stderr = &run.get_output().stderr;
+    assert!(stderr.len() < 500, "the failure has {} bytes", stderr.len());
 }
 
 #[test]
