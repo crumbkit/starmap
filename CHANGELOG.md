@@ -82,7 +82,7 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Places`, and names the first placeholder that has no place.
 - starmap-resolve's `one-password` feature adds `OnePassword`, a `Resolver`
   that reads each `op://` reference with `op read` under the resolution's
-  deadline. A signed-out or locked account returns `SecretError::Locked`, a
+  deadline. A signed-out account returns `SecretError::Locked`, a
   missing vault, item or field returns `SecretError::NotFound`, and a
   dismissed prompt returns `SecretError::Denied`.
 - `Variable::capture` binds one raw value by the variable's show, as

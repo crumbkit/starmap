@@ -54,7 +54,7 @@ impl Resolver for OnePassword {
     /// # Errors
     ///
     /// Returns [`SecretError::Unsupported`] for any other lookup,
-    /// [`SecretError::Locked`] when `op` is signed out or locked,
+    /// [`SecretError::Locked`] when `op` is signed out,
     /// [`SecretError::NotFound`] when the reference names no vault, item or
     /// field, [`SecretError::Denied`] when the person dismissed the
     /// 1Password prompt, [`SecretError::Deadline`] when `op` has not
@@ -108,8 +108,8 @@ fn failure(status: ExitStatus, message: &str) -> SecretError {
     let lower = message.to_lowercase();
     let says = |phrases: &[&str]| phrases.iter().any(|phrase| lower.contains(phrase));
     // The item, vault and field names appear in a not-found message, so its
-    // phrases are checked first, and a name such as "unlocked token" cannot
-    // read as a locked store.
+    // phrases are checked first, so an item named after another phrase,
+    // such as "not currently signed in", still reads as not found.
     if says(&[
         "isn't an item",
         "isn't a vault",
@@ -119,7 +119,7 @@ fn failure(status: ExitStatus, message: &str) -> SecretError {
         SecretError::NotFound
     } else if says(&["dismissed"]) {
         SecretError::Denied
-    } else if says(&["not currently signed in", "session expired"]) {
+    } else if says(&["not currently signed in"]) {
         SecretError::Locked
     } else {
         let last = message

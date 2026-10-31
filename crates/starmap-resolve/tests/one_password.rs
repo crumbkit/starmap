@@ -75,17 +75,6 @@ printf ' s3cret value\n'"#,
 }
 
 #[test]
-fn op_read_has_no_standard_input_to_wait_on() {
-    let program = fake_op(
-        "stdin",
-        r#"if read -r line; then exit 9; fi
-printf 'token'"#,
-    );
-    let secret = read(program, Instant::now() + PATIENT).unwrap();
-    assert_eq!(text(&secret), "token");
-}
-
-#[test]
 fn a_signed_out_account_reads_as_a_locked_store() {
     let program = fake_op(
         "locked",
@@ -108,14 +97,18 @@ exit 1"#,
 }
 
 #[test]
-fn a_missing_item_whose_name_says_locked_reads_as_not_found() {
-    let program = fake_op(
-        "missing-locked",
-        r#"echo '[ERROR] 2026/10/31 12:00:00 could not read secret '"'"'op://Personal/locked token/token'"'"': could not get item Personal/locked token: "locked token" isn'"'"'t an item in the "Personal" vault. Specify the item with its UUID, name, or domain.' >&2
-exit 1"#,
-    );
-    let error = read(program, Instant::now() + PATIENT).unwrap_err();
-    assert!(matches!(error, SecretError::NotFound), "{error:?}");
+fn a_missing_item_named_after_a_locked_or_denied_phrase_reads_as_not_found() {
+    for item in ["not currently signed in", "dismissed"] {
+        let program = fake_op(
+            &format!("missing-{}", item.replace(' ', "-")),
+            &format!(
+                r#"echo '[ERROR] 2026/10/31 12:00:00 could not get item Personal/{item}: "{item}" isn'"'"'t an item in the "Personal" vault.' >&2
+exit 1"#
+            ),
+        );
+        let error = read(program, Instant::now() + PATIENT).unwrap_err();
+        assert!(matches!(error, SecretError::NotFound), "{item}: {error:?}");
+    }
 }
 
 #[test]
@@ -155,10 +148,10 @@ exit 3",
     reason = "the test waits past the fake's own sleep to see that the kill stopped it"
 )]
 fn op_read_that_outlives_the_deadline_is_stopped() {
-    let program = fake_op("slow", "sleep 1; touch '{dir}/survived'");
-    let error = read(program.clone(), Instant::now() + Duration::from_millis(200)).unwrap_err();
+    let program = fake_op("slow", "sleep 0.3; touch '{dir}/survived'");
+    let error = read(program.clone(), Instant::now() + Duration::from_millis(100)).unwrap_err();
     assert!(matches!(error, SecretError::Deadline), "{error:?}");
-    std::thread::sleep(Duration::from_millis(1500));
+    std::thread::sleep(Duration::from_millis(600));
     assert!(!program.with_file_name("survived").exists());
 }
 
@@ -172,13 +165,23 @@ fn a_deadline_that_has_passed_starts_no_program() {
 }
 
 #[test]
-fn output_over_the_limit_is_refused() {
-    let program = fake_op("long", "exec cat /dev/zero");
-    let error = read(program, Instant::now() + PATIENT).unwrap_err();
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test waits past the fake's own sleep to see that the kill stopped it"
+)]
+fn output_over_the_limit_is_refused_and_stops_op() {
+    let program = fake_op(
+        "long",
+        "head -c 70000 /dev/zero; sleep 0.3; touch '{dir}/survived'",
+    );
+    // A short deadline makes a missing cap fail fast as Deadline.
+    let error = read(program.clone(), Instant::now() + Duration::from_secs(5)).unwrap_err();
     let SecretError::Program(error) = error else {
         panic!("{error:?}");
     };
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    std::thread::sleep(Duration::from_millis(600));
+    assert!(!program.with_file_name("survived").exists());
 }
 
 #[test]

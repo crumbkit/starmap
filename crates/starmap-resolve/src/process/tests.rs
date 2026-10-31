@@ -11,3 +11,11 @@ fn the_command_sets_and_removes_no_variable_of_the_inherited_environment() {
     let command = command(Path::new("/opt/op"), "op://Personal/shelf mirror/token");
     assert_eq!(command.get_envs().count(), 0);
 }
+
+#[test]
+fn the_command_gives_op_an_empty_standard_input() {
+    let command = command(Path::new("/opt/op"), "op://Personal/shelf mirror/token");
+    let shown = format!("{command:#?}");
+    let compact: String = shown.split_whitespace().collect();
+    assert!(compact.contains("stdin:Some(Null,)"), "{shown}");
+}

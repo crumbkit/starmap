@@ -60,12 +60,17 @@ enum Stream {
 /// - Streams and deadline: standard input is empty, so `op` cannot wait for
 ///   typed input. Standard output is kept up to [`OUTPUT_LIMIT`] bytes, and
 ///   more is refused. Standard error is kept up to [`ERROR_LIMIT`] bytes.
+///   After that the reader closes the pipe, so a further write by `op`
+///   fails, and `op` exits by SIGPIPE.
 ///   `deadline` is the resolution's deadline, and it also covers any
 ///   1Password prompt that `op` shows.
 /// - End: the operation stops and reaps the child. On the deadline or on
 ///   output over the limit it kills `op` and waits for it. After both
-///   streams close it reads the exit status, and it kills a child that
-///   still runs. The kill stops `op` only, and a process that `op` started
+///   streams close it kills and waits for `op` too, so a child that closed
+///   its streams and still runs cannot hold the operation past the
+///   deadline. A kill sent to a child that has exited and is not yet reaped
+///   leaves its exit status unchanged, so a normal exit keeps its status.
+///   The kill stops `op` only, and a process that `op` started
 ///   survives it (PROC-3). A descendant that inherits the pipes makes a
 ///   successful run wait until the deadline, and keeps the reader threads
 ///   alive after a kill until it closes them. `op read` writes no file, so
@@ -112,10 +117,7 @@ pub(crate) fn op_read(program: &Path, reference: &str, deadline: Instant) -> io:
             Err(RecvTimeoutError::Disconnected) => break,
         }
     }
-    let status = match child.try_wait()? {
-        Some(status) => status,
-        None => stop(&mut child)?,
-    };
+    let status = stop(&mut child)?;
     if status.success() {
         Ok(OpRead::Printed(output))
     } else {
@@ -142,17 +144,17 @@ fn command(program: &Path, reference: &str) -> Command {
     command
 }
 
-/// Kills `child`, waits for it, and returns its exit status. It waits even
-/// when the kill fails, such as for a child that has already exited, so the
-/// child is always reaped.
+/// Kills `child`, waits for it, and returns its exit status. The child is
+/// reaped whatever the kill returns.
 #[expect(
     clippy::disallowed_types,
     reason = "PROC-1: op_read owns its child and stops it"
 )]
 fn stop(child: &mut process::Child) -> io::Result<ExitStatus> {
-    let killed = child.kill();
-    let status = child.wait()?;
-    killed.map(|()| status)
+    // A kill fails only for a child that is already reaped, which the wait
+    // then reports.
+    let _ = child.kill();
+    child.wait()
 }
 
 /// Reads standard output on a new thread, up to one byte over
