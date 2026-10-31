@@ -174,7 +174,9 @@ fn output_over_the_limit_is_refused_and_stops_op() {
         "long",
         "head -c 70000 /dev/zero; sleep 0.3; touch '{dir}/survived'",
     );
-    // A short deadline makes a missing cap fail fast as Deadline.
+    // The 5 s deadline bounds the test. Without the cap, the reader waits
+    // for the fake to exit after its touch, so the test fails on its
+    // assertions well within that deadline.
     let error = read(program.clone(), Instant::now() + Duration::from_secs(5)).unwrap_err();
     let SecretError::Program(error) = error else {
         panic!("{error:?}");
@@ -182,6 +184,19 @@ fn output_over_the_limit_is_refused_and_stops_op() {
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     std::thread::sleep(Duration::from_millis(600));
     assert!(!program.with_file_name("survived").exists());
+}
+
+#[test]
+fn op_that_closes_its_streams_and_keeps_running_is_stopped() {
+    // A wait for the child would last the fake's 30 s sleep and then
+    // return the token, so the kill shows as a Program failure. The test
+    // checks the outcome and not the elapsed time (BASE-35).
+    let program = fake_op("closed", "printf token; exec >&- 2>&-; sleep 30");
+    let error = read(program, Instant::now() + Duration::from_secs(5)).unwrap_err();
+    let SecretError::Program(error) = error else {
+        panic!("{error:?}");
+    };
+    assert!(error.to_string().contains("signal"), "{error}");
 }
 
 #[test]
