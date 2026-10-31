@@ -108,6 +108,17 @@ exit 1"#,
 }
 
 #[test]
+fn a_missing_item_whose_name_says_locked_reads_as_not_found() {
+    let program = fake_op(
+        "missing-locked",
+        r#"echo '[ERROR] 2026/10/31 12:00:00 could not read secret '"'"'op://Personal/locked token/token'"'"': could not get item Personal/locked token: "locked token" isn'"'"'t an item in the "Personal" vault. Specify the item with its UUID, name, or domain.' >&2
+exit 1"#,
+    );
+    let error = read(program, Instant::now() + PATIENT).unwrap_err();
+    assert!(matches!(error, SecretError::NotFound), "{error:?}");
+}
+
+#[test]
 fn a_dismissed_prompt_reads_as_denied() {
     let program = fake_op(
         "dismissed",
@@ -139,23 +150,30 @@ exit 3",
 }
 
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test waits past the fake's own sleep to see that the kill stopped it"
+)]
 fn op_read_that_outlives_the_deadline_is_stopped() {
-    let program = fake_op("slow", "exec sleep 60");
-    let error = read(program, Instant::now() + Duration::from_millis(200)).unwrap_err();
+    let program = fake_op("slow", "sleep 1; touch '{dir}/survived'");
+    let error = read(program.clone(), Instant::now() + Duration::from_millis(200)).unwrap_err();
     assert!(matches!(error, SecretError::Deadline), "{error:?}");
+    std::thread::sleep(Duration::from_millis(1500));
+    assert!(!program.with_file_name("survived").exists());
 }
 
 #[test]
 fn a_deadline_that_has_passed_starts_no_program() {
-    let program = fake_op("late", "touch '{dir}/ran'");
-    let error = read(program.clone(), Instant::now()).unwrap_err();
+    // Starting a program that does not exist would fail as a program
+    // failure, so Deadline shows that nothing was started.
+    let program = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("no-such-op");
+    let error = read(program, Instant::now()).unwrap_err();
     assert!(matches!(error, SecretError::Deadline), "{error:?}");
-    assert!(!program.with_file_name("ran").exists());
 }
 
 #[test]
 fn output_over_the_limit_is_refused() {
-    let program = fake_op("long", "head -c 70000 /dev/zero | tr '\\0' 'a'");
+    let program = fake_op("long", "exec cat /dev/zero");
     let error = read(program, Instant::now() + PATIENT).unwrap_err();
     let SecretError::Program(error) = error else {
         panic!("{error:?}");

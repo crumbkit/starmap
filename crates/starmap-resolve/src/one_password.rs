@@ -107,22 +107,20 @@ fn text(mut bytes: Zeroizing<Vec<u8>>) -> Result<Secret<String>, SecretError> {
 fn failure(status: ExitStatus, message: &str) -> SecretError {
     let lower = message.to_lowercase();
     let says = |phrases: &[&str]| phrases.iter().any(|phrase| lower.contains(phrase));
-    if says(&["dismissed"]) {
-        SecretError::Denied
-    } else if says(&[
-        "not currently signed in",
-        "signed out",
-        "session expired",
-        "locked",
-    ]) {
-        SecretError::Locked
-    } else if says(&[
+    // The item, vault and field names appear in a not-found message, so its
+    // phrases are checked first, and a name such as "unlocked token" cannot
+    // read as a locked store.
+    if says(&[
         "isn't an item",
         "isn't a vault",
-        "isn't a field",
         "does not have a field",
+        "could not find field",
     ]) {
         SecretError::NotFound
+    } else if says(&["dismissed"]) {
+        SecretError::Denied
+    } else if says(&["not currently signed in", "session expired"]) {
+        SecretError::Locked
     } else {
         let last = message
             .lines()
