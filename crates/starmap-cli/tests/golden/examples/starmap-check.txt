@@ -1,1 +1,1 @@
-starmap.toml declares 9 variables.
+starmap.toml declares 9 variables, and src reads all 9.

@@ -6,7 +6,7 @@ use std::fmt;
 
 use crumbkit::schemars::{Schema, SchemaGenerator};
 use crumbkit::serde::Serializer;
-use crumbkit::{Batch, Call, Document, Failure, Recovery, Row, Shown};
+use crumbkit::{Batch, Document, Failure, Recovery, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{
@@ -147,15 +147,9 @@ impl fmt::Display for UnknownVariable {
 }
 
 /// Returns the recovery of an unknown name, which explains every variable
-/// of the same spec file. The call passes `--spec` only when `file` is not
-/// the default, so the usual recovery stays `starmap explain`.
+/// of the same spec file.
 fn list_again(file: &str) -> Recovery {
-    let call = Call::new(&["explain"]);
-    Recovery::Run(if file == SpecFile::DEFAULT {
-        call
-    } else {
-        call.value("spec", file)
-    })
+    Recovery::Run(SpecFile::call(&["explain"], file))
 }
 
 impl std::error::Error for UnknownVariable {}

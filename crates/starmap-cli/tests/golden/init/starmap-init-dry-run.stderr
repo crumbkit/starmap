@@ -1,0 +1,3 @@
+src reads 9 variables, and init wrote nothing.
+Next: starmap init writes the file.
+This was a dry run, so nothing changed.

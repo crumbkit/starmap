@@ -106,3 +106,22 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shell. A withheld value prints as eight dots whatever its length, and its
   JSON holds only its state. `commands list` and `self usage` come from
   crumbkit, and every run appends a line to the command's usage log.
+- `starmap init` scans the `.rs` files under `src` for each variable that
+  the code reads by a literal name, through `std::env::var`,
+  `std::env::var_os` or the `#[starmap("NAME")]` field attribute, and
+  writes `starmap.toml` with a guess for each field of each variable. Each
+  guess ends in `?`, and `--dry-run` prints the guesses and writes nothing.
+  init refuses to replace an existing file with `starmap::spec::exists`.
+  The scan skips test code: files named `tests.rs` or ending in
+  `_tests.rs`, and the item after `#[cfg(test)]`. It does not count a
+  method such as `ctx.var("X")`. It misses a name held in a constant, a
+  lookup in `std::env::vars_os`, a variable that a library such as clap
+  reads, and a reader that matches names by prefix. It counts a function
+  named `var` or `var_os` from another crate.
+- `starmap check` prints one failure for a file whose problems are all
+  guesses: it counts them and points at the first.
+- `starmap check` also scans `src`. Its text says how many of the declared
+  variables `src` reads, its JSON gains the fields `read` and
+  `undeclared`, and each variable that `src` reads and the file does not
+  declare fails with `starmap::variable::undeclared`. A missing spec's next
+  step is now `starmap init`.

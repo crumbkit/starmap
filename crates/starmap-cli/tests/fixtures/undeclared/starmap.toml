@@ -1,0 +1,7 @@
+# src reads SHELF_THEME, which this file does not declare.
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"

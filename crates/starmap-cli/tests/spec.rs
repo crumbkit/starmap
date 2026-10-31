@@ -34,7 +34,7 @@ fn code(output: &[u8]) -> String {
 }
 
 #[test]
-fn a_file_with_two_guesses_prints_one_failure_that_points_at_each() {
+fn a_file_with_two_guesses_prints_one_failure_that_counts_them_and_points_at_the_first() {
     let state = tempfile::tempdir().unwrap();
     starmap(
         SPEC_FIXTURES,
@@ -100,7 +100,7 @@ fn a_file_of_exactly_256_kib_is_read_and_parsed() {
     fs::write(dir.path().join("starmap.toml"), text).unwrap();
     starmap(dir.path(), dir.path(), &["check"])
         .success()
-        .stdout_eq("starmap.toml declares 0 variables.\n");
+        .stdout_eq("starmap.toml declares 0 variables, and src reads none of them.\n");
 }
 
 #[test]

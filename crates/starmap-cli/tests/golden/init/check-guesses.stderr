@@ -1,0 +1,8 @@
+error: starmap.toml still holds 45 guesses that starmap init marked with ?
+  at:    starmap.toml:7:11: the first guess
+     6 | # Read at src/env.rs:9.
+     7 | purpose = "?"
+       |           ^^^
+     8 | type = "url?"
+  help:  confirm or correct each guess and delete its ?
+  code:  starmap::spec::guess

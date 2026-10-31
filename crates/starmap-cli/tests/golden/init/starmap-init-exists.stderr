@@ -1,0 +1,3 @@
+error: starmap.toml exists already
+  help:  run `starmap check`
+  code:  starmap::spec::exists

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "starmap/init/v1",
+  "description": "Each variable that src reads, with the guesses that init writes to the spec.",
+  "type": "object",
+  "properties": {
+    "cut": {
+      "description": "Present when the output budget cut the result short, so data holds only its first rows.",
+      "type": "object",
+      "properties": {
+        "budget": {
+          "description": "The most bytes that the run printed on standard output.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "code": {
+          "description": "The over-budget code, in the tool's spelling.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "budget"
+      ]
+    },
+    "data": {
+      "description": "The rows of the page, up to the limit.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Guess"
+      }
+    },
+    "dry_run": {
+      "description": "Present, and true, when the run was a dry run that changed nothing.",
+      "const": true
+    },
+    "schema": {
+      "description": "The id of this document.",
+      "const": "starmap/init/v1"
+    },
+    "total": {
+      "description": "The number of rows that matched, of which data holds one page. It is absent when the tool did not count the rows.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "truncated": {
+      "description": "True when the document leaves out rows that matched, because of the limit or the output budget, and false when data holds every row.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema",
+    "data",
+    "truncated"
+  ],
+  "$defs": {
+    "Guess": {
+      "description": "One variable that src reads, with the guess for each field that init\nwrites. Each guess ends in `?`, as it does in the file.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The variable's name.",
+          "type": "string"
+        },
+        "read_at": {
+          "description": "The places in src that read the variable, such as src/serve.rs:22.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "show": {
+          "description": "The guessed show: withheld? for a secret, and shown? otherwise.",
+          "type": "string"
+        },
+        "source": {
+          "description": "The guessed source: setting?, secret? or inherited?.",
+          "type": "string"
+        },
+        "type": {
+          "description": "The guessed type, such as port?.",
+          "type": "string"
+        },
+        "unset": {
+          "description": "The guessed unset rule: required? for a setting, and optional? otherwise.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "unset",
+        "source",
+        "read_at"
+      ]
+    }
+  }
+}
