@@ -12,9 +12,11 @@ categories = ["config"]
 include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [dependencies]
+secrecy.workspace = true
 sha2.workspace = true
 toml_edit.workspace = true
 url.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 # `std` builds proptest on the standard library and gives the strategies that

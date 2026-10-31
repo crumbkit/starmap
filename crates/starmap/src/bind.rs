@@ -1,11 +1,15 @@
 //! The binds a variable's source takes: the provider of a provided value,
 //! the path template of a setting, the reference of a secret, and the size
-//! of a generated value.
+//! of a generated value. It also holds the values bound to variables before
+//! they are checked.
 
 use std::collections::BTreeMap;
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt;
 use std::str::FromStr;
+
+use crate::{Name, Secret};
 
 #[cfg(test)]
 mod tests;
@@ -432,3 +436,40 @@ impl fmt::Display for BytesError {
 }
 
 impl Error for BytesError {}
+
+/// The values bound to variables by name, before they are checked against
+/// a spec. [`capture`](crate::capture) builds them from an environment, and
+/// a host builds them from what it resolves.
+#[derive(Debug, Default)]
+pub struct Bindings(BTreeMap<Name, Bound>);
+
+impl Bindings {
+    /// Returns bindings that bind no variable.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Binds `name` to `bound`, replacing any value bound to it before.
+    pub fn bind(&mut self, name: Name, bound: Bound) {
+        self.0.insert(name, bound);
+    }
+
+    /// Returns the value bound to `name`, if there is one.
+    #[must_use]
+    pub fn get(&self, name: &Name) -> Option<&Bound> {
+        self.0.get(name)
+    }
+}
+
+/// A value bound to one variable.
+#[derive(Debug)]
+pub enum Bound {
+    /// A value that may be shown, as the environment holds it.
+    Plain(OsString),
+    /// A withheld value.
+    Secret(Secret<String>),
+    /// A withheld value that is not Unicode, which a [`Secret<String>`]
+    /// cannot hold. [`check`](crate::check) refuses it.
+    NotUnicode,
+}
