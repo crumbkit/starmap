@@ -82,6 +82,8 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
                 Unset::Required | Unset::Optional => None,
             }
         }
+        // The parser refuses a withheld mode variable, so a withheld value
+        // never reaches this arm; an invalid value decides local mode.
         Some(Ok(Some(Held::Withheld(_))) | Err(_)) => return Mode::Local,
     };
     rule.decide(value.map(|value| value.to_os_string()).as_deref())
@@ -96,7 +98,9 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 /// When the bindings decide another mode than `mode`, the mode variable has
 /// a finding too, so a ready environment fits the mode its child decides.
 /// A spec without a `[mode]` table is always checked in local mode, which
-/// is the only mode its child can decide.
+/// is the only mode its child can decide. An invalid mode value checked in
+/// production gives the mode variable two findings: `Invalid`, and
+/// `ModeMismatch { decided: Local }`.
 ///
 /// The verdict is [`Verdict::Ready`] only when no variable has a finding,
 /// and otherwise [`Verdict::Refused`] with each finding in the spec's order
