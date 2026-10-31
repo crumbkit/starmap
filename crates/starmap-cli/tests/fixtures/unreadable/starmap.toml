@@ -1,0 +1,7 @@
+# src holds a file that is not Rust.
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"

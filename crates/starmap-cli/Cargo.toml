@@ -45,6 +45,10 @@ clap = { workspace = true, features = [
     "color",
 ] }
 crumbkit-usage = { workspace = true }
+# `init` and `check` split each source file under src into Rust tokens to
+# find the variables it reads, and `span-locations` gives each token its
+# line. The scan needs only tokens, so it takes no parser such as syn.
+proc-macro2 = { workspace = true, features = ["span-locations"] }
 miette = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 schemars = { workspace = true, features = ["derive"] }

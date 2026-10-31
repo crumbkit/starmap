@@ -10,12 +10,32 @@
         "The command's output weight counts 0 bytes, so its path weight is too low."
       ],
       "budget": null
+    },
+    {
+      "rule": "examples/run",
+      "applies_to": "starmap init",
+      "reason": "The example directory holds starmap.toml, which init refuses to replace, so tests/init.rs runs init in a checkout without one and pins its output.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "examples/run",
+      "applies_to": "starmap init --dry-run",
+      "reason": "The example directory holds starmap.toml, which init refuses to replace, so tests/init.rs runs init in a checkout without one and pins its output.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
     }
   ],
   "customisations": [
     {
       "declaration": "root-verbs",
-      "applies_to": "starmap check, starmap explain",
+      "applies_to": "starmap init, starmap check, starmap explain",
       "declares": "Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.",
       "reason": "starmap acts on one file, starmap.toml, so its commands need no resource word."
     }

@@ -1,6 +1,7 @@
 starmap check --spec missing.toml
   fails with starmap::spec::not_found
-  hint
+  run starmap init --spec missing.toml
+    exits 0
 
 starmap check --spec .
   fails with starmap::spec::unreadable
@@ -74,6 +75,23 @@ starmap explain SHELF_THEME
   fails with starmap::variable::unknown
   run starmap explain
     exits 0
+
+starmap init --spec starmap.toml
+  fails with starmap::spec::exists
+  run starmap check
+    exits 0
+
+starmap init --spec missing/starmap.toml
+  fails with starmap::spec::unwritable
+  hint
+
+starmap check --spec undeclared/starmap.toml
+  fails with starmap::variable::undeclared
+  hint
+
+starmap check --spec unreadable/starmap.toml
+  fails with starmap::source::unreadable
+  hint
 
 codes that no start provokes:
   starmap::spec::too_large: Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.

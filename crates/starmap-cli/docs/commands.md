@@ -4,11 +4,12 @@ This reference is generated from the help of `starmap`. Edit the help in the too
 
 ## `starmap`
 
-Check and explain the environment variables that an application declares in starmap.toml
+Write, check and explain the environment variables that an application declares in starmap.toml
 
 ### Commands
 
-- [`starmap check`](#starmap-check): Check that starmap.toml follows every rule of the file
+- [`starmap init`](#starmap-init): Write starmap.toml with a guess for each variable that src reads
+- [`starmap check`](#starmap-check): Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
 - [`starmap explain`](#starmap-explain): Describe each declared variable and the value it has in this shell
 - [`starmap commands`](#starmap-commands): Explore starmap's commands
 - [`starmap self`](#starmap-self): Review starmap's own use
@@ -20,9 +21,48 @@ Check and explain the environment variables that an application declares in star
 - `--long`: Add the long columns after the compact ones. The default prints only the compact columns. Works after every subcommand.
 - `--full`: With --json, print every field of every row. The default prints only the fields of the columns. Works after every subcommand.
 
+## `starmap init`
+
+Write starmap.toml with a guess for each variable that src reads.
+
+The scan skips test code: files named tests.rs or ending in \_tests.rs, and the item after #\[cfg(test)\]. check scans src the same way.
+
+### Arguments
+
+- `--spec <FILE>`: Write the spec to this file, and scan the src directory beside it. Default: `starmap.toml`.
+- `--dry-run`: Report what the command would change, and change nothing
+
+### Examples
+
+Write starmap.toml with a guess for each variable that src reads.
+
+```sh
+starmap init
+```
+
+Print the guesses and write nothing.
+
+```sh
+starmap init --dry-run
+```
+
+### Columns
+
+- `name`: The variable's name.
+- `type`: The guessed type, such as port?.
+- `unset`: The guessed unset rule: required? for a setting, and optional? otherwise.
+- `source`: The guessed source: setting?, secret? or inherited?.
+- `read_at`: The places in src that read the variable, such as src/serve.rs:22.
+
+### Columns that `--long` adds
+
+- `show`: The guessed show: withheld? for a secret, and shown? otherwise.
+
+Effects: additive, not idempotent, closed-world.
+
 ## `starmap check`
 
-Check that starmap.toml follows every rule of the file
+Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
 
 ### Arguments
 

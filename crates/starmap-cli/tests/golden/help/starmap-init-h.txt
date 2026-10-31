@@ -1,0 +1,16 @@
+Write starmap.toml with a guess for each variable that src reads
+
+Usage: starmap init [OPTIONS]
+
+Options:
+      --spec <FILE>  Write the spec to this file, and scan the src directory beside it [default: starmap.toml]
+      --dry-run      Report what the command would change, and change nothing
+  -h, --help         Print help (see more with '--help')
+
+Examples:
+  starmap init
+  starmap init --dry-run
+
+Effects: additive, not idempotent, closed-world.
+Global flags: --json, --fields <FIELD>, --long, --full. `starmap init --help` describes them.
+Next: starmap init --help explains each column.

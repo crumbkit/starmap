@@ -8,6 +8,10 @@ use crumbkit::Code;
 pub const SPEC_NOT_FOUND: Code = Code::new("starmap", "spec", "not_found");
 /// The spec file exists and cannot be read, such as a directory.
 pub const SPEC_UNREADABLE: Code = Code::new("starmap", "spec", "unreadable");
+/// `init` finds a file at the spec path already.
+pub const SPEC_EXISTS: Code = Code::new("starmap", "spec", "exists");
+/// `init` cannot create or write the spec file.
+pub const SPEC_UNWRITABLE: Code = Code::new("starmap", "spec", "unwritable");
 /// The spec file is over 256 KiB.
 pub const SPEC_TOO_LARGE: Code = Code::new("starmap", "spec", "too_large");
 /// The spec file is not valid TOML, or not UTF-8 text.
@@ -45,11 +49,18 @@ pub const SPEC_MODE_UNDECLARED: Code = Code::new("starmap", "spec", "mode_undecl
 pub const SPEC_MODE_SOURCE: Code = Code::new("starmap", "spec", "mode_source");
 /// `explain` names a variable that the spec does not declare.
 pub const VARIABLE_UNKNOWN: Code = Code::new("starmap", "variable", "unknown");
+/// `check` finds source code that reads a variable the spec does not
+/// declare.
+pub const VARIABLE_UNDECLARED: Code = Code::new("starmap", "variable", "undeclared");
+/// A file or directory under `src` cannot be read as Rust source.
+pub const SOURCE_UNREADABLE: Code = Code::new("starmap", "source", "unreadable");
 
 /// Every code above.
 pub const ALL: &[&Code] = &[
     &SPEC_NOT_FOUND,
     &SPEC_UNREADABLE,
+    &SPEC_EXISTS,
+    &SPEC_UNWRITABLE,
     &SPEC_TOO_LARGE,
     &SPEC_SYNTAX,
     &SPEC_UNKNOWN_FIELD,
@@ -68,4 +79,6 @@ pub const ALL: &[&Code] = &[
     &SPEC_MODE_UNDECLARED,
     &SPEC_MODE_SOURCE,
     &VARIABLE_UNKNOWN,
+    &VARIABLE_UNDECLARED,
+    &SOURCE_UNREADABLE,
 ];

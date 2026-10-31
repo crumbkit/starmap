@@ -1,4 +1,4 @@
-Check that starmap.toml follows every rule of the file
+Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
 
 Usage: starmap check [OPTIONS]
 

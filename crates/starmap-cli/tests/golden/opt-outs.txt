@@ -1,12 +1,22 @@
-starmap has 1 opt-out from the conventions.
+starmap has 3 opt-outs from the conventions.
 
 examples/run: starmap self usage
   Reason: The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.
   Cost: The examples are not run, so help can show an example that fails.
   Cost: The command's output weight counts 0 bytes, so its path weight is too low.
 
+examples/run: starmap init
+  Reason: The example directory holds starmap.toml, which init refuses to replace, so tests/init.rs runs init in a checkout without one and pins its output.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+examples/run: starmap init --dry-run
+  Reason: The example directory holds starmap.toml, which init refuses to replace, so tests/init.rs runs init in a checkout without one and pins its output.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
 starmap declares 1 customisation.
 
-root-verbs: starmap check, starmap explain
+root-verbs: starmap init, starmap check, starmap explain
   Declares: Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.
   Reason: starmap acts on one file, starmap.toml, so its commands need no resource word.

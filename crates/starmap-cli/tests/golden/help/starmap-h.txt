@@ -1,9 +1,10 @@
-Check and explain the environment variables that an application declares in starmap.toml
+Write, check and explain the environment variables that an application declares in starmap.toml
 
 Usage: starmap [OPTIONS] <COMMAND>
 
 Verbs
-  check     Check that starmap.toml follows every rule of the file
+  init      Write starmap.toml with a guess for each variable that src reads
+  check     Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
   explain   Describe each declared variable and the value it has in this shell
 
 Commands

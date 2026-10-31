@@ -3,17 +3,18 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
-use crumbkit::ViewFlags;
 use crumbkit::commands::{COMMANDS_LIST, CommandsList};
 use crumbkit::help::{Effects, Example, Guide, Leaf};
+use crumbkit::{Call, DryRun, ViewFlags};
 use crumbkit_usage::{SELF_USAGE, SelfUsage};
 use starmap::Name;
 
 use crate::check::CHECK;
 use crate::explain::EXPLAIN;
+use crate::init::INIT;
 
-/// Check and explain the environment variables that an application declares
-/// in starmap.toml.
+/// Write, check and explain the environment variables that an application
+/// declares in starmap.toml.
 #[derive(Debug, Parser)]
 #[command(name = "starmap", version)]
 pub struct Cli {
@@ -26,15 +27,25 @@ pub struct Cli {
     pub(crate) view: ViewFlags,
 }
 
-/// The `starmap` command's root verbs, leaves and their examples. `check`
-/// and `explain` sit directly under the root, because a person types
-/// `starmap check` as one step of their work.
+/// The `starmap` command's root verbs, leaves and their examples. `init`,
+/// `check` and `explain` sit directly under the root, because a person
+/// types `starmap check` as one step of their work.
 pub const GUIDE: Guide = Guide::new()
     .root_verbs(
-        &["check", "explain"],
+        &["init", "check", "explain"],
         "starmap acts on one file, starmap.toml, so its commands need no resource word.",
     )
     .leaves(&[
+        Leaf::new(&["init"])
+            .examples(&[
+                Example::new(
+                    &[],
+                    "Write starmap.toml with a guess for each variable that src reads",
+                ),
+                Example::new(&["--dry-run"], "Print the guesses and write nothing"),
+            ])
+            .effects(Effects::additive())
+            .document(INIT),
         Leaf::new(&["check"])
             .examples(&[
                 Example::new(&[], "Check starmap.toml in the current directory"),
@@ -66,7 +77,14 @@ pub const GUIDE: Guide = Guide::new()
 /// The commands of `starmap`.
 #[derive(Debug, Subcommand)]
 pub(crate) enum Verb {
-    /// Check that starmap.toml follows every rule of the file.
+    /// Write starmap.toml with a guess for each variable that src reads.
+    ///
+    /// The scan skips test code: files named tests.rs or ending in
+    /// _tests.rs, and the item after #[cfg(test)]. check scans src the same
+    /// way.
+    Init(InitArgs),
+    /// Check that starmap.toml follows every rule of the file, and that it
+    /// declares every variable that src reads.
     Check(CheckArgs),
     /// Describe each declared variable and the value it has in this shell.
     Explain(ExplainArgs),
@@ -110,6 +128,31 @@ pub(crate) struct SpecFile {
 impl SpecFile {
     /// The file that `--spec` names when it is not passed.
     pub(crate) const DEFAULT: &str = "starmap.toml";
+
+    /// Returns the call of the command at `path` on the spec `file`. The
+    /// call passes `--spec` only when `file` is not the default, so the
+    /// usual call stays short, such as `starmap check`.
+    pub(crate) fn call(path: &'static [&'static str], file: &str) -> Call {
+        let call = Call::new(path);
+        if file == Self::DEFAULT {
+            call
+        } else {
+            call.value("spec", file)
+        }
+    }
+}
+
+/// The arguments of `starmap init`.
+#[derive(Debug, Args)]
+pub(crate) struct InitArgs {
+    /// Write the spec to this file, and scan the src directory beside it
+    #[arg(long, value_name = "FILE", default_value = SpecFile::DEFAULT)]
+    pub(crate) spec: PathBuf,
+
+    /// Print the guesses and write nothing. `crumbkit::parse` reads the
+    /// flag, and `init` reads it from the output.
+    #[command(flatten)]
+    pub(crate) dry_run: DryRun,
 }
 
 /// The arguments of `starmap check`.

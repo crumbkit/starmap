@@ -1,0 +1,48 @@
+Write starmap.toml with a guess for each variable that src reads.
+
+The scan skips test code: files named tests.rs or ending in _tests.rs, and the item after #[cfg(test)]. check scans src the same way.
+
+Usage: starmap init [OPTIONS]
+
+Options:
+      --spec <FILE>
+          Write the spec to this file, and scan the src directory beside it
+          
+          [default: starmap.toml]
+
+      --dry-run
+          Report what the command would change, and change nothing
+
+      --json
+          Print the result as a JSON document. The default prints text.
+
+      --fields <FIELD>
+          Print only these comma-separated fields, in this order. The default prints the compact columns.
+
+      --long
+          Add the long columns after the compact ones. The default prints only the compact columns.
+
+      --full
+          With --json, print every field of every row. The default prints only the fields of the columns.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  starmap init
+          Write starmap.toml with a guess for each variable that src reads
+
+  starmap init --dry-run
+          Print the guesses and write nothing
+
+Columns:
+  name     The variable's name.
+  type     The guessed type, such as port?.
+  unset    The guessed unset rule: required? for a setting, and optional? otherwise.
+  source   The guessed source: setting?, secret? or inherited?.
+  read_at  The places in src that read the variable, such as src/serve.rs:22.
+
+Columns that --long adds:
+  show  The guessed show: withheld? for a secret, and shown? otherwise.
+
+Effects: additive, not idempotent, closed-world.

@@ -1,0 +1,2 @@
+Wrote starmap.toml with 9 variables that src reads. Each value marked ? is a guess.
+Next: starmap check refuses the file until each guess is confirmed and its ? deleted.

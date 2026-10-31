@@ -1,5 +1,5 @@
-//! The `starmap` command, which checks and explains an application's
-//! declared environment.
+//! The `starmap` command, which writes, checks and explains an
+//! application's declared environment.
 //!
 //! The library holds the whole command, and the `starmap` binary calls
 //! [`run`]. It exports the parser, the guide and the failure codes, so the
@@ -13,17 +13,23 @@ mod cli;
 pub mod codes;
 mod explain;
 mod files;
+mod init;
 mod mode;
+mod scan;
 mod spec;
 
 use std::ffi::OsString;
+use std::fmt;
 use std::process::ExitCode;
 
 use clap::CommandFactory as _;
+use crumbkit::Failure;
 
 #[doc(hidden)]
 pub use crate::cli::{Cli, GUIDE};
 use crate::cli::{CommandsCommand, SelfCommand, Verb};
+use crate::scan::SourceFailure;
+use crate::spec::SpecFailure;
 
 /// Parses `args`, runs the command and returns the process's exit code. The
 /// first argument is the program's name. `vars` is the process environment,
@@ -45,6 +51,10 @@ where
         Err(stop) => return stop.exit_code(),
     };
     match cli.verb {
+        Verb::Init(args) => {
+            let dry_run = output.is_dry_run();
+            crumbkit::finish(output, init::INIT, init::init(&args, dry_run))
+        }
         Verb::Check(args) => crumbkit::finish(output, check::CHECK, check::check(&args, vars)),
         Verb::Explain(args) => {
             crumbkit::finish(output, explain::EXPLAIN, explain::explain(&args, vars))
@@ -64,5 +74,47 @@ where
                 Ok::<_, crumbkit::Error>(crumbkit_usage::findings(&mut output, &GUIDE, &args));
             crumbkit::finish(output, crumbkit_usage::SELF_USAGE, result)
         }
+    }
+}
+
+/// A failure of `init` or `check`, which read or write the spec and scan
+/// the source.
+#[derive(Debug, Failure)]
+pub(crate) enum Failed {
+    /// The spec cannot be read, parsed or written.
+    #[failure(forward, diagnostic)]
+    Spec(SpecFailure),
+    /// A file under src cannot be read.
+    #[failure(forward)]
+    Source(SourceFailure),
+}
+
+impl fmt::Display for Failed {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Spec(failure) => failure.fmt(formatter),
+            Self::Source(failure) => failure.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for Failed {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Spec(failure) => failure.source(),
+            Self::Source(failure) => failure.source(),
+        }
+    }
+}
+
+impl From<SpecFailure> for Failed {
+    fn from(failure: SpecFailure) -> Self {
+        Self::Spec(failure)
+    }
+}
+
+impl From<SourceFailure> for Failed {
+    fn from(failure: SourceFailure) -> Self {
+        Self::Source(failure)
     }
 }
