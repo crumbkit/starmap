@@ -43,3 +43,14 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Environment::apply` sets each checked value on a `Command` and removes
   each declared variable that stays unset. `Environment::value` returns a
   shown value, and only `Environment::secret` returns a withheld one.
+- `starmap_resolve::resolve` resolves each variable of a spec in one mode
+  from a `Context` of the caller's values, the `Places` of path templates,
+  a `Provider` for each provided kind and a list of `Resolver`s. A caller
+  value wins for a setting or inherited variable, and for a provided one
+  when no provider of its kind is registered. A caller value for a secret
+  or generated variable is ignored and listed in `Resolution::ignored`.
+  Every provider and resolver is asked under one deadline, and the
+  `Resolution` lists a `ResolveFailure` for each variable it could not
+  resolve.
+- `starmap_resolve::expand` fills a path template's placeholders from
+  `Places`, and names the first placeholder that has no place.

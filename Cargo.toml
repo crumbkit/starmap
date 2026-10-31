@@ -17,6 +17,12 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/crumbkit/starmap"
 
 [workspace.dependencies]
+# starmap-resolve resolves the variables of a starmap `Spec` into the
+# `Bindings` that core checks. The entry gives a version beside the path,
+# because cargo-deny treats a path dependency without a version as a
+# wildcard.
+starmap = { version = "0.0.0", path = "crates/starmap" }
+
 # clap parses xtask's subcommands. The workspace entry enables only `std`.
 # Cargo turns on a feature for every crate in a build when any one crate asks
 # for it, so each crate enables only the features its own code needs.

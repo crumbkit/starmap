@@ -18,9 +18,9 @@ note = "The check counts the lines of each production `.rs` file that git lists,
 
 [[binding]]
 rule = "BASE-24"
-owners = ["crates/starmap/src/secret.rs", "crates/starmap/src/env.rs"]
+owners = ["crates/starmap/src/secret.rs", "crates/starmap/src/env.rs", "crates/starmap-resolve/src/resolve.rs"]
 checks = ["clippy disallowed_methods (clippy.toml), which refuses `expose_secret` and `starmap::Secret::expose` outside an `#[expect]` that gives its reason"]
-note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the only caller of `expose_secret`, which `Secret::expose` and the crate-private `Secret::duplicate` call. env.rs is the only caller of `Secret::expose`, where `Environment::apply` sets a withheld value in a child's environment."
+note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the only caller of `expose_secret`, which `Secret::expose` and the crate-private `Secret::duplicate` call. env.rs calls `Secret::expose` where `Environment::apply` sets a withheld value in a child's environment. starmap-resolve's resolve.rs calls it where it copies a caller's withheld value straight into a new `Secret`."
 
 [[decision]]
 id = "lanes"

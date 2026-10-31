@@ -503,6 +503,10 @@ version = "0.0.0"
 [[package]]
 name = "starmap-resolve"
 version = "0.0.0"
+dependencies = [
+ "proptest",
+ "starmap",
+]
 
 [[package]]
 name = "starmap-test"
