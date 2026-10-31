@@ -1,0 +1,1 @@
+{"schema":"starmap/check/v1","data":{"spec":"starmap.toml","digest":"sha256:2cd6b4b308567110b27ea3ab060be6ac0824d0e6dce22ee48f4fa9fbbb7aa3b0","variables":9,"mode":"local"},"failures":[]}

@@ -1,0 +1,1 @@
+{"schema":"starmap/explain/v1","data":[{"name":"SHELF_MIRROR_TOKEN","type":"string","unset":"optional; production required","source":"secret, 1Password","value":{"state":"set"}}],"failures":[]}

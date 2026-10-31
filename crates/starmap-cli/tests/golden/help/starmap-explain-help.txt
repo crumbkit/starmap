@@ -1,0 +1,52 @@
+Describe each declared variable and the value it has in this shell
+
+Usage: starmap explain [OPTIONS] [NAME]...
+
+Arguments:
+  [NAME]...
+          The variables to explain, separated by spaces; without names, every declared variable
+
+Options:
+      --spec <FILE>
+          Read the spec from this file
+          
+          [default: starmap.toml]
+
+      --json
+          Print the result as a JSON document. The default prints text.
+
+      --fields <FIELD>
+          Print only these comma-separated fields, in this order. The default prints the compact columns.
+
+      --long
+          Add the long columns after the compact ones. The default prints only the compact columns.
+
+      --full
+          With --json, print every field of every row. The default prints only the fields of the columns.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  starmap explain
+          Explain every variable and its value in this shell
+
+  starmap explain SHELF_MIRROR_TOKEN
+          Explain one variable
+
+  starmap explain SHELF_MIRROR_TOKEN --json
+          Print one variable as JSON, where a withheld value has no text
+
+Columns:
+  name    The variable's name.
+  type    The type of the variable's value, such as port or integer 1..=100.
+  unset   What happens when the variable has no value, in local mode and, when it differs, in production.
+  source  Where the variable's value comes from, with the kind of its bind.
+  value   The variable's value in this shell, or its default; a withheld value prints as eight dots and has no text in JSON.
+
+Columns that --long adds:
+  show     Whether the value may be shown or is withheld.
+  bind     The variable's bind, such as a 1Password reference, when it has one.
+  purpose  The sentence that says what the variable is for.
+
+Effects: read-only, closed-world.

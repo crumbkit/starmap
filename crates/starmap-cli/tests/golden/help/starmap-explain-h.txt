@@ -1,0 +1,19 @@
+Describe each declared variable and the value it has in this shell
+
+Usage: starmap explain [OPTIONS] [NAME]...
+
+Arguments:
+  [NAME]...  The variables to explain, separated by spaces; without names, every declared variable
+
+Options:
+      --spec <FILE>  Read the spec from this file [default: starmap.toml]
+  -h, --help         Print help (see more with '--help')
+
+Examples:
+  starmap explain
+  starmap explain SHELF_MIRROR_TOKEN
+  starmap explain SHELF_MIRROR_TOKEN --json
+
+Effects: read-only, closed-world.
+Global flags: --json, --fields <FIELD>, --long, --full. `starmap explain --help` describes them.
+Next: starmap explain --help explains each column.

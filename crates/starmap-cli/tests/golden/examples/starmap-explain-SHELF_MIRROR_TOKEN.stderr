@@ -1,0 +1,1 @@
+Mode: local, because SHELF_ENV is unset and its default is dev. Values come from this shell, and explain resolves no bind.
