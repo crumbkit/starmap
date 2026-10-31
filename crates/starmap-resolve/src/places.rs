@@ -146,10 +146,9 @@ impl FromStr for AppName {
 /// Returns `text` when it starts with a lower case ASCII letter and holds
 /// only lower case ASCII letters, digits and hyphens.
 ///
-/// starmap's provider kinds follow the same rule in a private function.
-/// The names here are this crate's own type, and sharing the rule would add
-/// a public function to starmap that only this crate calls, so the rule is
-/// written twice. If starmap ever makes it public, this calls that instead.
+/// The rule keeps `/` out of a name, because the Keychain account of a
+/// generated value is `<app>/<NAME>`, and a `/` in the app name would make
+/// two accounts read alike.
 fn label(text: &str) -> Result<String, LabelError> {
     let mut characters = text.chars();
     let fits = characters

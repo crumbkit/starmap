@@ -213,11 +213,22 @@ impl Provider for FakeProvider {
             qualifiers,
             deadline,
         });
-        // The deadline itself is the signal this provider waits for.
-        while self.waits_out_deadline && Instant::now() < deadline {
-            std::thread::yield_now();
+        if self.waits_out_deadline {
+            wait_out(deadline);
         }
         self.answer.clone().map(OsString::from)
+    }
+}
+
+/// Returns once `deadline` has passed.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "BASE-11: the deadline passing is the event this fake waits for, and the plan's \
+              Instant deadline has no clock owner to sleep in"
+)]
+fn wait_out(deadline: Instant) {
+    while Instant::now() < deadline {
+        std::thread::sleep(deadline.saturating_duration_since(Instant::now()));
     }
 }
 
@@ -680,19 +691,20 @@ fn a_resolution_without_failures_passes_check() {
 #[test]
 fn a_deadline_that_passes_partway_fails_each_later_variable_without_asking_its_provider_or_resolver()
  {
+    let spec = spec();
     let caller = Bindings::new();
     let ports = FakeProvider::waiting("multiverse/port", "9090");
     let urls = FakeProvider::answering("multiverse/url", "http://shelf.test/");
     let resolver = FakeResolver::answering();
-    let context = Context::new(
-        places(),
-        &caller,
-        Instant::now() + Duration::from_millis(50),
-    )
-    .provider(&ports)
-    .provider(&urls)
-    .resolver(&resolver);
-    let resolution = resolve(&spec(), Mode::Local, &context);
+    // The deadline starts once the fixture is ready (BASE-35). Its margin
+    // lets the port's provider be asked in time on a busy machine, and the
+    // provider then waits the rest of it out.
+    let deadline = Instant::now() + Duration::from_millis(200);
+    let context = Context::new(places(), &caller, deadline)
+        .provider(&ports)
+        .provider(&urls)
+        .resolver(&resolver);
+    let resolution = resolve(&spec, Mode::Local, &context);
 
     // The port's provider was asked in time and answered after the
     // deadline, so its value stands and every later step fails.

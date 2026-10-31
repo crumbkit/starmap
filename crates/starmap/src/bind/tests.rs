@@ -1,7 +1,8 @@
 //! Tests for the binds a variable's source takes.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::ffi::OsStr;
+use std::path::Path;
 
 use proptest::prelude::*;
 
@@ -115,9 +116,10 @@ fn a_path_template_fills_each_placeholder_from_its_place() {
         _ => None,
     });
 
+    // PathBuf equality ignores a doubled slash, so the text is compared.
     assert_eq!(
-        path,
-        Ok(PathBuf::from("/home/luke/.cache//workspace/books.db"))
+        path.as_ref().map(|path| path.as_os_str()),
+        Ok(OsStr::new("/home/luke/.cache//workspace/books.db"))
     );
 }
 

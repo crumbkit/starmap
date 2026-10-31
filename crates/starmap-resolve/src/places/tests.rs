@@ -1,6 +1,7 @@
 //! Tests for the places a path template names and for expanding a
 //! template.
 
+use std::ffi::OsStr;
 use std::path::PathBuf;
 
 use proptest::prelude::*;
@@ -30,7 +31,11 @@ fn expand_replaces_each_placeholder_with_its_place() {
     assert_eq!(path, Ok(PathBuf::from("/workspace/books.db")));
 
     let path = expand(&template("{home}/.cache/{checkout}"), &every_place());
-    assert_eq!(path, Ok(PathBuf::from("/home/luke/.cache//checkout")));
+    // PathBuf equality ignores a doubled slash, so the text is compared.
+    assert_eq!(
+        path.as_ref().map(|path| path.as_os_str()),
+        Ok(OsStr::new("/home/luke/.cache//checkout"))
+    );
 }
 
 #[test]
