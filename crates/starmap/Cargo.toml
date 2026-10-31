@@ -11,5 +11,14 @@ keywords = ["environment", "configuration", "env", "variables"]
 categories = ["config"]
 include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
+[dependencies]
+url.workspace = true
+
+[dev-dependencies]
+# `std` builds proptest on the standard library and gives the strategies that
+# generate strings from a regular expression. The default features add
+# forking, timeouts and bit-set strategies, which the tests do not use.
+proptest = { workspace = true, features = ["std"] }
+
 [lints]
 workspace = true
