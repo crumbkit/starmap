@@ -1,0 +1,8 @@
+# A spec whose page size range is wider than a u8 holds, for the struct
+# test of a field that cannot hold a checked value.
+[variables.SHELF_PAGE_SIZE]
+purpose = "How many books one page of a listing holds."
+type = { integer = { min = 1, max = 1000 } }
+unset = { default = "20" }
+show = "shown"
+source = "setting"

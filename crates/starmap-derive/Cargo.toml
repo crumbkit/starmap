@@ -14,5 +14,15 @@ include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 [lib]
 proc-macro = true
 
+[dependencies]
+# syn reads the struct or enum that derives `Env` or `Enumeration` and the
+# `#[starmap(...)]` attributes on it. The features are the ones a derive
+# macro needs to parse and print tokens.
+syn = { workspace = true, features = ["parsing", "printing", "derive", "proc-macro"] }
+# quote writes the generated impl as tokens.
+quote = { workspace = true, features = ["proc-macro"] }
+# proc-macro2 gives the token types that syn and quote use.
+proc-macro2 = { workspace = true, features = ["proc-macro"] }
+
 [lints]
 workspace = true

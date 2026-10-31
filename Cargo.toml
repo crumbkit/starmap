@@ -17,12 +17,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/crumbkit/starmap"
 
 [workspace.dependencies]
-# starmap-resolve resolves the variables of a starmap `Spec` into the
-# `Bindings` that core checks. The entry gives a version beside the path,
-# because cargo-deny treats a path dependency without a version as a
-# wildcard.
-starmap = { version = "0.0.0", path = "crates/starmap" }
-
 # clap parses xtask's subcommands. The workspace entry enables only `std`.
 # Cargo turns on a feature for every crate in a build when any one crate asks
 # for it, so each crate enables only the features its own code needs.
@@ -63,6 +57,26 @@ proptest = { version = "1.12.0", default-features = false }
 # crumbkit's golden files are compared. Only tests use it, and none of its
 # features is needed.
 snapbox = { version = "1.2.2", default-features = false }
+
+# starmap re-exports the derives of starmap-derive behind its `derive`
+# feature, starmap-test checks a derived struct against a spec, and
+# starmap-resolve resolves a spec's variables into the `Bindings` that
+# starmap checks. Each entry gives a version beside the path, because
+# cargo-deny treats a path dependency without a version as a wildcard, and
+# the release pull request moves both versions with the workspace version.
+starmap = { version = "0.0.0", path = "crates/starmap" }
+starmap-derive = { version = "0.0.0", path = "crates/starmap-derive" }
+
+# syn, quote and proc-macro2 build starmap-derive, the `Env` and
+# `Enumeration` derives behind starmap's `derive` feature. The entries enable
+# no feature, and starmap-derive enables the ones it uses.
+syn = { version = "3.0.6", default-features = false }
+quote = { version = "1.0.47", default-features = false }
+proc-macro2 = { version = "1.0.107", default-features = false }
+
+# trybuild compiles the derive's misuses and compares each compile error with
+# its golden `.stderr` file. Only tests use it.
+trybuild = "1.0.122"
 
 # The lint table is lints/base.toml and lints/library.toml of the Rust
 # standards (BASE-1, LIB-2, LIB-3). A build with CARGO_BUILD_WARNINGS=deny

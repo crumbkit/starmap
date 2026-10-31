@@ -1,0 +1,69 @@
+# A spec that disagrees with the struct `EveryKind` in each way the check
+# reports, and agrees with it about SHELF_HELPER, which an Allow entry
+# excuses.
+[mode]
+variable = "SHELF_ENV"
+production = ["prod"]
+
+[variables.SHELF_ENV]
+purpose = "Selects local, test or production behaviour."
+type = { enumeration = ["dev", "prod", "test"] }
+unset = { default = "dev" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PAGE_SIZE]
+purpose = "How many books one page of a listing holds."
+type = { integer = { min = -5, max = 1000 } }
+unset = { default = "20" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_TOKEN]
+purpose = "The token shelf sends to the catalogue."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "secret"
+
+[variables.SHELF_COLOUR]
+purpose = "The colour of the web view."
+type = "string"
+unset = { default = "blue" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_TOKEN]
+purpose = "The token shelf sends to the catalogue mirror."
+type = "string"
+unset = { local = "required", production = "optional" }
+show = "withheld"
+source = "secret"
+
+[variables.SHELF_DEBUG]
+purpose = "Logs each catalogue query."
+type = "boolean"
+unset = { default = "false" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_LEGACY]
+purpose = "A setting that no code reads any more."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_HELPER]
+purpose = "A setting that only a dependency reads."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "inherited"

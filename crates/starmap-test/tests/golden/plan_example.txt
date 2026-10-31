@@ -1,0 +1,4 @@
+starmap.toml and starmap_test::tests::Stale disagree in 3 places:
+  SHELF_MIRROR_TOKEN  starmap.toml withholds it, and the field type String is not starmap::Secret<String>
+  SHELF_PAGE_SIZE     starmap.toml allows up to 1000, and the field type u8 holds at most 255
+  SHELF_THEME         the struct reads it, and starmap.toml does not declare it

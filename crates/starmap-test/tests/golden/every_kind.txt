@@ -1,0 +1,14 @@
+starmap.toml and starmap_test::tests::EveryKind disagree in 13 places:
+  SHELF_COLOUR        starmap.toml shows it, and the field type starmap::Secret<String> holds a withheld value
+  SHELF_DEBUG         starmap.toml always gives it a value, and the field type Option<bool> holds an unset value
+  SHELF_ENV           starmap.toml allows test, and the field type Stage has no value test
+  SHELF_GONE          its Allow entry excuses nothing, because starmap.toml does not declare it
+  SHELF_LEGACY        starmap.toml declares it, and the struct neither reads it nor has an Allow entry for it
+  SHELF_MIRROR_TOKEN  starmap.toml lets it stay unset in production mode, and the field type starmap::Secret<String> is not inside an Option
+  SHELF_PAGE_SIZE     starmap.toml allows up to 1000, and the field type u8 holds at most 255
+  SHELF_PAGE_SIZE     starmap.toml allows down to -5, and the field type u8 holds at least 0
+  SHELF_PORT          starmap.toml types it as a port, and the field type PathBuf holds a path
+  SHELF_PORT          its Allow entry excuses nothing, because the struct reads it
+  SHELF_THEME         the struct reads it, and starmap.toml does not declare it
+  SHELF_TOKEN         starmap.toml withholds it, and the field type String is not starmap::Secret<String>
+  SHELF_TOKEN         starmap.toml lets it stay unset in local mode and production mode, and the field type String is not inside an Option
