@@ -138,9 +138,8 @@ impl std::error::Error for SpecFailure {
 
 /// Each problem of a file that does not parse is a label at its span, so the
 /// output shows every problem with the lines it is about. The label of a
-/// file's only problem is the word `here`, because the failure's message
-/// already states the problem. A problem holds no shorter name for the
-/// field it is about than its message. The label of each of several problems is its
+/// file's only problem is `here`, because the failure's message already
+/// states the problem. The label of each of several problems is its
 /// message. The `problems` field lists their codes.
 impl Diagnostic for SpecFailure {
     fn source_code(&self) -> Option<&dyn SourceCode> {

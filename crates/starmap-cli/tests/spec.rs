@@ -47,6 +47,19 @@ fn a_file_with_two_guesses_prints_one_failure_that_points_at_each() {
 }
 
 #[test]
+fn a_file_with_one_problem_states_it_on_the_error_line_and_labels_it_here() {
+    let state = tempfile::tempdir().unwrap();
+    starmap(
+        SPEC_FIXTURES,
+        state.path(),
+        &["check", "--spec", "bad_default.toml"],
+    )
+    .code(1)
+    .stdout_eq("")
+    .stderr_eq(file!["golden/check-bad-default.stderr"]);
+}
+
+#[test]
 fn a_file_with_two_guesses_lists_both_problems_in_json() {
     let state = tempfile::tempdir().unwrap();
     starmap(

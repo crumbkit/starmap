@@ -1,0 +1,8 @@
+error: bad_default.toml: `variables.SHELF_PAGE_SIZE.unset.default` is "0", and the value is not a whole number from 1 to 100
+  at:    bad_default.toml:5:21: here
+     4 | type = { integer = { min = 1, max = 100 } }
+     5 | unset = { default = "0" }
+       |                     ^^^
+     6 | show = "shown"
+  help:  set a default the type accepts
+  code:  starmap::spec::bad_default

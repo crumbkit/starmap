@@ -3,7 +3,9 @@ use std::path::Path;
 
 use starmap::{Name, Spec};
 
-use super::{row, value_text};
+use crumbkit::{Call, Recovery};
+
+use super::{list_again, row, value_text};
 use crate::spec;
 
 /// Returns the build plan's illustrative spec.
@@ -160,4 +162,16 @@ fn a_value_reads_as_the_text_an_environment_holds() {
         panic!("SHELF_PAGE_SIZE has a default");
     };
     assert_eq!(value_text(value), "20");
+}
+
+#[test]
+fn the_recovery_of_an_unknown_name_keeps_a_spec_file_that_is_not_the_default() {
+    assert_eq!(
+        list_again("other.toml"),
+        Recovery::Run(Call::new(&["explain"]).value("spec", "other.toml"))
+    );
+    assert_eq!(
+        list_again("starmap.toml"),
+        Recovery::Run(Call::new(&["explain"]))
+    );
 }
