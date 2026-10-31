@@ -11,6 +11,16 @@ keywords = ["environment", "configuration", "secrets"]
 categories = ["config"]
 include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
+[dependencies]
+# Resolution reads a starmap `Spec` and returns the `Bindings` that
+# `starmap::check` checks.
+starmap.workspace = true
+
+[dev-dependencies]
+# `std` gives the strategies that generate strings from a regular
+# expression, which the expand property uses.
+proptest = { workspace = true, features = ["std"] }
+
 # No feature is on by default (LIB-6).
 [features]
 # one-password reads a secret through the 1Password CLI's `op read`.

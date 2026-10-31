@@ -59,10 +59,11 @@ proptest = { version = "1.12.0", default-features = false }
 snapbox = { version = "1.2.2", default-features = false }
 
 # starmap re-exports the derives of starmap-derive behind its `derive`
-# feature, and starmap-test checks a derived struct against a spec. Each
-# entry gives a version beside the path, because cargo-deny treats a path
-# dependency without a version as a wildcard, and the release pull request
-# moves both versions with the workspace version.
+# feature, starmap-test checks a derived struct against a spec, and
+# starmap-resolve resolves a spec's variables into the `Bindings` that
+# starmap checks. Each entry gives a version beside the path, because
+# cargo-deny treats a path dependency without a version as a wildcard, and
+# the release pull request moves both versions with the workspace version.
 starmap = { version = "0.0.0", path = "crates/starmap" }
 starmap-derive = { version = "0.0.0", path = "crates/starmap-derive" }
 
