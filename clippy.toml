@@ -25,6 +25,10 @@ disallowed-methods = [
     { path = "std::env::remove_var", reason = "build a snapshot in the test instead" },
     { path = "std::env::current_dir", reason = "read the directory from the snapshot" },
     { path = "std::env::set_current_dir", reason = "pass the directory to the operation instead" },
+    # BASE-24: a secret's text is read only in the files that the BASE-24
+    # binding of rust-standards.toml lists.
+    { path = "secrecy::ExposeSecret::expose_secret", reason = "read a secret through starmap::Secret::expose", allow-invalid = true },
+    { path = "starmap::Secret::expose", reason = "expose a secret only in a file that the BASE-24 binding lists", allow-invalid = true },
     # BASE-7
     { path = "std::process::exit", reason = "return the exit code from main so destructors run" },
     # BASE-11

@@ -536,6 +536,15 @@ fn a_secret_mode_variable_is_refused() {
 }
 
 #[test]
+fn a_withheld_mode_variable_is_refused() {
+    let text = "[mode]\nvariable = \"APP_STAGE\"\nproduction = [\"prod\"]\n\n\
+         [variables.APP_STAGE]\npurpose = \"The stage.\"\ntype = \"string\"\n\
+         unset = \"optional\"\nshow = \"withheld\"\nsource = \"setting\"\n";
+
+    assert_eq!(kinds(text), [SpecProblemKind::ModeSource]);
+}
+
+#[test]
 fn an_empty_production_list_is_refused() {
     let text = "[mode]\nvariable = \"APP_STAGE\"\nproduction = []\n\n\
          [variables.APP_STAGE]\npurpose = \"The stage.\"\ntype = \"string\"\n\
@@ -843,7 +852,7 @@ fn variable() -> impl Strategy<Value = (&'static str, String)> {
 }
 
 /// The text of a valid spec, with a mode table when one of its variables
-/// may decide the mode.
+/// may decide the mode: a shown setting or inherited variable.
 fn valid_spec() -> impl Strategy<Value = String> {
     (
         prop::collection::btree_map("[A-Z_][A-Z0-9_]{0,12}", variable(), 0..6),
@@ -852,9 +861,9 @@ fn valid_spec() -> impl Strategy<Value = String> {
     )
         .prop_map(|(variables, with_mode, production)| {
             let mut text = String::new();
-            let decider = variables
-                .iter()
-                .find(|(_, (source, _))| matches!(*source, "setting" | "inherited"));
+            let decider = variables.iter().find(|(_, (source, body))| {
+                matches!(*source, "setting" | "inherited") && body.contains("show = \"shown\"")
+            });
             if let (true, Some((name, _))) = (with_mode, decider) {
                 let production: Vec<String> = production.iter().map(|value| quote(value)).collect();
                 text.push_str(&format!(

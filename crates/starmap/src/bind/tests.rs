@@ -5,9 +5,10 @@ use std::collections::BTreeMap;
 use proptest::prelude::*;
 
 use super::{
-    OnePasswordRef, PathTemplate, PathTemplateError, Placeholder, ProvidedRef, ProviderKind,
-    SecretBytes,
+    Bindings, Bound, OnePasswordRef, PathTemplate, PathTemplateError, Placeholder, ProvidedRef,
+    ProviderKind, SecretBytes,
 };
+use crate::Name;
 
 /// The three placeholders, each with the text that names it in a template.
 const PLACEHOLDERS: [(Placeholder, &str); 3] = [
@@ -243,4 +244,23 @@ proptest! {
             (16..=1024).contains(&bytes).then_some(bytes)
         );
     }
+}
+
+// Bindings
+
+/// Returns the name `text`.
+fn name(text: &str) -> Name {
+    text.parse().unwrap()
+}
+
+#[test]
+fn binding_a_name_again_replaces_its_value() {
+    let mut bindings = Bindings::new();
+    bindings.bind(name("SHELF_PORT"), Bound::Plain("8080".into()));
+    bindings.bind(name("SHELF_PORT"), Bound::NotUnicode);
+
+    assert!(matches!(
+        bindings.get(&name("SHELF_PORT")),
+        Some(Bound::NotUnicode)
+    ));
 }

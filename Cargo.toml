@@ -37,6 +37,17 @@ toml_edit = "0.25.17"
 # and an object identifier (`oid`), which starmap does not use.
 sha2 = { version = "0.11.1", default-features = false }
 
+# secrecy holds each withheld value in a box that zeroes its memory on drop
+# and whose Debug never prints the value (BASE-24). It has no default
+# features, and its optional `serde` feature stays off, so a secret cannot
+# be serialized.
+secrecy = "0.10.3"
+
+# zeroize names the trait that bounds `starmap::Secret<T>`: a type whose
+# memory a drop can zero. Its default `alloc` feature implements it for
+# `String`, the type a withheld value is read as.
+zeroize = "1.9.1"
+
 # proptest checks the checking constructors and the forms against generated
 # inputs, and the lanes decision sets its case counts. Only tests use it.
 proptest = { version = "1.12.0", default-features = false }

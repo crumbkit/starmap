@@ -122,22 +122,17 @@ fn source(source: &Source) -> (SourceKind, Option<Toml>) {
 }
 
 /// Writes a default's value as the text that its form reads back as an
-/// equal value.
+/// equal value. A default is read from TOML text, which is Unicode, so the
+/// lossy conversions never change it.
 fn text(value: &Value) -> String {
     match value {
         // A path is written from its components, as PathBuf compares paths,
-        // so `a//b` and `a/b/` both write `a/b`. A default is read from TOML
-        // text, which is Unicode, so the lossy conversion never changes it.
+        // so `a//b` and `a/b/` both write `a/b`.
         Value::Path(path) => path
             .components()
             .collect::<PathBuf>()
             .to_string_lossy()
             .into_owned(),
-        Value::String(string) => string.to_string_lossy().into_owned(),
-        Value::Port(port) => port.to_string(),
-        Value::Url(url) => url.as_str().to_owned(),
-        Value::Boolean(boolean) => boolean.to_string(),
-        Value::Integer(number) => number.to_string(),
-        Value::Choice(choice) => choice.as_str().to_owned(),
+        _ => value.to_os_string().to_string_lossy().into_owned(),
     }
 }

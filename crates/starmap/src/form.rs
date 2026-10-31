@@ -119,6 +119,22 @@ pub enum Value {
     String(OsString),
 }
 
+impl Value {
+    /// Returns the value as the text an environment holds, which its form
+    /// reads back as an equal value.
+    pub(crate) fn to_os_string(&self) -> OsString {
+        match self {
+            Self::Path(path) => path.clone().into_os_string(),
+            Self::String(string) => string.clone(),
+            Self::Port(port) => port.to_string().into(),
+            Self::Url(url) => url.as_str().into(),
+            Self::Boolean(boolean) => boolean.to_string().into(),
+            Self::Integer(number) => number.to_string().into(),
+            Self::Choice(choice) => choice.as_str().into(),
+        }
+    }
+}
+
 /// The reason a value does not fit its [`Form`]. The text names the form's
 /// rule and never repeats the value, which may be a secret.
 #[derive(Debug, Clone, PartialEq, Eq)]
