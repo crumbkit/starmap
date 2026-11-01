@@ -12,5 +12,5 @@ Examples:
   starmap init --dry-run
 
 Effects: additive, not idempotent, closed-world.
-Global flags: --json, --fields <FIELD>, --long, --full. `starmap init --help` describes them.
+Global flags: --json, --fields <FIELD>, --long, --full, --no-input. `starmap init --help` describes them.
 Next: starmap init --help explains each column.

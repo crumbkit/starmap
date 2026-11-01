@@ -5,5 +5,8 @@ starmap check          Check that starmap.toml follows every rule of the file, a
 starmap explain        Describe each declared variable and the value it has in this shell
 starmap commands       Explore starmap's commands
 starmap commands list  List a branch of starmap's commands with their arguments, examples and columns
+starmap schemas        Explore the JSON documents that starmap prints
+starmap schemas list   List the JSON documents that starmap prints, with a description of each
+starmap schemas show   Print the JSON Schema of each document
 starmap self           Review starmap's own use
 starmap self usage     Report the patterns in starmap's usage log where callers waste effort

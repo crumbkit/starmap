@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 use crumbkit::commands::{COMMANDS_LIST, CommandsList};
 use crumbkit::help::{Effects, Example, Guide, Leaf};
-use crumbkit::{Call, DryRun, ViewFlags};
+use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
+use crumbkit::{Call, DryRun, NoInput, ViewFlags};
 use crumbkit_usage::{SELF_USAGE, SelfUsage};
 use starmap::Name;
 
@@ -25,6 +26,10 @@ pub struct Cli {
     /// The flags that choose how the result prints.
     #[command(flatten)]
     pub(crate) view: ViewFlags,
+
+    /// The flag that tells starmap that nobody can answer a question.
+    #[command(flatten)]
+    pub(crate) no_input: NoInput,
 }
 
 /// The `starmap` command's root verbs, leaves and their examples. `init`,
@@ -68,6 +73,17 @@ pub const GUIDE: Guide = Guide::new()
             .examples(&[Example::new(&[], "List every command")])
             .effects(Effects::read_only())
             .document(COMMANDS_LIST),
+        Leaf::new(&["schemas", "list"])
+            .examples(&[Example::new(&[], "List every document that starmap prints")])
+            .effects(Effects::read_only())
+            .document(SCHEMAS_LIST),
+        Leaf::new(&["schemas", "show"])
+            .examples(&[Example::new(
+                &["starmap/init/v1"],
+                "Print the JSON Schema of the document that init prints",
+            )])
+            .effects(Effects::read_only())
+            .document(SCHEMAS_SHOW),
         Leaf::new(&["self", "usage"])
             .examples(&[Example::new(&[], "Report the findings of the last 7 days")])
             .effects(Effects::read_only())
@@ -94,6 +110,12 @@ pub(crate) enum Verb {
         #[command(subcommand)]
         command: CommandsCommand,
     },
+    /// Explore the JSON documents that starmap prints.
+    Schemas {
+        /// What to do with the documents.
+        #[command(subcommand)]
+        command: SchemasCommand,
+    },
     /// Review starmap's own use.
     #[command(name = "self")]
     SelfCommand {
@@ -108,6 +130,15 @@ pub(crate) enum Verb {
 pub(crate) enum CommandsCommand {
     /// List a branch of starmap's commands with their arguments, examples and columns.
     List(CommandsList),
+}
+
+/// The commands for the JSON documents that starmap prints.
+#[derive(Debug, Subcommand)]
+pub(crate) enum SchemasCommand {
+    /// List the JSON documents that starmap prints, with a description of each.
+    List(SchemasList),
+    /// Print the JSON Schema of each document.
+    Show(SchemasShow),
 }
 
 /// The commands that review starmap itself.
