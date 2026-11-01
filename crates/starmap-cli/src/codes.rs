@@ -54,6 +54,12 @@ pub const VARIABLE_UNKNOWN: Code = Code::new("starmap", "variable", "unknown");
 pub const VARIABLE_UNDECLARED: Code = Code::new("starmap", "variable", "undeclared");
 /// A file or directory under `src` cannot be read as Rust source.
 pub const SOURCE_UNREADABLE: Code = Code::new("starmap", "source", "unreadable");
+/// `diff` runs in a directory that is not in a git repository.
+pub const REVISION_NO_REPOSITORY: Code = Code::new("starmap", "revision", "no_repository");
+/// `diff` names a revision that names no commit.
+pub const REVISION_NOT_FOUND: Code = Code::new("starmap", "revision", "not_found");
+/// git cannot start, or cannot read the revision that `diff` names.
+pub const REVISION_UNREADABLE: Code = Code::new("starmap", "revision", "unreadable");
 
 /// Every code above.
 pub const ALL: &[&Code] = &[
@@ -81,4 +87,7 @@ pub const ALL: &[&Code] = &[
     &VARIABLE_UNKNOWN,
     &VARIABLE_UNDECLARED,
     &SOURCE_UNREADABLE,
+    &REVISION_NO_REPOSITORY,
+    &REVISION_NOT_FOUND,
+    &REVISION_UNREADABLE,
 ];

@@ -11,6 +11,7 @@ use crumbkit_usage::{SELF_USAGE, SelfUsage};
 use starmap::Name;
 
 use crate::check::CHECK;
+use crate::diff::DIFF;
 use crate::explain::EXPLAIN;
 use crate::init::INIT;
 
@@ -33,11 +34,11 @@ pub struct Cli {
 }
 
 /// The `starmap` command's root verbs, leaves and their examples. `init`,
-/// `check` and `explain` sit directly under the root, because a person
-/// types `starmap check` as one step of their work.
+/// `check`, `explain` and `diff` sit directly under the root, because a
+/// person types `starmap check` as one step of their work.
 pub const GUIDE: Guide = Guide::new()
     .root_verbs(
-        &["init", "check", "explain"],
+        &["init", "check", "explain", "diff"],
         "starmap acts on one file, starmap.toml, so its commands need no resource word.",
     )
     .leaves(&[
@@ -69,6 +70,13 @@ pub const GUIDE: Guide = Guide::new()
             ])
             .effects(Effects::read_only())
             .document(EXPLAIN),
+        Leaf::new(&["diff"])
+            .examples(&[Example::new(
+                &["main"],
+                "List each variable that changed since the spec on main",
+            )])
+            .effects(Effects::read_only())
+            .document(DIFF),
         Leaf::new(&["commands", "list"])
             .examples(&[Example::new(&[], "List every command")])
             .effects(Effects::read_only())
@@ -96,14 +104,20 @@ pub(crate) enum Verb {
     /// Write starmap.toml with a guess for each variable that src reads.
     ///
     /// The scan skips test code: files named tests.rs or ending in
-    /// _tests.rs, and the item after #[cfg(test)]. check scans src the same
-    /// way.
+    /// _tests.rs, a file that begins with #![cfg(test)], and the item after
+    /// #[cfg(test)]. check scans src the same way.
     Init(InitArgs),
     /// Check that starmap.toml follows every rule of the file, and that it
     /// declares every variable that src reads.
     Check(CheckArgs),
     /// Describe each declared variable and the value it has in this shell.
     Explain(ExplainArgs),
+    /// List each variable that was added, changed or removed since a git
+    /// revision's spec.
+    ///
+    /// diff compares the spec with the file at the same path in the
+    /// revision. A revision without the file counts as an empty spec.
+    Diff(DiffArgs),
     /// Explore starmap's commands.
     Commands {
         /// What to do with the commands.
@@ -200,6 +214,18 @@ pub(crate) struct ExplainArgs {
     /// The variables to explain, separated by spaces; without names, every declared variable
     #[arg(value_name = "NAME")]
     pub(crate) names: Vec<Name>,
+
+    /// The file that holds the spec.
+    #[command(flatten)]
+    pub(crate) file: SpecFile,
+}
+
+/// The arguments of `starmap diff`.
+#[derive(Debug, Args)]
+pub(crate) struct DiffArgs {
+    /// The git revision to compare with, such as main or HEAD~3
+    #[arg(value_name = "REVISION")]
+    pub(crate) revision: String,
 
     /// The file that holds the spec.
     #[command(flatten)]

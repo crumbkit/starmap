@@ -1,0 +1,5 @@
+CHANGE  NAME                NOW
+added   SHELF_DEBUG         boolean, shown, setting
+added   SHELF_MIRROR_TOKEN  string, withheld, secret
+added   SHELF_PAGE_SIZE     integer, shown, setting
+added   SHELF_PORT          port, shown, setting

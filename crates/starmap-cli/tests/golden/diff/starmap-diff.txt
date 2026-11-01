@@ -1,0 +1,5 @@
+CHANGE   NAME                FIELD  WAS                          NOW
+added    SHELF_MIRROR_TOKEN  -      -                            string, withheld, secret
+changed  SHELF_PAGE_SIZE     type   integer 1..=50               integer 1..=100
+changed  SHELF_PORT          unset  default 8080                 required
+removed  SHELF_VERBOSE       -      enumeration, shown, setting  -

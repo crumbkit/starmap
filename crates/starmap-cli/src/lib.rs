@@ -11,8 +11,10 @@ mod check;
 mod cli;
 #[doc(hidden)]
 pub mod codes;
+mod diff;
 mod explain;
 mod files;
+mod git;
 mod init;
 mod mode;
 mod scan;
@@ -28,6 +30,7 @@ use crumbkit::Failure;
 #[doc(hidden)]
 pub use crate::cli::{Cli, GUIDE};
 use crate::cli::{CommandsCommand, SchemasCommand, SelfCommand, Verb};
+use crate::diff::RevisionFailure;
 use crate::scan::SourceFailure;
 use crate::spec::SpecFailure;
 
@@ -59,6 +62,7 @@ where
         Verb::Explain(args) => {
             crumbkit::finish(output, explain::EXPLAIN, explain::explain(&args, vars))
         }
+        Verb::Diff(args) => crumbkit::finish(output, diff::DIFF, diff::diff(&args)),
         // `commands list`, `schemas` and `self usage` read the command tree through
         // `&mut output`, so each runs before `finish` takes `output`.
         Verb::Commands {
@@ -89,8 +93,8 @@ where
     }
 }
 
-/// A failure of `init` or `check`, which read or write the spec and scan
-/// the source.
+/// A failure of `init`, `check` or `diff`, which read or write the spec,
+/// scan the source or read a git revision.
 #[derive(Debug, Failure)]
 pub(crate) enum Failed {
     /// The spec cannot be read, parsed or written.
@@ -99,6 +103,9 @@ pub(crate) enum Failed {
     /// A file under src cannot be read.
     #[failure(forward)]
     Source(SourceFailure),
+    /// git cannot read the revision that `diff` names.
+    #[failure(forward)]
+    Revision(RevisionFailure),
 }
 
 impl fmt::Display for Failed {
@@ -106,6 +113,7 @@ impl fmt::Display for Failed {
         match self {
             Self::Spec(failure) => failure.fmt(formatter),
             Self::Source(failure) => failure.fmt(formatter),
+            Self::Revision(failure) => failure.fmt(formatter),
         }
     }
 }
@@ -115,6 +123,7 @@ impl std::error::Error for Failed {
         match self {
             Self::Spec(failure) => failure.source(),
             Self::Source(failure) => failure.source(),
+            Self::Revision(failure) => failure.source(),
         }
     }
 }
@@ -128,5 +137,11 @@ impl From<SpecFailure> for Failed {
 impl From<SourceFailure> for Failed {
     fn from(failure: SourceFailure) -> Self {
         Self::Source(failure)
+    }
+}
+
+impl From<RevisionFailure> for Failed {
+    fn from(failure: RevisionFailure) -> Self {
+        Self::Revision(failure)
     }
 }

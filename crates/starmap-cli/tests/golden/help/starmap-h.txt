@@ -6,6 +6,7 @@ Verbs
   init      Write starmap.toml with a guess for each variable that src reads
   check     Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
   explain   Describe each declared variable and the value it has in this shell
+  diff      List each variable that was added, changed or removed since a git revision's spec
 
 Commands
   commands  Explore starmap's commands
