@@ -27,7 +27,7 @@ use crumbkit::Failure;
 
 #[doc(hidden)]
 pub use crate::cli::{Cli, GUIDE};
-use crate::cli::{CommandsCommand, SelfCommand, Verb};
+use crate::cli::{CommandsCommand, SchemasCommand, SelfCommand, Verb};
 use crate::scan::SourceFailure;
 use crate::spec::SpecFailure;
 
@@ -59,13 +59,25 @@ where
         Verb::Explain(args) => {
             crumbkit::finish(output, explain::EXPLAIN, explain::explain(&args, vars))
         }
-        // `commands list` and `self usage` read the command tree through
+        // `commands list`, `schemas` and `self usage` read the command tree through
         // `&mut output`, so each runs before `finish` takes `output`.
         Verb::Commands {
             command: CommandsCommand::List(args),
         } => {
             let result = crumbkit::commands::list(&mut output, &GUIDE, &args);
             crumbkit::finish(output, crumbkit::commands::COMMANDS_LIST, result)
+        }
+        Verb::Schemas {
+            command: SchemasCommand::List(args),
+        } => {
+            let result = crumbkit::schemas::list(&mut output, &GUIDE, &args);
+            crumbkit::finish(output, crumbkit::schemas::SCHEMAS_LIST, result)
+        }
+        Verb::Schemas {
+            command: SchemasCommand::Show(args),
+        } => {
+            let result = crumbkit::schemas::show(&mut output, &GUIDE, &args);
+            crumbkit::finish(output, crumbkit::schemas::SCHEMAS_SHOW, result)
         }
         Verb::SelfCommand {
             command: SelfCommand::Usage(args),
