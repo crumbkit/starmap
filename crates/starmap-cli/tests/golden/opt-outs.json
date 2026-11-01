@@ -30,12 +30,22 @@
         "The example's output is not counted, so the command's output weight is too low when this example prints the most."
       ],
       "budget": null
+    },
+    {
+      "rule": "examples/run",
+      "applies_to": "starmap diff main",
+      "reason": "Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
     }
   ],
   "customisations": [
     {
       "declaration": "root-verbs",
-      "applies_to": "starmap init, starmap check, starmap explain",
+      "applies_to": "starmap init, starmap check, starmap explain, starmap diff",
       "declares": "Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.",
       "reason": "starmap acts on one file, starmap.toml, so its commands need no resource word."
     }

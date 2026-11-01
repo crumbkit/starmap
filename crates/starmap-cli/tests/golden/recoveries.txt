@@ -95,5 +95,8 @@ starmap check --spec unreadable/starmap.toml
 
 codes that no start provokes:
   starmap::spec::too_large: Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.
+  starmap::revision::no_repository: Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.
+  starmap::revision::not_found: Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.
+  starmap::revision::unreadable: Only a git that cannot start or cannot read the repository provokes it, which no fixture can set up portably.
 
 codes whose recoveries the check did not follow, because no declared code spells them: 0

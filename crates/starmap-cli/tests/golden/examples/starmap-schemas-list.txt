@@ -3,6 +3,7 @@ starmap/failure/v1        output  document  The document that a command prints o
 starmap/init/v1           output  document  Each variable that src reads, with the guesses that init writes to the spec.
 starmap/check/v1          output  document  A spec that follows every rule of the file: its path, digest, number of variables, the reads in src and the mode.
 starmap/explain/v1        output  document  Each variable that a spec declares, with its rules and the value it has in this shell.
+starmap/diff/v1           output  document  Each variable that was added, changed or removed between a git revision's spec and the spec in the working tree.
 starmap/commands-list/v1  output  document  One branch of the tool's commands with their arguments, examples and columns.
 starmap/schemas-list/v1   output  document  The JSON documents that the tool prints, with a description of each.
 starmap/schemas-show/v1   output  document  The JSON Schema of each document id given.

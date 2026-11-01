@@ -1,0 +1,43 @@
+List each variable that was added, changed or removed since a git revision's spec.
+
+diff compares the spec with the file at the same path in the revision. A revision without the file counts as an empty spec.
+
+Usage: starmap diff [OPTIONS] <REVISION>
+
+Arguments:
+  <REVISION>
+          The git revision to compare with, such as main or HEAD~3
+
+Options:
+      --spec <FILE>
+          Read the spec from this file
+          
+          [default: starmap.toml]
+
+      --json
+          Print the result as a JSON document. The default prints text.
+
+      --fields <FIELD>
+          Print only these comma-separated fields, in this order. The default prints the compact columns.
+
+      --full
+          With --json, print every field of every row. The default prints only the fields of the columns.
+
+      --no-input
+          Fail instead of asking a question
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  starmap diff main
+          List each variable that changed since the spec on main
+
+Columns:
+  change  Whether the variable was added, changed or removed.
+  name    The variable's name.
+  field   The field that changed, such as type or unset; null for a variable that was added or removed.
+  was     The field's value at the revision, or the type, show and source of a removed variable; null for an added variable.
+  now     The field's value in the working tree, or the type, show and source of an added variable; null for a removed variable.
+
+Effects: read-only, closed-world.

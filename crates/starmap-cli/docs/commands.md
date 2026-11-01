@@ -11,6 +11,7 @@ Write, check and explain the environment variables that an application declares 
 - [`starmap init`](#starmap-init): Write starmap.toml with a guess for each variable that src reads
 - [`starmap check`](#starmap-check): Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
 - [`starmap explain`](#starmap-explain): Describe each declared variable and the value it has in this shell
+- [`starmap diff`](#starmap-diff): List each variable that was added, changed or removed since a git revision's spec
 - [`starmap commands`](#starmap-commands): Explore starmap's commands
 - [`starmap schemas`](#starmap-schemas): Explore the JSON documents that starmap prints
 - [`starmap self`](#starmap-self): Review starmap's own use
@@ -27,7 +28,7 @@ Write, check and explain the environment variables that an application declares 
 
 Write starmap.toml with a guess for each variable that src reads.
 
-The scan skips test code: files named tests.rs or ending in \_tests.rs, and the item after #\[cfg(test)\]. check scans src the same way.
+The scan skips test code: files named tests.rs or ending in \_tests.rs, a file that begins with #!\[cfg(test)\], and the item after #\[cfg(test)\]. check scans src the same way.
 
 ### Arguments
 
@@ -128,6 +129,35 @@ starmap explain SHELF_MIRROR_TOKEN --json
 - `show`: Whether the value may be shown or is withheld.
 - `bind`: The variable's bind, such as a 1Password reference, when it has one.
 - `purpose`: The sentence that says what the variable is for.
+
+Effects: read-only, closed-world.
+
+## `starmap diff`
+
+List each variable that was added, changed or removed since a git revision's spec.
+
+diff compares the spec with the file at the same path in the revision. A revision without the file counts as an empty spec.
+
+### Arguments
+
+- `<REVISION>`: The git revision to compare with, such as main or HEAD\~3. Required.
+- `--spec <FILE>`: Read the spec from this file. Default: `starmap.toml`.
+
+### Examples
+
+List each variable that changed since the spec on main.
+
+```sh
+starmap diff main
+```
+
+### Columns
+
+- `change`: Whether the variable was added, changed or removed.
+- `name`: The variable's name.
+- `field`: The field that changed, such as type or unset; null for a variable that was added or removed.
+- `was`: The field's value at the revision, or the type, show and source of a removed variable; null for an added variable.
+- `now`: The field's value in the working tree, or the type, show and source of an added variable; null for a removed variable.
 
 Effects: read-only, closed-world.
 

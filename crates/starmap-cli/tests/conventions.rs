@@ -37,6 +37,11 @@ const SOURCE_FIXTURES: &str = "tests/fixtures";
 /// directory.
 const INIT_RUNS_ELSEWHERE: &str = "The example directory holds starmap.toml, which init refuses to replace, so tests/init.rs runs init in a checkout without one and pins its output.";
 
+/// The reason that the example of `diff` does not run in the example
+/// directory, and that no command line in this file provokes a revision
+/// failure.
+const DIFF_NEEDS_GIT: &str = "Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.";
+
 /// The `starmap` command's opt-outs from crumbkit's conventions, which
 /// every check below reads.
 const ALLOW: &[Allow] = &[
@@ -47,6 +52,7 @@ const ALLOW: &[Allow] = &[
     ),
     Allow::example("init", &[], INIT_RUNS_ELSEWHERE),
     Allow::example("init", &["--dry-run"], INIT_RUNS_ELSEWHERE),
+    Allow::example("diff", &["main"], DIFF_NEEDS_GIT),
 ];
 
 /// The budgets of the `-h` pages, which are crumbkit's defaults.
@@ -264,10 +270,18 @@ const STARTS: &[Failing<'static>] = &[
 ];
 
 /// The declared codes that no command line in this file provokes.
-const UNPROVOKED: &[Unprovoked<'_>] = &[Unprovoked::new(
-    &codes::SPEC_TOO_LARGE,
-    "Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.",
-)];
+const UNPROVOKED: &[Unprovoked<'_>] = &[
+    Unprovoked::new(
+        &codes::SPEC_TOO_LARGE,
+        "Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.",
+    ),
+    Unprovoked::new(&codes::REVISION_NO_REPOSITORY, DIFF_NEEDS_GIT),
+    Unprovoked::new(&codes::REVISION_NOT_FOUND, DIFF_NEEDS_GIT),
+    Unprovoked::new(
+        &codes::REVISION_UNREADABLE,
+        "Only a git that cannot start or cannot read the repository provokes it, which no fixture can set up portably.",
+    ),
+];
 
 /// The settings of the recovery check.
 const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, &[codes::ALL])

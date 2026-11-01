@@ -250,7 +250,7 @@ pub(crate) fn value_text(value: &Value) -> String {
 }
 
 /// Returns the type of a form, such as `integer 1..=100`.
-fn form_text(form: &Form) -> String {
+pub(crate) fn form_text(form: &Form) -> String {
     match form {
         Form::Path { absolute: false } => "path".to_owned(),
         Form::Path { absolute: true } => "absolute path".to_owned(),
@@ -267,7 +267,7 @@ fn form_text(form: &Form) -> String {
 
 /// Returns a variable's unset rule, such as `default dev` or `optional;
 /// production required`.
-fn unset_text(variable: &Variable) -> String {
+pub(crate) fn unset_text(variable: &Variable) -> String {
     let word = |unset: &Unset| match unset {
         Unset::Required => "required".to_owned(),
         Unset::Optional => "optional".to_owned(),
@@ -287,7 +287,7 @@ fn unset_text(variable: &Variable) -> String {
 
 /// Returns a variable's source with the kind of its bind, such as `secret,
 /// 1Password` or `provided multiverse/port`.
-fn source_text(source: &Source) -> String {
+pub(crate) fn source_text(source: &Source) -> String {
     match source {
         Source::Setting { bind: None } => "setting".to_owned(),
         Source::Setting { bind: Some(_) } => "setting, path bind".to_owned(),
@@ -305,7 +305,7 @@ fn source_text(source: &Source) -> String {
 
 /// Returns a variable's bind, such as `op://Personal/shelf mirror/token`,
 /// or `None` for a variable without one.
-fn bind_text(source: &Source) -> Option<String> {
+pub(crate) fn bind_text(source: &Source) -> Option<String> {
     match source {
         Source::Setting {
             bind: Some(template),

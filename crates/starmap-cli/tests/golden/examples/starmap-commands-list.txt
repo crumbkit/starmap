@@ -3,6 +3,7 @@ starmap                Write, check and explain the environment variables that a
 starmap init           Write starmap.toml with a guess for each variable that src reads
 starmap check          Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
 starmap explain        Describe each declared variable and the value it has in this shell
+starmap diff           List each variable that was added, changed or removed since a git revision's spec
 starmap commands       Explore starmap's commands
 starmap commands list  List a branch of starmap's commands with their arguments, examples and columns
 starmap schemas        Explore the JSON documents that starmap prints
