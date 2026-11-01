@@ -15,5 +15,5 @@ Examples:
   starmap explain SHELF_MIRROR_TOKEN --json
 
 Effects: read-only, closed-world.
-Global flags: --json, --fields <FIELD>, --long, --full. `starmap explain --help` describes them.
+Global flags: --json, --fields <FIELD>, --long, --full, --no-input. `starmap explain --help` describes them.
 Next: starmap explain --help explains each column.

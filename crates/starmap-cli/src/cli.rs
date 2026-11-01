@@ -79,8 +79,8 @@ pub const GUIDE: Guide = Guide::new()
             .document(SCHEMAS_LIST),
         Leaf::new(&["schemas", "show"])
             .examples(&[Example::new(
-                &["starmap/check/v1"],
-                "Print the JSON Schema of the document that check prints",
+                &["starmap/init/v1"],
+                "Print the JSON Schema of the document that init prints",
             )])
             .effects(Effects::read_only())
             .document(SCHEMAS_SHOW),

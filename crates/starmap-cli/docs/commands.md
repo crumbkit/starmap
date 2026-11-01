@@ -213,10 +213,10 @@ Print the JSON Schema of each document
 
 ### Examples
 
-Print the JSON Schema of the document that check prints.
+Print the JSON Schema of the document that init prints.
 
 ```sh
-starmap schemas show starmap/check/v1
+starmap schemas show starmap/init/v1
 ```
 
 ### Columns
