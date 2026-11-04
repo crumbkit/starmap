@@ -225,16 +225,16 @@ pub enum Unset {
 }
 
 impl fmt::Display for Unset {
-    /// Writes `required`, `optional` or `default` and the default's value,
-    /// such as `default 0.0.0.0:8080`, as a program's `--help` describes a
-    /// variable. It writes a withheld variable's default too, so a caller
-    /// that describes a withheld variable checks [`Variable::show`] first.
+    /// Writes `required`, `optional` or `default`, as a program's `--help`
+    /// describes a variable. It never writes the default's value, which may
+    /// belong to a withheld variable, so a caller that describes a shown
+    /// variable writes the [`Value`] after it.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Required => formatter.write_str("required"),
-            Self::Optional => formatter.write_str("optional"),
-            Self::Default(value) => write!(formatter, "default {value}"),
-        }
+        formatter.write_str(match self {
+            Self::Required => "required",
+            Self::Optional => "optional",
+            Self::Default(_) => "default",
+        })
     }
 }
 

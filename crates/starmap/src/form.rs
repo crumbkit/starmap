@@ -35,8 +35,10 @@ pub enum Form {
     /// An absolute URL.
     Url,
     /// An IP socket address, such as `0.0.0.0:8080` or `[::1]:8080`, as
-    /// [`SocketAddr`]'s `FromStr` reads it. A host name such as
-    /// `localhost:8080` is refused.
+    /// [`SocketAddr`]'s `FromStr` reads it. It accepts port 0 and a numeric
+    /// IPv6 zone id, such as `[fe80::1%1]:80`. A host name such as
+    /// `localhost:8080` and a named zone id such as `[fe80::1%eth0]:80` are
+    /// refused.
     SocketAddress,
     /// One of the words 1, 0, true, false, yes, no, on and off, in any mix
     /// of ASCII case.

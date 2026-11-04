@@ -345,11 +345,28 @@ fn a_socket_address_form_reads_an_ipv4_or_an_ipv6_address_with_its_port() {
             443
         )))))
     );
+    for raw in ["0.0.0.0:0", "[fe80::1%1]:80"] {
+        assert!(
+            matches!(
+                parse(&Form::SocketAddress, raw),
+                Ok(Some(Value::SocketAddress(_)))
+            ),
+            "{raw:?}"
+        );
+    }
 }
 
 #[test]
-fn a_socket_address_form_refuses_a_host_name_an_address_without_a_port_and_empty_text() {
-    for raw in ["localhost:8080", "127.0.0.1", "127.0.0.1:", ":8080", ""] {
+fn a_socket_address_form_refuses_a_host_name_a_named_zone_an_address_without_a_port_and_empty_text()
+{
+    for raw in [
+        "localhost:8080",
+        "127.0.0.1",
+        "127.0.0.1:",
+        ":8080",
+        "",
+        "[fe80::1%eth0]:80",
+    ] {
         assert_eq!(
             parse(&Form::SocketAddress, raw),
             Err(FormError::NotSocketAddress),

@@ -369,8 +369,24 @@ fn an_unset_rule_describes_itself_for_help_text() {
     assert_eq!(Unset::Optional.to_string(), "optional");
     assert_eq!(
         Unset::Default(Value::SocketAddress(([0, 0, 0, 0], 8080).into())).to_string(),
-        "default 0.0.0.0:8080"
+        "default"
     );
+}
+
+#[test]
+fn a_withheld_variables_unset_text_holds_no_default_value() {
+    let spec = spec(&one("purpose = \"The key shelf signs with.\"\n\
+         type = \"string\"\nunset = { default = \"shelf-signing-key\" }\n\
+         show = \"withheld\"\nsource = \"setting\""));
+    let text = spec
+        .variable(&name("SHELF_X"))
+        .unwrap()
+        .unset()
+        .in_mode(Mode::Local)
+        .to_string();
+
+    assert_eq!(text, "default");
+    assert!(!text.contains("shelf-signing-key"));
 }
 
 #[test]
