@@ -2,14 +2,18 @@ Write, check, explain and run the environment variables that an application decl
 
 Usage: starmap [OPTIONS] <COMMAND>
 
-Verbs
+Write and check starmap.toml
   init      Write starmap.toml with a guess for each variable that src reads
   check     Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
-  explain   Describe each declared variable and the value it has in this shell
-  diff      List each variable that was added, changed or removed since a git revision's spec
+
+Run a program with its environment
   run       Run a program with the environment that starmap.toml declares
 
-Commands
+Read the variables
+  explain   Describe each declared variable and the value it has in this shell
+  diff      List each variable that was added, changed or removed since a git revision's spec
+
+Explore commands
   commands  Explore starmap's commands
   schemas   Explore the JSON documents that starmap prints
   self      Review starmap's own use
