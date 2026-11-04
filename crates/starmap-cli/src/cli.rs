@@ -27,7 +27,8 @@ pub struct Cli {
     #[command(flatten)]
     pub(crate) view: ViewFlags,
 
-    /// The flag that tells starmap that nobody can answer a question.
+    /// Ask no question. Starmap asks none yet, and `crumbkit::parse` reads
+    /// the flag.
     #[command(flatten)]
     pub(crate) no_input: NoInput,
 }
