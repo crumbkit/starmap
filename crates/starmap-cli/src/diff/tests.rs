@@ -63,3 +63,39 @@ fn a_changed_withheld_default_is_listed_and_prints_as_dots_and_never_as_the_secr
     assert!(!text.contains("a-default-secret"), "{text}");
     assert!(!text.contains("another-secret"), "{text}");
 }
+
+/// A port setting, which a later spec turns into a socket address.
+const LISTEN: &str = r#"
+[variables.SHELF_LISTEN]
+purpose = "Where the api process listens."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+"#;
+
+#[test]
+fn a_socket_address_is_named_when_it_is_added_and_when_a_type_changes_to_it() {
+    let socket = LISTEN.replace("\"port\"", "\"socket-address\"");
+
+    let added = changes(None, &spec(&socket));
+    assert_eq!(
+        added
+            .first()
+            .and_then(|change| change.now.clone())
+            .as_deref(),
+        Some("ip socket address, shown, setting")
+    );
+
+    let changed = changes(Some(&spec(LISTEN)), &spec(&socket));
+    assert_eq!(
+        changed,
+        vec![Change {
+            change: Kind::Changed,
+            name: "SHELF_LISTEN".to_owned(),
+            field: Some("type".to_owned()),
+            was: Some("port".to_owned()),
+            now: Some("ip socket address".to_owned()),
+        }]
+    );
+}
