@@ -217,6 +217,7 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
     let mut bindings = Bindings::new();
     let mut failures = Vec::new();
     let mut ignored = Vec::new();
+    let _finish = Finish(context);
     prepare(spec, context);
     for (name, variable) in spec.variables() {
         let caller = context.caller.get(name);
@@ -238,13 +239,23 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
             }),
         }
     }
-    for resolver in &context.resolvers {
-        resolver.finish();
-    }
     Resolution {
         bindings,
         failures,
         ignored,
+    }
+}
+
+/// Calls [`Resolver::finish`] on each resolver of a context when it is
+/// dropped, so a resolution that ends early, even by a panic in a
+/// resolver, drops what was readied.
+struct Finish<'c, 'a>(&'c Context<'a>);
+
+impl Drop for Finish<'_, '_> {
+    fn drop(&mut self) {
+        for resolver in &self.0.resolvers {
+            resolver.finish();
+        }
     }
 }
 

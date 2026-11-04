@@ -9,6 +9,7 @@ use std::mem;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::thread::{self, ThreadId};
 use std::time::Instant;
 
 use starmap::{Secret, SecretRef};
@@ -31,6 +32,10 @@ use batch::{Template, batchable};
 /// [`Resolver::finish`] drops it. `resolve` reads any other reference with
 /// its own `op read`.
 ///
+/// What `prepare` readies belongs to the thread that called it, so
+/// resolutions that share one `OnePassword` on several threads each keep
+/// their own values.
+///
 /// ```no_run
 /// use std::path::PathBuf;
 /// use std::time::{Duration, Instant};
@@ -48,7 +53,7 @@ use batch::{Template, batchable};
 /// ```
 pub struct OnePassword {
     program: PathBuf,
-    prepared: Mutex<Prepared>,
+    prepared: Mutex<HashMap<ThreadId, Prepared>>,
 }
 
 /// What [`OnePassword::prepare`] readied for the lookups of one
@@ -135,10 +140,10 @@ impl OnePassword {
         }
     }
 
-    /// Returns what [`Resolver::prepare`] readied. A thread that panicked
-    /// while it held the lock leaves entries that are still whole, so the
-    /// lock is taken anyway.
-    fn prepared(&self) -> MutexGuard<'_, Prepared> {
+    /// Returns what [`Resolver::prepare`] readied on each thread. A thread
+    /// that panicked while it held the lock leaves entries that are still
+    /// whole, so the lock is taken anyway.
+    fn prepared(&self) -> MutexGuard<'_, HashMap<ThreadId, Prepared>> {
         self.prepared.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -146,13 +151,14 @@ impl OnePassword {
     /// `deadline`, and returns an entry for each, in order, and the stop
     /// that the run brought, if any.
     ///
-    /// A batch that `op` reports as not found, or that fails for any other
-    /// reason that names no reference, such as a template it refuses,
-    /// leaves each reference to its own `op read`, which names the
-    /// reference that failed. A locked store, a dismissed prompt or the
-    /// deadline stops every read. Output over the limit, or output that
-    /// does not split into one value for each reference, fails each
-    /// reference of the batch.
+    /// A batch that `op` reports as not found, or that could not start
+    /// `op` at all, leaves each reference to its own `op read`, which names
+    /// the reference that failed. A locked store, a dismissed prompt or the
+    /// deadline stops every read. Any other failure is final for each
+    /// reference of the batch, and its message holds the last line `op`
+    /// printed on standard error, because a retry could show the person
+    /// another prompt. So are output over the limit and output that does
+    /// not split into one value for each reference.
     fn inject(&self, batch: &[&str], deadline: Instant) -> (Vec<Entry>, Option<Stop>) {
         let each = |entry: &dyn Fn() -> Entry| batch.iter().map(|_| entry()).collect();
         let Ok(template) = Template::new(batch) else {
@@ -196,10 +202,11 @@ impl OnePassword {
                     None,
                 ),
             },
-            Ok(OpRun::Failed { status, message }) => (
-                each(&|| Entry::Read),
-                Stop::of(&failure("op inject", status, &message)),
-            ),
+            Ok(OpRun::Failed { status, message }) => match failure("op inject", status, &message) {
+                SecretError::NotFound => (each(&|| Entry::Read), None),
+                SecretError::Program(error) => (each(&|| Entry::Failed(error.to_string())), None),
+                error => (each(&|| Entry::Read), Stop::of(&error)),
+            },
             Ok(OpRun::TooLong) => (
                 each(&|| {
                     Entry::Failed(format!(
@@ -256,13 +263,13 @@ impl Resolver for OnePassword {
                 prepared.stopped = stopped;
             }
         }
-        *self.prepared() = prepared;
+        self.prepared().insert(thread::current().id(), prepared);
     }
 
-    /// Drops every value that `prepare` readied and `resolve` did not take,
-    /// which zeroes it, and forgets a stop.
+    /// Drops every value that `prepare` readied on this thread and
+    /// `resolve` did not take, which zeroes it, and forgets a stop.
     fn finish(&self) {
-        *self.prepared() = Prepared::default();
+        self.prepared().remove(&thread::current().id());
     }
 
     /// Returns the value that [`Resolver::prepare`] readied for a
@@ -293,10 +300,13 @@ impl Resolver for OnePassword {
             return Err(SecretError::Deadline);
         }
         let reference = reference.as_str();
-        let (entry, stopped) = {
-            let mut prepared = self.prepared();
-            let entry = prepared.entries.get_mut(reference).and_then(Vec::pop);
-            (entry, prepared.stopped)
+        let thread = thread::current().id();
+        let (entry, stopped) = match self.prepared().get_mut(&thread) {
+            Some(prepared) => (
+                prepared.entries.get_mut(reference).and_then(Vec::pop),
+                prepared.stopped,
+            ),
+            None => (None, None),
         };
         match entry {
             Some(Entry::Value(secret)) => Ok(secret),
@@ -306,8 +316,10 @@ impl Resolver for OnePassword {
                     return Err(stop.error());
                 }
                 let read = self.read(reference, deadline);
-                if let Some(stop) = read.as_ref().err().and_then(Stop::of) {
-                    self.prepared().stopped = Some(stop);
+                if let Some(stop) = read.as_ref().err().and_then(Stop::of)
+                    && let Some(prepared) = self.prepared().get_mut(&thread)
+                {
+                    prepared.stopped = Some(stop);
                 }
                 read
             }

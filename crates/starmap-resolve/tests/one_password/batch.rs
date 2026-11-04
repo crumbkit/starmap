@@ -1,8 +1,10 @@
 //! Tests of reading a resolution's 1Password references with one
 //! `op inject`. Each fake `op` records each run's subcommand in `runs`, its
-//! arguments in `args`, its environment in `env` and an inject template in
-//! `template`. Its values hold a canary that the test generates at run
-//! time, which appears only in the fake's own files, `op` and `inject.awk`.
+//! arguments in `args` and its environment in `env`. An inject run keeps its
+//! template in `template.<pid>`, so runs at the same time do not mix, and
+//! appends it to `template`. The fake's values hold a canary that the test
+//! generates at run time, which appears only in the fake's own files, `op`
+//! and `inject.awk`.
 
 #![expect(
     clippy::unwrap_used,
@@ -68,7 +70,8 @@ printf '%s\n' "$@" >> '{{dir}}/args'
 env >> '{{dir}}/env'
 case "$1" in
 inject)
-  cat > '{{dir}}/template'
+  cat > "{{dir}}/template.$$"
+  cat "{{dir}}/template.$$" >> '{{dir}}/template'
   {inject}
   ;;
 read)
@@ -78,7 +81,7 @@ esac"#
         )
         .replace(
             "{inject}",
-            "LC_ALL=C awk -f '{dir}/inject.awk' '{dir}/template'",
+            "LC_ALL=C awk -f '{dir}/inject.awk' \"{dir}/template.$$\"",
         )
         .replace(
             "{read}",
@@ -133,6 +136,29 @@ esac"#
             base64(self.canary.as_bytes()),
         ] {
             assert!(!text.contains(&form), "the canary appears in {place}");
+        }
+    }
+}
+
+impl Fake {
+    /// Fails the test when the canary appears in the arguments or
+    /// environment of any run of the fake, in an inject template, in any
+    /// file beside the fake other than its own program and awk script, or
+    /// in the debug output of `resolution`.
+    fn assert_no_leak(&self, resolution: &Resolution) {
+        self.assert_absent("the arguments of op", &self.file("args"));
+        self.assert_absent("the environment of op", &self.file("env"));
+        self.assert_absent("the template", &self.file("template"));
+        self.assert_absent("the resolution's debug output", &format!("{resolution:?}"));
+        // The fake's own program and awk script hold the canary, as they
+        // print it. No other file does.
+        for path in files(self.program.parent().unwrap()) {
+            let name = path.file_name().unwrap().to_str().unwrap();
+            if name == "op" || name == "inject.awk" {
+                continue;
+            }
+            let bytes = fs::read(&path).unwrap();
+            self.assert_absent(name, &String::from_utf8_lossy(&bytes));
         }
     }
 }
@@ -217,8 +243,8 @@ fn files(directory: &Path) -> Vec<PathBuf> {
 /// Three references a template can hold, the last of which has a value of
 /// three lines.
 const THREE: [(&str, &str); 3] = [
-    ("SHELF_MIRROR_TOKEN", "op://Personal/shelf mirror/token"),
-    ("SHELF_API_KEY", "op://Dev vault/catalogue_api.v2/key"),
+    ("SHELF_MIRROR_TOKEN", "op://Personal/shelf-mirror/token"),
+    ("SHELF_API_KEY", "op://Dev_vault/catalogue_api.v2/key"),
     ("SHELF_CERTIFICATE", "op://Personal/shelf-tls/lines"),
 ];
 
@@ -246,8 +272,7 @@ fn no_value_reaches_the_arguments_environment_input_or_any_file_of_op() {
     let resolution = fake.resolve(&spec(&THREE), Instant::now() + PATIENT);
     assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
 
-    let args = fake.file("args");
-    assert_eq!(args, "inject\n");
+    assert_eq!(fake.file("args"), "inject\n");
     let template = fake.file("template");
     for (_, reference) in THREE {
         assert!(
@@ -255,48 +280,45 @@ fn no_value_reaches_the_arguments_environment_input_or_any_file_of_op() {
             "{template}"
         );
     }
-    fake.assert_absent("the arguments of op", &args);
-    fake.assert_absent("the environment of op", &fake.file("env"));
-    fake.assert_absent("the template", &template);
-    fake.assert_absent("the resolution's debug output", &format!("{resolution:?}"));
-    // The fake's own program and awk script hold the canary, as they print
-    // it. No other file does.
-    for path in files(fake.program.parent().unwrap()) {
-        let name = path.file_name().unwrap().to_str().unwrap();
-        if name == "op" || name == "inject.awk" {
-            continue;
-        }
-        let bytes = fs::read(&path).unwrap();
-        fake.assert_absent(name, &String::from_utf8_lossy(&bytes));
-    }
+    fake.assert_no_leak(&resolution);
 }
 
 #[test]
 fn a_reference_a_template_would_change_is_read_with_its_own_op_read() {
     let fake = Fake::answering("batch-unbatchable");
-    let reference = "op://Personal/${ITEM:-shelf}/token";
+    let expanded = "op://Personal/${ITEM:-shelf}/token";
+    let spaced = "op://Personal/shelf mirror/my field";
     let resolution = fake.resolve(
         &spec(&[
-            ("SHELF_MIRROR_TOKEN", "op://Personal/shelf mirror/token"),
+            ("SHELF_MIRROR_TOKEN", "op://Personal/shelf-mirror/token"),
             ("SHELF_API_KEY", "op://Personal/catalogue/key"),
-            ("SHELF_EXPANDED", reference),
+            ("SHELF_EXPANDED", expanded),
+            ("SHELF_SPACED", spaced),
         ]),
         Instant::now() + PATIENT,
     );
 
     assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
-    assert_eq!(fake.runs(), ["inject", "read"]);
-    assert!(!fake.file("template").contains('$'));
-    assert!(fake.file("args").contains(&format!("--\n{reference}\n")));
+    assert_eq!(fake.runs(), ["inject", "read", "read"]);
+    let template = fake.file("template");
+    assert!(
+        !template.contains('$') && !template.contains("my field"),
+        "{template}"
+    );
+    let args = fake.file("args");
+    assert!(args.contains(&format!("--\n{expanded}\n")), "{args}");
+    assert!(args.contains(&format!("--\n{spaced}\n")), "{args}");
     assert_eq!(bound(&resolution, "SHELF_EXPANDED"), fake.value("token"));
+    assert_eq!(bound(&resolution, "SHELF_SPACED"), fake.value("my field"));
     assert_eq!(bound(&resolution, "SHELF_API_KEY"), fake.value("key"));
+    fake.assert_no_leak(&resolution);
 }
 
 #[test]
 fn a_single_reference_is_read_with_op_read() {
     let fake = Fake::answering("batch-single");
     let resolution = fake.resolve(
-        &spec(&[("SHELF_MIRROR_TOKEN", "op://Personal/shelf mirror/token")]),
+        &spec(&[("SHELF_MIRROR_TOKEN", "op://Personal/shelf-mirror/token")]),
         Instant::now() + PATIENT,
     );
     assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
@@ -308,10 +330,10 @@ fn two_variables_of_one_reference_each_receive_its_value_from_the_one_op_inject(
     let fake = Fake::answering("batch-shared");
     let resolution = fake.resolve(
         &spec(&[
-            ("SHELF_MIRROR_TOKEN", "op://Personal/shelf mirror/token"),
+            ("SHELF_MIRROR_TOKEN", "op://Personal/shelf-mirror/token"),
             (
                 "SHELF_MIRROR_TOKEN_AGAIN",
-                "op://Personal/shelf mirror/token",
+                "op://Personal/shelf-mirror/token",
             ),
         ]),
         Instant::now() + PATIENT,
@@ -364,13 +386,76 @@ fn a_batch_that_op_reports_not_found_reads_each_reference_on_its_own() {
     assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
     assert_eq!(fake.runs(), ["inject", "read", "read", "read"]);
     assert_eq!(bound(&resolution, "SHELF_API_KEY"), fake.value("key"));
+    fake.assert_no_leak(&resolution);
+}
+
+#[test]
+fn an_unrecognised_batch_failure_is_final_and_names_the_last_line_op_printed() {
+    let fake = Fake::new(
+        "batch-unrecognised",
+        "echo 'first line' >&2; echo '[ERROR] the template has a syntax error' >&2; exit 1",
+        "{read}",
+    );
+    let resolution = fake.resolve(&spec(&THREE), Instant::now() + PATIENT);
+
+    assert_eq!(fake.runs(), ["inject"]);
+    assert_eq!(resolution.failures.len(), 3);
+    for failure in &resolution.failures {
+        let ResolveProblem::Secret(SecretError::Program(error)) = &failure.problem else {
+            panic!("{failure:?}");
+        };
+        let message = error.to_string();
+        assert!(message.starts_with("op inject exited with"), "{message}");
+        assert!(
+            message.ends_with("the template has a syntax error"),
+            "{message}"
+        );
+    }
+}
+
+#[test]
+fn the_same_batch_failure_worded_as_not_found_falls_back_to_op_read() {
+    // The twin of the unrecognised failure: only the words of op's last
+    // line differ, and they decide whether each reference is read again.
+    let fake = Fake::new(
+        "batch-recognised",
+        r#"echo 'first line' >&2; echo '[ERROR] "shelf-tls" isn'"'"'t an item in the "Personal" vault.' >&2; exit 1"#,
+        "{read}",
+    );
+    let resolution = fake.resolve(&spec(&THREE), Instant::now() + PATIENT);
+    assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
+    assert_eq!(fake.runs(), ["inject", "read", "read", "read"]);
+}
+
+#[test]
+fn a_batch_that_cannot_start_op_reads_each_reference_on_its_own() {
+    // Each op read fails to start the same missing program, and reports it
+    // against its own variable.
+    let program = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("no-such-op");
+    let one_password = OnePassword::new(program);
+    let caller = starmap::Bindings::new();
+    let context = Context::new(
+        Places::new(PathBuf::from("/checkout")),
+        &caller,
+        Instant::now() + PATIENT,
+    )
+    .resolver(&one_password);
+    let resolution = resolve(&spec(&THREE), Mode::Local, &context);
+
+    assert_eq!(resolution.failures.len(), 3);
+    for failure in &resolution.failures {
+        let ResolveProblem::Secret(SecretError::Program(error)) = &failure.problem else {
+            panic!("{failure:?}");
+        };
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound, "{error}");
+    }
 }
 
 #[test]
 fn a_dismissed_op_read_after_a_failed_batch_ends_the_remaining_reads() {
     let fake = Fake::new(
         "batch-then-dismissed",
-        "echo '[ERROR] the template has a syntax error' >&2; exit 1",
+        r#"echo '[ERROR] "shelf-tls" isn'"'"'t an item in the "Personal" vault.' >&2; exit 1"#,
         "echo '[ERROR] authorization prompt dismissed' >&2; exit 1",
     );
     let resolution = fake.resolve(&spec(&THREE), Instant::now() + PATIENT);
@@ -408,8 +493,8 @@ fn a_value_that_is_not_unicode_fails_only_its_own_variable() {
     let fake = Fake::answering("batch-bytes");
     let resolution = fake.resolve(
         &spec(&[
-            ("SHELF_MIRROR_TOKEN", "op://Personal/shelf mirror/token"),
-            ("SHELF_DOCUMENT", "op://Personal/shelf document/bytes"),
+            ("SHELF_MIRROR_TOKEN", "op://Personal/shelf-mirror/token"),
+            ("SHELF_DOCUMENT", "op://Personal/shelf-document/bytes"),
         ]),
         Instant::now() + PATIENT,
     );
@@ -459,4 +544,38 @@ fn finish_drops_what_prepare_readied_so_a_later_resolve_reads_again() {
 
     assert_eq!(fake.runs(), ["inject", "read"]);
     assert_eq!(text(&secret), fake.value("token"));
+}
+
+#[test]
+fn two_threads_that_share_one_resolver_each_keep_the_values_they_prepared() {
+    let fake = Fake::answering("batch-threads");
+    let one_password = OnePassword::new(fake.program.clone());
+    let barrier = std::sync::Barrier::new(2);
+    let batches = [
+        ["op://Personal/first/alpha", "op://Personal/first/beta"],
+        ["op://Personal/second/gamma", "op://Personal/second/delta"],
+    ];
+    std::thread::scope(|scope| {
+        for batch in &batches {
+            let (one_password, barrier, fake) = (&one_password, &barrier, &fake);
+            scope.spawn(move || {
+                let references: Vec<SecretRef> = batch
+                    .iter()
+                    .map(|reference| SecretRef::OnePassword(reference.parse().unwrap()))
+                    .collect();
+                let lookups: Vec<Lookup<'_>> = references.iter().map(Lookup::Reference).collect();
+                let deadline = Instant::now() + PATIENT;
+                one_password.prepare(&lookups, deadline);
+                // Both threads have prepared before either resolves.
+                barrier.wait();
+                for (lookup, reference) in lookups.iter().zip(batch) {
+                    let secret = one_password.resolve(*lookup, deadline).unwrap();
+                    let part = reference.rsplit('/').next().unwrap();
+                    assert_eq!(text(&secret), fake.value(part));
+                }
+                one_password.finish();
+            });
+        }
+    });
+    assert_eq!(fake.runs(), ["inject", "inject"]);
 }

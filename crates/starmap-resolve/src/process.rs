@@ -105,7 +105,11 @@ pub(crate) fn op_read(program: &Path, reference: &str, deadline: Instant) -> io:
 ///   Standard output is kept up to `references` times [`OUTPUT_LIMIT`]
 ///   plus the template's length, which fits a full value for every
 ///   reference. The buffer holds that limit from the start, and reserving
-///   it does not touch the pages until `op` writes to them.
+///   it does not touch the pages until `op` writes to them. A write to a
+///   pipe that `op` has closed fails with an error only while the process
+///   ignores SIGPIPE, as the Rust runtime sets it before `main`. A host
+///   must not reset SIGPIPE to its default action, or `op` exiting
+///   before it reads the whole template would end the host.
 ///
 /// # Errors
 ///

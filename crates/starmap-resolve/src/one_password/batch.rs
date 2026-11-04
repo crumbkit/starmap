@@ -18,25 +18,25 @@ mod tests;
 const MARKER_BYTES: usize = 16;
 
 /// Whether `reference` may go into a template. Each part after `op://`
-/// holds only ASCII letters, digits, spaces, `_`, `.` and `-`, and starts
-/// and ends with something other than a space.
+/// holds only ASCII letters, digits, `_`, `.` and `-`.
 ///
 /// `op inject` expands `$var`, `${var}` and `${VAR:-default}`, trims the
 /// spaces around a reference, and refuses names with `? ! " { } [ ] ( )`,
 /// so a template would read a reference outside this rule as another one
-/// or not at all. `op read` takes the reference as one argument, so such a
-/// reference is read on its own.
+/// or not at all. A space is left out too: whether `op inject` reads
+/// `{{ op://vault/item/my field }}` as the field `my field` or as the field
+/// `my` has not been measured, and a wrong reading would bind the value of
+/// another field. `op read` takes the reference as one argument, so a
+/// reference outside the rule is read on its own.
 pub(super) fn batchable(reference: &str) -> bool {
     let Some(path) = reference.strip_prefix("op://") else {
         return false;
     };
     path.split('/').all(|part| {
         !part.is_empty()
-            && !part.starts_with(' ')
-            && !part.ends_with(' ')
             && part
                 .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b" _.-".contains(&byte))
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
     })
 }
 

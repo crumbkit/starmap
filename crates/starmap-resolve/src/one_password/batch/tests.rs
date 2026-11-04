@@ -14,10 +14,10 @@ fn injected(template: &Template, values: &[&[u8]]) -> Vec<u8> {
 }
 
 #[test]
-fn a_reference_of_letters_digits_spaces_and_punctuation_marks_is_batchable() {
+fn a_reference_of_letters_digits_and_three_punctuation_marks_is_batchable() {
     for reference in [
-        "op://Personal/shelf mirror/token",
-        "op://Dev vault/api_key.v2/section-1/credential",
+        "op://Personal/shelf-mirror/token",
+        "op://Dev_vault/api_key.v2/section-1/credential",
     ] {
         assert!(batchable(reference), "{reference}");
     }
@@ -37,6 +37,8 @@ fn a_reference_that_a_template_would_change_or_refuse_is_not_batchable() {
         "op://Personal/shelf (old)/token",
         "op://Personal/ shelf/token",
         "op://Personal/shelf /token",
+        "op://Personal/shelf mirror/token",
+        "op://Personal/shelf/my field",
         "op://Personal/café/token",
     ] {
         assert!(!batchable(reference), "{reference}");

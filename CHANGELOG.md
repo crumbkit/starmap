@@ -114,10 +114,11 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for them one at a time, and `Resolver::finish` drops what was readied and
   not taken when the resolution ends. `starmap_resolve::resolve` calls both
   on each resolver. `OnePassword::prepare` reads every reference whose parts
-  hold only letters, digits, spaces, `_`, `.` and `-` with one `op inject`,
+  hold only ASCII letters, digits, `_`, `.` and `-` with one `op inject`,
   so one 1Password prompt covers them, and leaves each other reference to
   its own `op read`. A locked store, a dismissed prompt or the deadline
   ends every read still to come, so the person sees no further prompt.
+  What `prepare` readies belongs to the calling thread.
 - `Variable::capture` binds one raw value by the variable's show, as
   `starmap::capture` binds each value. `PathTemplate::fill` returns the path
   a template names when a function gives each placeholder's directory.
@@ -178,3 +179,9 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   type as `ip socket address`, where they printed `another type`, and
   `starmap explain` prints its value, such as `0.0.0.0:8080`, where it
   printed `a value`.
+
+### Removed
+
+- `OnePassword` no longer implements `Clone`, because it holds the values
+  that `prepare` readied, which cannot be copied. A host that needs two
+  resolvers calls `OnePassword::new` twice.
