@@ -72,10 +72,10 @@ pub use starmap_derive::Enumeration;
 /// file that `#[starmap(spec = "config/starmap.toml")]` on the struct
 /// names, relative to the crate root. Each field names its variable with
 /// `#[starmap("NAME")]`, and its type is one of `PathBuf`,
-/// [`Port`], `url::Url`, `bool`, an integer type of at most 64 bits,
-/// `String`, `OsString`, [`Secret<String>`] or a type that derives
-/// [`Enumeration`], each inside an `Option` or not. Any other type fails to
-/// compile.
+/// [`Port`], `url::Url`, `std::net::SocketAddr`, `bool`, an integer type
+/// of at most 64 bits, `String`, `OsString`, [`Secret<String>`] or a type
+/// that derives [`Enumeration`], each inside an `Option` or not. Any
+/// other type fails to compile.
 #[cfg(feature = "derive")]
 pub use starmap_derive::Env;
 
@@ -144,11 +144,16 @@ pub trait Enumeration: Sized {
 
     /// Returns the variant whose value is `choice`, if there is one.
     fn from_choice(choice: &Choice) -> Option<Self>;
+
+    /// Returns the variant's value, which is one of [`Enumeration::VALUES`].
+    fn value(&self) -> &'static str;
 }
 
 /// The reason [`Env::from_vars`] cannot read an environment. A spec or
 /// field error is its `source()` (BASE-47), and a refusal's findings are
-/// part of its text.
+/// its text, as [`Refusals`] writes them, so a program can print it after
+/// its own words, such as `shelf cannot start: SHELF_PORT is required and
+/// has no value`. A field error's text names the variable.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ReadError {
@@ -164,33 +169,12 @@ impl fmt::Display for ReadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Spec(_) => formatter.write_str("the embedded starmap.toml is invalid"),
-            Self::Refused(refusals) => {
-                formatter.write_str("the environment does not fit starmap.toml")?;
-                for (index, finding) in refusals.iter().enumerate() {
-                    formatter.write_str(if index == 0 { ": " } else { "; " })?;
-                    let name = &finding.name;
-                    match &finding.problem {
-                        Problem::Missing { mode } => {
-                            write!(
-                                formatter,
-                                "{name} is required in {mode} mode and has no value"
-                            )
-                        }
-                        Problem::Invalid(error) => write!(formatter, "{name}: {error}"),
-                        Problem::ShowMismatch { show } => {
-                            write!(
-                                formatter,
-                                "{name} has a value of the wrong kind for a {show} variable"
-                            )
-                        }
-                        Problem::ModeMismatch { decided } => {
-                            write!(formatter, "{name} decides {decided} mode")
-                        }
-                    }?;
-                }
-                Ok(())
-            }
-            Self::Field(_) => formatter.write_str("a field of the struct cannot hold its value"),
+            Self::Refused(refusals) => refusals.fmt(formatter),
+            Self::Field(error) => write!(
+                formatter,
+                "the struct cannot read {} into its field",
+                error.name()
+            ),
         }
     }
 }

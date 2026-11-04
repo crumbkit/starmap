@@ -206,3 +206,42 @@ fn a_spec_that_does_not_parse_is_reported() {
         "{actual}"
     );
 }
+
+/// The spec of [`Listen`], which reads a socket address.
+const LISTEN: &str = include_str!("../../starmap/tests/example/listen.toml");
+
+/// A struct that agrees with [`LISTEN`].
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/listen.toml")]
+struct Listen {
+    #[starmap("SHELF_LISTEN_ADDRESS")]
+    _address: std::net::SocketAddr,
+    #[starmap("SHELF_STAGE")]
+    _stage: Stage,
+}
+
+/// A struct that reads [`LISTEN`]'s socket address as a port.
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/listen.toml")]
+struct ListenPort {
+    #[starmap("SHELF_LISTEN_ADDRESS")]
+    _address: starmap::Port,
+    #[starmap("SHELF_STAGE")]
+    _stage: Stage,
+}
+
+#[test]
+fn a_socket_address_field_agrees_with_a_socket_address_variable() {
+    check::<Listen>(LISTEN);
+}
+
+#[test]
+fn a_port_field_disagrees_with_a_socket_address_variable() {
+    let actual = report::<ListenPort>(LISTEN, &[]);
+    assert!(
+        actual.contains(
+            "SHELF_LISTEN_ADDRESS  starmap.toml types it as an ip socket address, and the field type starmap::Port holds a port"
+        ),
+        "{actual}"
+    );
+}

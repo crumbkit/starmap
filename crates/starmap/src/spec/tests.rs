@@ -341,6 +341,55 @@ fn a_default_takes_a_production_rule_of_its_own() {
 }
 
 #[test]
+fn a_socket_address_type_reads_its_default_as_a_socket_address() {
+    let spec = spec(&one("purpose = \"The address the server binds.\"\n\
+         type = \"socket-address\"\nunset = { default = \"0.0.0.0:8080\" }\n\
+         show = \"shown\"\nsource = \"setting\""));
+    let variable = spec.variable(&name("SHELF_X")).unwrap();
+
+    assert_eq!(variable.form(), &Form::SocketAddress);
+    assert_eq!(
+        variable.unset().in_mode(Mode::Local),
+        &Unset::Default(Value::SocketAddress(([0, 0, 0, 0], 8080).into()))
+    );
+}
+
+#[test]
+fn a_socket_address_default_that_names_a_host_is_a_bad_default() {
+    let text = one("purpose = \"The address the server binds.\"\n\
+         type = \"socket-address\"\nunset = { default = \"localhost:8080\" }\n\
+         show = \"shown\"\nsource = \"setting\"");
+
+    assert_eq!(kinds(&text), [SpecProblemKind::BadDefault]);
+}
+
+#[test]
+fn an_unset_rule_describes_itself_for_help_text() {
+    assert_eq!(Unset::Required.to_string(), "required");
+    assert_eq!(Unset::Optional.to_string(), "optional");
+    assert_eq!(
+        Unset::Default(Value::SocketAddress(([0, 0, 0, 0], 8080).into())).to_string(),
+        "default"
+    );
+}
+
+#[test]
+fn a_withheld_variables_unset_text_holds_no_default_value() {
+    let spec = spec(&one("purpose = \"The key shelf signs with.\"\n\
+         type = \"string\"\nunset = { default = \"shelf-signing-key\" }\n\
+         show = \"withheld\"\nsource = \"setting\""));
+    let text = spec
+        .variable(&name("SHELF_X"))
+        .unwrap()
+        .unset()
+        .in_mode(Mode::Local)
+        .to_string();
+
+    assert_eq!(text, "default");
+    assert!(!text.contains("shelf-signing-key"));
+}
+
+#[test]
 fn an_unset_table_takes_local_or_default_and_not_both() {
     let text = one("purpose = \"A port.\"\ntype = \"port\"\n\
          unset = { local = \"optional\", default = \"8080\" }\n\
@@ -752,6 +801,16 @@ fn form_with_default() -> impl Strategy<Value = (String, String)> {
         "(/[a-z]{1,8}){1,3}".prop_map(|path| ("{ path = { absolute = true } }".to_owned(), path)),
         (1_u16..).prop_map(|port| ("\"port\"".to_owned(), port.to_string())),
         "[a-z]{1,10}".prop_map(|host| ("\"url\"".to_owned(), format!("https://{host}.test"))),
+        prop_oneof![
+            any::<std::net::Ipv4Addr>().prop_map(std::net::IpAddr::from),
+            any::<std::net::Ipv6Addr>().prop_map(std::net::IpAddr::from),
+        ]
+        .prop_flat_map(|ip| any::<u16>().prop_map(move |port| {
+            (
+                "\"socket-address\"".to_owned(),
+                std::net::SocketAddr::new(ip, port).to_string(),
+            )
+        })),
         prop::sample::select(vec!["1", "0", "TRUE", "false", "Yes", "no", "on", "OFF"])
             .prop_map(|word| ("\"boolean\"".to_owned(), word.to_owned())),
         integer,

@@ -3,6 +3,7 @@
 #![cfg(feature = "derive")]
 
 use std::ffi::OsString;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use starmap::{Enumeration, Env, Port, Presence, ReadError, Secret, Shape, Show};
@@ -193,7 +194,7 @@ fn the_mode_variable_decides_the_mode_the_struct_is_read_in() {
     .expect_err("the mirror token is required in production");
     assert_eq!(
         error.to_string(),
-        "the environment does not fit starmap.toml: SHELF_MIRROR_TOKEN is required in production mode and has no value"
+        "SHELF_MIRROR_TOKEN is required in production mode and has no value"
     );
 }
 
@@ -204,7 +205,7 @@ fn a_missing_or_invalid_variable_refuses_the_read_with_every_finding() {
     assert!(matches!(error, ReadError::Refused(_)));
     assert_eq!(
         error.to_string(),
-        "the environment does not fit starmap.toml: SHELF_PORT is required in local mode and has no value; \
+        "SHELF_PORT is required in local mode and has no value; \
          SHELF_PAGE_SIZE: the value is not a whole number from 1 to 100; \
          SHELF_SESSION_KEY is required in local mode and has no value"
     );
@@ -225,6 +226,10 @@ fn a_field_that_cannot_hold_a_checked_value_refuses_the_read() {
         Narrow::from_vars(vars(&[("SHELF_PAGE_SIZE", "300")])).expect_err("a u8 cannot hold 300");
     assert!(matches!(error, ReadError::Field(ref field) if field.name() == "SHELF_PAGE_SIZE"));
     assert_eq!(
+        error.to_string(),
+        "the struct cannot read SHELF_PAGE_SIZE into its field"
+    );
+    assert_eq!(
         std::error::Error::source(&error)
             .map(ToString::to_string)
             .as_deref(),
@@ -242,6 +247,62 @@ fn an_enumeration_variant_reads_as_its_kebab_case_name_with_a_run_of_capitals_as
     assert_eq!(Speed::from_choice(&choice("dry-run")), Some(Speed::DryRun));
     assert_eq!(Speed::from_choice(&choice("full")), Some(Speed::Flat));
     assert_eq!(Speed::from_choice(&choice("flat")), None);
+}
+
+#[test]
+fn an_enumeration_variant_returns_its_value() {
+    assert_eq!(Speed::DryRun.value(), "dry-run");
+    assert_eq!(Speed::HTTPServer.value(), "http-server");
+    assert_eq!(Speed::Flat.value(), "full");
+}
+
+/// A struct over a spec without a `[mode]` table, which reads a socket
+/// address.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/listen.toml")]
+struct Listen {
+    #[starmap("SHELF_LISTEN_ADDRESS")]
+    address: SocketAddr,
+    #[starmap("SHELF_STAGE")]
+    stage: Stage,
+}
+
+#[test]
+fn a_socket_address_field_reads_its_value_or_its_default() {
+    let set = Listen::from_vars(vars(&[
+        ("SHELF_LISTEN_ADDRESS", "[::1]:9090"),
+        ("SHELF_STAGE", "prod"),
+    ]))
+    .expect("the variables fit the spec");
+    let defaulted =
+        Listen::from_vars(vars(&[("SHELF_STAGE", "dev")])).expect("the address has a default");
+
+    assert_eq!(
+        set.address,
+        SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 9090))
+    );
+    assert_eq!(set.stage, Stage::Prod);
+    assert_eq!(defaulted.address, SocketAddr::from(([0, 0, 0, 0], 8080)));
+}
+
+#[test]
+fn without_a_mode_table_a_refusal_names_no_mode_and_no_file() {
+    let missing = Listen::from_vars(vars(&[])).expect_err("the stage is required");
+    let empty = Listen::from_vars(vars(&[
+        ("SHELF_LISTEN_ADDRESS", "localhost:8080"),
+        ("SHELF_STAGE", ""),
+    ]))
+    .expect_err("the address names a host and the stage is empty");
+
+    assert_eq!(
+        missing.to_string(),
+        "SHELF_STAGE is required and has no value"
+    );
+    assert_eq!(
+        empty.to_string(),
+        "SHELF_LISTEN_ADDRESS: the value is not an ip socket address, such as 127.0.0.1:8080 or [::1]:8080; \
+         SHELF_STAGE: the value is empty, and it must be one of dev, prod"
+    );
 }
 
 #[test]

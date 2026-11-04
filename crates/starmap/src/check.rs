@@ -2,6 +2,7 @@
 //! bindings against a spec.
 
 use std::ffi::OsString;
+use std::fmt;
 
 use crate::env::Held;
 use crate::{
@@ -145,7 +146,10 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
     if findings.is_empty() {
         Verdict::Ready(Environment::new(mode, entries))
     } else {
-        Verdict::Refused(Refusals(findings))
+        Verdict::Refused(Refusals {
+            findings,
+            modes: spec.mode().is_some(),
+        })
     }
 }
 
@@ -210,13 +214,52 @@ pub enum Verdict {
 
 /// The findings of a refused check. It holds at least one.
 #[derive(Debug)]
-pub struct Refusals(Vec<Finding>);
+pub struct Refusals {
+    findings: Vec<Finding>,
+    /// Whether the spec has a `[mode]` table, so that a missing variable's
+    /// text names the mode only when the spec has modes.
+    modes: bool,
+}
 
 impl Refusals {
     /// Returns each finding, in the spec's order of variables, with a mode
     /// mismatch last.
     pub fn iter(&self) -> impl Iterator<Item = &Finding> {
-        self.0.iter()
+        self.findings.iter()
+    }
+}
+
+impl fmt::Display for Refusals {
+    /// Writes each finding with its variable's name, separated by `; `,
+    /// such as `SHELF_PORT is required and has no value; SHELF_DEBUG: the
+    /// value is not one of the words 1, 0, true, false, yes, no, on and
+    /// off`. A missing variable names its mode only when the spec has a
+    /// `[mode]` table. The text never repeats a value.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, finding) in self.findings.iter().enumerate() {
+            if index > 0 {
+                formatter.write_str("; ")?;
+            }
+            let name = &finding.name;
+            match &finding.problem {
+                Problem::Missing { mode } if self.modes => {
+                    write!(
+                        formatter,
+                        "{name} is required in {mode} mode and has no value"
+                    )
+                }
+                Problem::Missing { .. } => write!(formatter, "{name} is required and has no value"),
+                Problem::Invalid(error) => write!(formatter, "{name}: {error}"),
+                Problem::ShowMismatch { show } => write!(
+                    formatter,
+                    "{name} has a value of the wrong kind for a {show} variable"
+                ),
+                Problem::ModeMismatch { decided } => {
+                    write!(formatter, "{name} decides {decided} mode")
+                }
+            }?;
+        }
+        Ok(())
     }
 }
 

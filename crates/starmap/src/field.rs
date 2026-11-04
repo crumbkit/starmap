@@ -4,6 +4,7 @@
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use url::Url;
@@ -112,6 +113,8 @@ pub enum Shape {
     Port,
     /// A URL, held as a [`Url`].
     Url,
+    /// An IP socket address, held as a [`SocketAddr`].
+    SocketAddress,
     /// A boolean, held as a `bool`.
     Boolean,
     /// A whole number from `min` to `max`, held as an integer type.
@@ -148,7 +151,7 @@ pub enum Presence {
 #[diagnostic::on_unimplemented(
     message = "starmap cannot read a variable into `{Self}`",
     label = "this field type is not one that starmap reads",
-    note = "a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option"
+    note = "a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option"
 )]
 pub trait FieldType: Sized {
     /// The kind of value the type holds.
@@ -194,6 +197,10 @@ shown!(Port, Shape::Port, |value| match value {
 });
 shown!(Url, Shape::Url, |value| match value {
     Value::Url(url) => Some(url.clone()),
+    _ => None,
+});
+shown!(SocketAddr, Shape::SocketAddress, |value| match value {
+    Value::SocketAddress(address) => Some(*address),
     _ => None,
 });
 shown!(bool, Shape::Boolean, |value| match value {

@@ -3,6 +3,7 @@
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 
 use proptest::prelude::*;
@@ -326,6 +327,76 @@ fn a_url_form_refuses_text_without_a_scheme_and_keeps_the_parse_error_as_its_sou
     assert!(error.source().is_some());
 }
 
+// Form::parse for socket addresses
+
+#[test]
+fn a_socket_address_form_reads_an_ipv4_or_an_ipv6_address_with_its_port() {
+    assert_eq!(
+        parse(&Form::SocketAddress, "0.0.0.0:8080"),
+        Ok(Some(Value::SocketAddress(SocketAddr::from((
+            Ipv4Addr::UNSPECIFIED,
+            8080
+        )))))
+    );
+    assert_eq!(
+        parse(&Form::SocketAddress, "[::1]:443"),
+        Ok(Some(Value::SocketAddress(SocketAddr::from((
+            Ipv6Addr::LOCALHOST,
+            443
+        )))))
+    );
+    for raw in ["0.0.0.0:0", "[fe80::1%1]:80"] {
+        assert!(
+            matches!(
+                parse(&Form::SocketAddress, raw),
+                Ok(Some(Value::SocketAddress(_)))
+            ),
+            "{raw:?}"
+        );
+    }
+}
+
+#[test]
+fn a_socket_address_form_refuses_a_host_name_a_named_zone_an_address_without_a_port_and_empty_text()
+{
+    for raw in [
+        "localhost:8080",
+        "127.0.0.1",
+        "127.0.0.1:",
+        ":8080",
+        "",
+        "[fe80::1%eth0]:80",
+    ] {
+        assert_eq!(
+            parse(&Form::SocketAddress, raw),
+            Err(FormError::NotSocketAddress),
+            "{raw:?}"
+        );
+    }
+    assert_eq!(
+        FormError::NotSocketAddress.to_string(),
+        "the value is not an ip socket address, such as 127.0.0.1:8080 or [::1]:8080"
+    );
+}
+
+proptest! {
+    #[test]
+    fn a_socket_address_value_reads_back_from_the_text_it_writes(
+        ip in prop_oneof![
+            any::<Ipv4Addr>().prop_map(std::net::IpAddr::from),
+            any::<Ipv6Addr>().prop_map(std::net::IpAddr::from),
+        ],
+        port in any::<u16>(),
+    ) {
+        let value = Value::SocketAddress(SocketAddr::new(ip, port));
+
+        prop_assert_eq!(
+            Form::SocketAddress.parse(&value.to_os_string()),
+            Ok(Some(value))
+        );
+    }
+}
+
 #[test]
 fn a_string_form_reads_any_text_including_an_empty_one() {
     assert_eq!(
@@ -544,6 +615,18 @@ fn an_enumeration_form_refuses_another_value_and_lists_its_choices() {
     assert_eq!(error.to_string(), "the value is not one of dev, prod");
 }
 
+#[test]
+fn an_enumeration_form_refuses_an_empty_value_as_empty_and_lists_its_choices() {
+    let form = Form::Enumeration(choices(&["dev", "prod"]));
+    let error = parse(&form, "").unwrap_err();
+
+    assert_eq!(error, FormError::EmptyChoice(choices(&["dev", "prod"])));
+    assert_eq!(
+        error.to_string(),
+        "the value is empty, and it must be one of dev, prod"
+    );
+}
+
 proptest! {
     #[test]
     fn an_enumeration_form_accepts_a_value_exactly_when_it_is_a_choice(
@@ -568,6 +651,7 @@ fn every_form_that_needs_text_refuses_a_value_that_is_not_unicode() {
     let forms = [
         Form::Port,
         Form::Url,
+        Form::SocketAddress,
         Form::Boolean,
         Form::Integer(IntegerRange::new(1, 100).unwrap()),
         Form::Enumeration(choices(&["dev"])),
@@ -593,4 +677,43 @@ fn the_string_and_path_forms_read_a_value_that_is_not_unicode() {
         Form::Path { absolute: true }.parse(raw),
         Ok(Some(Value::Path(PathBuf::from(raw))))
     );
+}
+
+// Display of forms and values
+
+#[test]
+fn each_form_describes_its_values_for_help_text() {
+    let described = [
+        (Form::Path { absolute: false }, "a path"),
+        (Form::Path { absolute: true }, "an absolute path"),
+        (Form::Port, "a port"),
+        (Form::Url, "a url"),
+        (Form::SocketAddress, "an ip socket address"),
+        (Form::Boolean, "a boolean"),
+        (
+            Form::Integer(IntegerRange::new(-5, 100).unwrap()),
+            "a whole number from -5 to 100",
+        ),
+        (
+            Form::Enumeration(choices(&["dev", "prod"])),
+            "one of dev, prod",
+        ),
+        (Form::String, "a string"),
+    ];
+
+    for (form, text) in described {
+        assert_eq!(form.to_string(), text);
+    }
+}
+
+#[test]
+fn a_value_prints_as_the_text_an_environment_holds() {
+    let address = parse(&Form::SocketAddress, "[::1]:8080").unwrap().unwrap();
+    let choice = parse(&Form::Enumeration(choices(&["dev"])), "dev")
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(address.to_string(), "[::1]:8080");
+    assert_eq!(choice.to_string(), "dev");
+    assert_eq!(Value::Boolean(true).to_string(), "true");
 }

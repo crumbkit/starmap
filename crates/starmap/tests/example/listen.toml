@@ -1,0 +1,15 @@
+# A spec without a [mode] table, for the struct tests of a socket address
+# and of the refusals of a spec that has no modes.
+[variables.SHELF_LISTEN_ADDRESS]
+purpose = "The address the server binds."
+type = "socket-address"
+unset = { default = "0.0.0.0:8080" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_STAGE]
+purpose = "The stage the server runs as."
+type = { enumeration = ["dev", "prod"] }
+unset = "required"
+show = "shown"
+source = "setting"
