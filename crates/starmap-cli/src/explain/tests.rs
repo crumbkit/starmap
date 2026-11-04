@@ -175,3 +175,28 @@ fn the_recovery_of_an_unknown_name_keeps_a_spec_file_that_is_not_the_default() {
         Recovery::Run(Call::new(&["explain"]))
     );
 }
+
+/// A socket address setting with a default.
+const LISTEN: &str = r#"
+[variables.SHELF_LISTEN]
+purpose = "The address the api process listens on."
+type = "socket-address"
+unset = { default = "0.0.0.0:8080" }
+show = "shown"
+source = "setting"
+"#;
+
+#[test]
+fn a_socket_address_is_named_as_its_type_and_shows_its_value() {
+    let spec = Spec::parse(LISTEN).unwrap();
+    let name: Name = "SHELF_LISTEN".parse().unwrap();
+    let vars = [(OsString::from("SHELF_LISTEN"), OsString::from("[::1]:9090"))];
+    let bindings = starmap::capture(&spec, vars);
+    let shell = row(&spec, "starmap.toml", &bindings, name.clone()).unwrap();
+    assert_eq!(shell.kind, "ip socket address");
+    assert_eq!(shell.value.to_string(), "[::1]:9090");
+
+    let bindings = starmap::capture(&spec, Vec::new());
+    let default = row(&spec, "starmap.toml", &bindings, name).unwrap();
+    assert_eq!(default.value.to_string(), "0.0.0.0:8080 (default)");
+}

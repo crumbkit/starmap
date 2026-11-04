@@ -325,6 +325,7 @@ fn form_word(form: &Form) -> &'static str {
         Form::Path { .. } => "path",
         Form::Port => "port",
         Form::Url => "url",
+        Form::SocketAddress => "ip socket address",
         Form::Boolean => "boolean",
         Form::Integer(_) => "integer",
         Form::Enumeration(_) => "enumeration",

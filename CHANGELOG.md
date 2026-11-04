@@ -150,3 +150,7 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `undeclared`, and each variable that `src` reads and the file does not
   declare fails with `starmap::variable::undeclared`. A missing spec's next
   step is now `starmap init`.
+- `starmap explain` and `starmap diff` name a `socket-address` variable's
+  type as `ip socket address`, where they printed `another type`, and
+  `starmap explain` prints its value, such as `0.0.0.0:8080`, where it
+  printed `a value`.
