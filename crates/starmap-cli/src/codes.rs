@@ -61,6 +61,31 @@ pub const REVISION_NOT_FOUND: Code = Code::new("starmap", "revision", "not_found
 /// git cannot start, or cannot read the revision that `diff` names.
 pub const REVISION_UNREADABLE: Code = Code::new("starmap", "revision", "unreadable");
 
+/// `.env` sets a secret or generated variable, which only a bind supplies.
+pub const DOTENV_SECRET: Code = Code::new("starmap", "dotenv", "secret");
+/// `.env` holds a line that the `.env` format does not allow.
+pub const DOTENV_SYNTAX: Code = Code::new("starmap", "dotenv", "syntax");
+/// `.env` exists and cannot be read, or is over 256 KiB.
+pub const DOTENV_UNREADABLE: Code = Code::new("starmap", "dotenv", "unreadable");
+/// `--set` gives a value to a secret or generated variable.
+pub const VARIABLE_SECRET: Code = Code::new("starmap", "variable", "secret");
+/// A required variable has no value in the run's mode.
+pub const VARIABLE_MISSING: Code = Code::new("starmap", "variable", "missing");
+/// A variable's value does not fit its type.
+pub const VARIABLE_INVALID: Code = Code::new("starmap", "variable", "invalid");
+/// No provider of a provided variable's kind is present, and nothing else
+/// gives it a value.
+pub const BIND_NO_PROVIDER: Code = Code::new("starmap", "bind", "no_provider");
+/// A path bind names a place that `run` has no directory for.
+pub const BIND_NO_PLACE: Code = Code::new("starmap", "bind", "no_place");
+/// A required secret has no bind, no value in the shell and no saved
+/// value, and no person can type it.
+pub const SECRET_UNBOUND: Code = Code::new("starmap", "secret", "unbound");
+/// A secret store could not return a secret: it is locked, has no such
+/// item, was refused, is missing on this platform, failed, or did not
+/// answer in time. The message names which.
+pub const SECRET_UNREADABLE: Code = Code::new("starmap", "secret", "unreadable");
+
 /// Every code above.
 pub const ALL: &[&Code] = &[
     &SPEC_NOT_FOUND,
@@ -90,4 +115,14 @@ pub const ALL: &[&Code] = &[
     &REVISION_NO_REPOSITORY,
     &REVISION_NOT_FOUND,
     &REVISION_UNREADABLE,
+    &DOTENV_SECRET,
+    &DOTENV_SYNTAX,
+    &DOTENV_UNREADABLE,
+    &VARIABLE_SECRET,
+    &VARIABLE_MISSING,
+    &VARIABLE_INVALID,
+    &BIND_NO_PROVIDER,
+    &BIND_NO_PLACE,
+    &SECRET_UNBOUND,
+    &SECRET_UNREADABLE,
 ];

@@ -3,9 +3,10 @@
 
 use std::time::Instant;
 
-use starmap::Secret;
+use starmap::{Name, Secret};
+use zeroize::Zeroizing;
 
-use crate::{Lookup, Resolver, SecretError, WorkspaceName};
+use crate::{AppName, Lookup, Resolver, SecretError, WorkspaceName};
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -14,15 +15,20 @@ use macos as platform;
 #[cfg(test)]
 mod tests;
 
-/// A [`Resolver`] of generated values that keeps each one in the macOS
-/// login keychain.
+/// A [`Resolver`] of generated values and saved secrets that keeps each
+/// one in the macOS login keychain.
 ///
 /// The first lookup of a generated variable creates its value from the
 /// variable's `bytes` random bytes, written as base64url without padding,
 /// and every later lookup returns the same value. The value is a generic
 /// password whose service is `starmap.<workspace>` and whose account is
-/// `<app>/<NAME>`. The resolver leaves every lookup by reference to another
-/// resolver.
+/// `<app>/<NAME>`.
+///
+/// A [`Lookup::Saved`] returns the value that [`Resolver::save`] kept for
+/// a secret without a bind, at the same service and account, and
+/// [`SecretError::NotFound`] when the Keychain holds none. `forget`
+/// deletes saved values with the generated ones. The resolver leaves every
+/// lookup by reference to another resolver.
 ///
 /// On a platform other than macOS, every call returns
 /// [`SecretError::Unsupported`].
@@ -37,7 +43,7 @@ impl Keychain {
         Self
     }
 
-    /// Deletes every generated value of `workspace`, and returns how many
+    /// Deletes every generated and saved value of `workspace`, and returns how many
     /// it deleted. A host calls it when it deletes the workspace.
     ///
     /// A failure partway through can leave some of the workspace's values
@@ -68,18 +74,56 @@ impl Resolver for Keychain {
         lookup: Lookup<'_>,
         deadline: Instant,
     ) -> Result<Secret<String>, SecretError> {
-        let Lookup::Generated {
+        match lookup {
+            Lookup::Generated {
+                workspace,
+                app,
+                name,
+                bytes,
+            } => platform::generated(&service(workspace), &account(app, name), bytes, deadline),
+            Lookup::Saved {
+                workspace,
+                app,
+                name,
+            } => platform::saved(&service(workspace), &account(app, name), deadline),
+            _ => Err(SecretError::Unsupported),
+        }
+    }
+
+    /// Keeps `value` for a [`Lookup::Saved`]. When the Keychain already
+    /// holds a value at the same service and account, it keeps that value
+    /// unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecretError::Unsupported`] for any other lookup and on a
+    /// platform other than macOS, and the Keychain's failure otherwise.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "BASE-24: a typed secret leaves the program here, into the Keychain"
+    )]
+    fn save(
+        &self,
+        lookup: Lookup<'_>,
+        value: &Secret<String>,
+        deadline: Instant,
+    ) -> Result<(), SecretError> {
+        let Lookup::Saved {
             workspace,
             app,
             name,
-            bytes,
         } = lookup
         else {
             return Err(SecretError::Unsupported);
         };
-        let account = format!("{}/{}", app.as_str(), name.as_str());
-        platform::generated(&service(workspace), &account, bytes, deadline)
+        let value = Zeroizing::new(value.expose().clone());
+        platform::save(&service(workspace), &account(app, name), value, deadline)
     }
+}
+
+/// Returns the Keychain account of the variable `name` of `app`.
+fn account(app: &AppName, name: &Name) -> String {
+    format!("{}/{}", app.as_str(), name.as_str())
 }
 
 /// The calls on a platform without a Keychain, each of which returns
@@ -89,6 +133,7 @@ mod platform {
     use std::time::Instant;
 
     use starmap::{Secret, SecretBytes};
+    use zeroize::Zeroizing;
 
     use crate::SecretError;
 
@@ -98,6 +143,23 @@ mod platform {
         _bytes: SecretBytes,
         _deadline: Instant,
     ) -> Result<Secret<String>, SecretError> {
+        Err(SecretError::Unsupported)
+    }
+
+    pub(super) fn saved(
+        _service: &str,
+        _account: &str,
+        _deadline: Instant,
+    ) -> Result<Secret<String>, SecretError> {
+        Err(SecretError::Unsupported)
+    }
+
+    pub(super) fn save(
+        _service: &str,
+        _account: &str,
+        _value: Zeroizing<String>,
+        _deadline: Instant,
+    ) -> Result<(), SecretError> {
         Err(SecretError::Unsupported)
     }
 

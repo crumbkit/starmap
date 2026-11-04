@@ -13,7 +13,8 @@ that `starmap::check` checks, with a failure for each variable it could not
 resolve. The `one-password` feature adds `OnePassword`, a resolver that
 runs `op read` for each `op://` reference. The `keychain` feature adds
 `Keychain`, which creates each generated value on first use and returns it
-unchanged afterwards, and `Keychain::forget` deletes a workspace's values.
+unchanged afterwards, keeps a secret without a bind that a host saves with
+`Resolver::save`, and `Keychain::forget` deletes a workspace's values.
 On a platform other than macOS, every call of `Keychain` returns
 `SecretError::Unsupported`. The repository's
 [README](https://github.com/crumbkit/starmap) describes the project.

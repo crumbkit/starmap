@@ -143,6 +143,36 @@ impl FromStr for AppName {
     }
 }
 
+/// Returns the workspace and app names that the directory `dir` gives a
+/// host by default: its name in lower case, with each character other
+/// than a letter, a digit or a hyphen written as a hyphen, and `app-`
+/// before a name that does not start with a letter. So `My_App` gives
+/// `my-app`, `.tmp9` gives `app--tmp9` and `/` gives `app`. The result
+/// always fits the name rule, so this never fails.
+#[must_use]
+pub fn names_of(dir: &Path) -> (WorkspaceName, AppName) {
+    let text: String = dir
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default()
+        .chars()
+        .map(|c| {
+            let c = c.to_ascii_lowercase();
+            if c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let text = match text.chars().next() {
+        Some(first) if first.is_ascii_lowercase() => text,
+        Some(_) => format!("app-{text}"),
+        None => "app".to_owned(),
+    };
+    (WorkspaceName(text.clone()), AppName(text))
+}
+
 /// Returns `text` when it starts with a lower case ASCII letter and holds
 /// only lower case ASCII letters, digits and hyphens.
 ///

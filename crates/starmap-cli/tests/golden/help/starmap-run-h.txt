@@ -1,0 +1,20 @@
+Run a program with the environment that starmap.toml declares
+
+Usage: starmap run [OPTIONS] -- <PROGRAM>...
+
+Arguments:
+  <PROGRAM>...  The program to run and its arguments, after --
+
+Options:
+      --spec <FILE>       Read the spec from this file [default: starmap.toml]
+      --workspace <NAME>  Name the Keychain items of this checkout after this workspace; default: the checkout's directory name
+      --set <NAME=VALUE>  Give a setting or inherited variable this value for this run, as NAME=VALUE; repeat it for more
+  -h, --help              Print help (see more with '--help')
+
+Examples:
+  starmap run -- cargo run
+  starmap run --set SHELF_DEBUG=true -- cargo run
+
+Effects: additive, not idempotent, closed-world.
+Exit code: the command passes on the exit code of the program after --.
+Global flags: --json, --fields <FIELD>, --long, --full, --no-input. `starmap run --help` describes them.

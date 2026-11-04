@@ -45,6 +45,13 @@ clap = { workspace = true, features = [
     "color",
 ] }
 crumbkit-usage = { workspace = true }
+crumbkit-child = { workspace = true }
+# `run` resolves every variable, reads `op://` binds through the 1Password
+# CLI, and keeps generated and typed secrets in the macOS Keychain.
+starmap-resolve = { workspace = true, features = ["one-password", "keychain"] }
+rpassword = { workspace = true }
+# `run` zeroes the bytes of `.env` and each typed secret once it holds them.
+zeroize = { workspace = true }
 # `init` and `check` split each source file under src into Rust tokens to
 # find the variables it reads, and `span-locations` gives each token its
 # line. The scan needs only tokens, so it takes no parser such as syn.

@@ -1,0 +1,7 @@
+# A spec whose required secret has no bind.
+[variables.SHELF_UPSTREAM_TOKEN]
+purpose = "The token shelf sends to the upstream catalogue."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"

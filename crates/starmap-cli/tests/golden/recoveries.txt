@@ -97,9 +97,31 @@ starmap diff -- -x
   fails with starmap::revision::not_found
   hint
 
+starmap run --no-input --spec dotenv-secret/starmap.toml -- /usr/bin/true
+  fails with starmap::dotenv::secret
+  hint
+
+starmap run --no-input --spec dotenv-syntax/starmap.toml -- /usr/bin/true
+  fails with starmap::dotenv::syntax
+  hint
+
+starmap run --no-input --spec dotenv-unreadable/starmap.toml -- /usr/bin/true
+  fails with starmap::dotenv::unreadable
+  hint
+
+starmap run --no-input --set SHELF_UPSTREAM_TOKEN=x -- /usr/bin/true
+  fails with starmap::variable::secret
+  hint
+
 codes that no start provokes:
   starmap::spec::too_large: Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.
   starmap::revision::no_repository: Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.
   starmap::revision::unreadable: Only a git that cannot start or cannot read the repository provokes it, which no fixture can set up portably.
+  starmap::variable::missing: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
+  starmap::variable::invalid: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
+  starmap::bind::no_provider: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
+  starmap::bind::no_place: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
+  starmap::secret::unbound: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
+  starmap::secret::unreadable: Only 1Password or the Keychain provokes it, which a test must not touch, so starmap-resolve's tests provoke each SecretError through a fake op program and a fake resolver, and src/run/tests.rs checks how run reports one.
 
 codes whose recoveries the check did not follow, because no declared code spells them: 0

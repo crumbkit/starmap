@@ -72,6 +72,30 @@ pub trait Resolver {
     /// [`SecretError`] when the secret cannot be read.
     fn resolve(&self, lookup: Lookup<'_>, deadline: Instant)
     -> Result<Secret<String>, SecretError>;
+
+    /// Keeps `value` as the secret that `lookup` names, so a later
+    /// [`Resolver::resolve`] of the same lookup returns it. A host calls it
+    /// with a [`Lookup::Saved`] after a person typed a secret that has no
+    /// bind. The resolver returns by `deadline`.
+    ///
+    /// The default keeps nothing and returns [`SecretError::Unsupported`],
+    /// so a resolver that only reads, such as one of 1Password, needs no
+    /// code for it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SecretError::Unsupported`] for a lookup the resolver does
+    /// not keep, and another [`SecretError`] when the store refuses the
+    /// value.
+    fn save(
+        &self,
+        lookup: Lookup<'_>,
+        value: &Secret<String>,
+        deadline: Instant,
+    ) -> Result<(), SecretError> {
+        let _ = (lookup, value, deadline);
+        Err(SecretError::Unsupported)
+    }
 }
 
 /// The secret that resolution asks a [`Resolver`] for.
@@ -91,6 +115,17 @@ pub enum Lookup<'a> {
         name: &'a Name,
         /// How many random bytes a new value has.
         bytes: SecretBytes,
+    },
+    /// The value that a person typed for the secret variable `name` of
+    /// `app` in `workspace`, which has no bind, and that a host kept with
+    /// [`Resolver::save`].
+    Saved {
+        /// The workspace the app runs in.
+        workspace: &'a WorkspaceName,
+        /// The app that reads the variable.
+        app: &'a AppName,
+        /// The variable.
+        name: &'a Name,
     },
 }
 

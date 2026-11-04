@@ -1,23 +1,25 @@
 //! The `starmap` command's command-line grammar and help guide.
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Args, Parser, Subcommand};
 use crumbkit::commands::{COMMANDS_LIST, CommandsList};
-use crumbkit::help::{Effects, Example, Guide, Leaf};
+use crumbkit::help::{Effects, Example, Exit, Guide, Leaf};
 use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
 use crumbkit::{Call, DryRun, NoInput, ViewFlags};
 use crumbkit_usage::{SELF_USAGE, SelfUsage};
 use starmap::Name;
+use starmap_resolve::WorkspaceName;
 
 use crate::check::CHECK;
 use crate::diff::DIFF;
 use crate::explain::EXPLAIN;
 use crate::init::INIT;
 
-/// Write, check and explain the environment variables that an application
-/// declares in starmap.toml.
+/// Write, check, explain and run the environment variables that an
+/// application declares in starmap.toml.
 #[derive(Debug, Parser)]
 #[command(name = "starmap", version)]
 pub struct Cli {
@@ -29,18 +31,18 @@ pub struct Cli {
     #[command(flatten)]
     pub(crate) view: ViewFlags,
 
-    /// Ask no question. Starmap asks none yet, and `crumbkit::parse` reads
-    /// the flag.
+    /// Ask no question. `run` then refuses a secret that it would ask for,
+    /// and `crumbkit::parse` reads the flag.
     #[command(flatten)]
     pub(crate) no_input: NoInput,
 }
 
 /// The `starmap` command's root verbs, leaves and their examples. `init`,
-/// `check`, `explain` and `diff` sit directly under the root, because a
-/// person types `starmap check` as one step of their work.
+/// `check`, `explain`, `diff` and `run` sit directly under the root,
+/// because a person types `starmap check` as one step of their work.
 pub const GUIDE: Guide = Guide::new()
     .root_verbs(
-        &["init", "check", "explain", "diff"],
+        &["init", "check", "explain", "diff", "run"],
         "starmap acts on one file, starmap.toml, so its commands need no resource word.",
     )
     .leaves(&[
@@ -79,6 +81,21 @@ pub const GUIDE: Guide = Guide::new()
             )])
             .effects(Effects::read_only())
             .document(DIFF),
+        // run may add an item to the Keychain when a person agrees to save
+        // a typed secret, and it changes nothing else.
+        Leaf::new(&["run"])
+            .examples(&[
+                Example::new(
+                    &["--", "cargo", "run"],
+                    "Run the app with the environment that starmap.toml declares",
+                ),
+                Example::new(
+                    &["--set", "SHELF_DEBUG=true", "--", "cargo", "run"],
+                    "Run the app with one setting changed for this run",
+                ),
+            ])
+            .effects(Effects::additive())
+            .passes_on_exit("the program after --"),
         Leaf::new(&["commands", "list"])
             .examples(&[Example::new(&[], "List every command")])
             .effects(Effects::read_only())
@@ -98,7 +115,13 @@ pub const GUIDE: Guide = Guide::new()
             .examples(&[Example::new(&[], "Report the findings of the last 7 days")])
             .effects(Effects::read_only())
             .document(SELF_USAGE),
-    ]);
+    ])
+    .exits(&[Exit::range(
+        3,
+        255,
+        "starmap run passes on the exit code of the program it runs. The program's exit codes 0, 1 and 2 pass on as well, and are then the same numbers as starmap's own success, failure and refused command line.",
+    )
+    .commands(&[&["run"]])]);
 
 /// The commands of `starmap`.
 #[derive(Debug, Subcommand)]
@@ -120,6 +143,16 @@ pub(crate) enum Verb {
     /// diff compares the spec with the file at the same path in the
     /// revision. A revision without the file counts as an empty spec.
     Diff(DiffArgs),
+    /// Run a program with the environment that starmap.toml declares.
+    ///
+    /// run resolves every variable, checks the values and starts the
+    /// program with each declared variable set or removed. A value comes
+    /// from --set, then the shell, then .env beside the spec, then the
+    /// default. A secret comes from its bind, or from the shell or the
+    /// Keychain when it has none; at a terminal, run asks for a missing
+    /// one and offers to save it to the Keychain. .env and --set never
+    /// give a secret.
+    Run(RunArgs),
     /// Explore starmap's commands.
     Commands {
         /// What to do with the commands.
@@ -232,4 +265,45 @@ pub(crate) struct DiffArgs {
     /// The file that holds the spec.
     #[command(flatten)]
     pub(crate) file: SpecFile,
+}
+
+/// The arguments of `starmap run`.
+#[derive(Debug, Args)]
+pub(crate) struct RunArgs {
+    /// The file that holds the spec.
+    #[command(flatten)]
+    pub(crate) file: SpecFile,
+
+    /// Name the Keychain items of this checkout after this workspace; default: the checkout's directory name
+    #[arg(long, value_name = "NAME")]
+    pub(crate) workspace: Option<WorkspaceName>,
+
+    /// Give a setting or inherited variable this value for this run, as NAME=VALUE; repeat it for more
+    #[arg(long, value_name = "NAME=VALUE", value_parser = parse_assignment)]
+    pub(crate) set: Vec<Assignment>,
+
+    /// The program to run and its arguments, after --
+    #[arg(value_name = "PROGRAM", required = true, last = true)]
+    pub(crate) program: Vec<OsString>,
+}
+
+/// One `--set NAME=VALUE`.
+#[derive(Debug, Clone)]
+pub(crate) struct Assignment {
+    /// The variable.
+    pub(crate) name: Name,
+    /// The value.
+    pub(crate) value: String,
+}
+
+/// Parses `NAME=VALUE` into an [`Assignment`].
+fn parse_assignment(text: &str) -> Result<Assignment, String> {
+    let (name, value) = text
+        .split_once('=')
+        .ok_or_else(|| "write the value as NAME=VALUE".to_owned())?;
+    let name = name.parse::<Name>().map_err(|error| error.to_string())?;
+    Ok(Assignment {
+        name,
+        value: value.to_owned(),
+    })
 }
