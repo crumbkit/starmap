@@ -4,9 +4,10 @@
 
 #![cfg(test)]
 
+use clap::CommandFactory as _;
 use serde_json::Value;
 use snapbox::cmd::Command;
-use starmap_cli::GUIDE;
+use starmap_cli::{Cli, GUIDE};
 
 /// The directory that holds the build plan's illustrative `starmap.toml`,
 /// relative to this package.
@@ -14,10 +15,6 @@ const EXAMPLE: &str = "../starmap/tests/example";
 
 /// The flags that a UI client adds to every command line it runs.
 const UI_FLAGS: &[&str] = &["--json", "--full", "--no-input"];
-
-/// The code of the failure that starmap reports when the command line does
-/// not match the command's arguments.
-const USAGE: &str = "starmap::cli::usage";
 
 /// Runs the built `starmap` binary with `words` and each of [`UI_FLAGS`]
 /// that `words` lacks in [`EXAMPLE`], with a cleared environment and its
@@ -43,17 +40,23 @@ fn document(words: &[&str]) -> Value {
     })
 }
 
-/// Asserts that `words` with [`UI_FLAGS`] prints a JSON document that is
-/// not a usage failure.
+/// Asserts that the command line parser accepts `words` with each of
+/// [`UI_FLAGS`] that `words` lacks. The parser runs in process, so the
+/// example's command, such as `init`, never runs and writes nothing.
 fn assert_accepts_ui_flags(words: &[&str]) {
-    let document = document(words);
-    assert_ne!(
-        document["code"],
-        USAGE,
-        "starmap {} {} refused the flags: {document}",
-        words.join(" "),
-        UI_FLAGS.join(" "),
-    );
+    let line: Vec<&str> = ["starmap"]
+        .into_iter()
+        .chain(words.iter().copied())
+        .chain(
+            UI_FLAGS
+                .iter()
+                .copied()
+                .filter(|flag| !words.contains(flag)),
+        )
+        .collect();
+    if let Err(error) = Cli::command().try_get_matches_from(&line) {
+        panic!("{} refused the flags: {error}", line.join(" "));
+    }
 }
 
 #[test]
@@ -67,13 +70,13 @@ fn every_example_in_the_guide_accepts_the_flags_that_a_ui_client_adds() {
 }
 
 #[test]
-fn the_command_list_that_a_ui_client_loads_accepts_the_flags_that_it_adds() {
+fn the_command_list_with_all_prints_its_document_under_the_flags_that_a_ui_client_adds() {
     let document = document(&["commands", "list", "--all"]);
     assert_eq!(document["schema"], "starmap/commands-list/v1");
 }
 
 #[test]
-fn the_schema_list_names_every_document_that_starmap_prints() {
+fn the_schema_list_names_starmaps_own_documents() {
     let document = document(&["schemas", "list"]);
     assert_eq!(document["schema"], "starmap/schemas-list/v1");
     let ids: Vec<&str> = document["data"]
