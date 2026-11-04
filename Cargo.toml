@@ -90,10 +90,6 @@ crumbkit = { version = "0.1.0", default-features = false }
 # child, and the command returns the child's exit code.
 crumbkit-child = "0.1.0"
 
-# dotenvy reads the `.env` file beside the spec for `starmap run`, which
-# parses the format as the ecosystem's tools do.
-dotenvy = "0.15.7"
-
 # rpassword reads a secret that `starmap run` asks a person for from the
 # terminal with echo turned off, so the value never shows on screen.
 rpassword = "7.5.4"

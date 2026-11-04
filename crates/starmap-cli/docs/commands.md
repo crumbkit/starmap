@@ -193,7 +193,7 @@ Effects: additive, not idempotent, closed-world.
 
 ### Exit codes
 
-- `3-255`: starmap run passes on the exit code of the program it runs.
+- `3-255`: starmap run passes on the exit code of the program it runs. The program's exit codes 0, 1 and 2 pass on as well, and are then the same numbers as starmap's own success, failure and refused command line.
 
 ## `starmap commands`
 

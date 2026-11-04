@@ -2,7 +2,7 @@
 //! resolver and a fake person, so no test needs 1Password, a Keychain or a
 //! terminal.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -12,9 +12,12 @@ use crumbkit::Code;
 use starmap::{Name, Secret};
 use starmap_resolve::{Lookup, ResolveProblem, Resolver, SecretError};
 
-use super::{Ask, Ready, Refused, RunFailure, label, prepare};
-use crate::cli::{Assignment, RunArgs, SpecFile};
+use clap::CommandFactory as _;
+
+use super::{Ask, Ready, Refused, RunFailure, gather, label, run_with, settle};
+use crate::cli::{Assignment, RunArgs, SpecFile, Verb};
 use crate::codes;
+use crate::{Cli, GUIDE};
 
 /// A spec with a setting that has a default, a bound secret, a secret
 /// without a bind, a provided variable and an inherited one.
@@ -232,7 +235,7 @@ fn prepared(
     resolver: &FakeResolver,
     person: &mut Person,
 ) -> Result<Ready, Refused> {
-    prepare(args, shell(vars), &[resolver], person)
+    gather(args, shell(vars)).and_then(|gathered| settle(gathered, &[resolver], person))
 }
 
 /// Returns the shown value of `variable`, as text.
@@ -462,7 +465,7 @@ fn a_typed_secret_that_the_person_saves_is_found_by_the_next_run_without_asking(
 
     assert_eq!(resolver.keys(), ["shelf/shelf/SHELF_UPSTREAM_TOKEN"]);
     assert!(ready.notes.contains(
-        &"starmap saved SHELF_UPSTREAM_TOKEN to the Keychain as service starmap.shelf and account shelf/SHELF_UPSTREAM_TOKEN."
+        &"The Keychain holds SHELF_UPSTREAM_TOKEN as service starmap.shelf and account shelf/SHELF_UPSTREAM_TOKEN, and later runs read it from there."
             .to_owned()
     ));
 
@@ -517,7 +520,7 @@ fn a_checkout_directory_name_becomes_a_workspace_label() {
         ("/", "app"),
     ];
     for (dir, expected) in cases {
-        assert_eq!(label(Path::new(dir)).0, expected, "{dir}");
+        assert_eq!(label(Path::new(dir)), expected, "{dir}");
     }
 }
 
@@ -574,37 +577,136 @@ fn each_required_variable_without_a_value_is_refused_and_each_is_admitted_with_o
 }
 
 #[test]
-fn each_secret_store_problem_maps_to_its_code() {
-    let cases: [(ResolveProblem, &Code); 7] = [
+fn each_secret_store_problem_is_unreadable_and_says_what_the_store_returned() {
+    let cases = [
         (
             ResolveProblem::Secret(SecretError::Locked),
-            &codes::SECRET_LOCKED,
+            "the secret store is locked",
         ),
         (
-            ResolveProblem::Secret(SecretError::NotFound),
-            &codes::SECRET_NOT_FOUND,
+            ResolveProblem::Deadline,
+            "the secret store did not answer in time",
         ),
         (
-            ResolveProblem::Secret(SecretError::Denied),
-            &codes::SECRET_DENIED,
+            ResolveProblem::NoResolver,
+            "no resolver handles this secret",
         ),
-        (
-            ResolveProblem::Secret(SecretError::Unsupported),
-            &codes::SECRET_UNSUPPORTED,
-        ),
-        (
-            ResolveProblem::Secret(SecretError::Program(std::io::Error::other("op failed"))),
-            &codes::SECRET_UNREADABLE,
-        ),
-        (
-            ResolveProblem::Secret(SecretError::Deadline),
-            &codes::SECRET_DEADLINE,
-        ),
-        (ResolveProblem::Deadline, &codes::SECRET_DEADLINE),
     ];
-    for (problem, code) in cases {
+    for (problem, says) in cases {
         let failure = RunFailure::resolve(name("SHELF_MIRROR_TOKEN"), problem);
-        assert_eq!(crumbkit::Failure::code(&failure), code, "{failure}");
-        assert!(failure.to_string().contains("SHELF_MIRROR_TOKEN"));
+        assert_eq!(crumbkit::Failure::code(&failure), &codes::SECRET_UNREADABLE);
+        assert_eq!(
+            failure.to_string(),
+            format!("SHELF_MIRROR_TOKEN could not be read, because {says}")
+        );
     }
+}
+
+#[test]
+fn an_unbound_secret_is_not_asked_for_when_another_variable_fails() {
+    let checkout = Checkout::with_spec(&format!("{SPEC}{REQUIRED_PORT}"), None);
+    let mut person = Person::typing("typed-test-value", true);
+    let refused = prepared(
+        &checkout.args(&[]),
+        &[],
+        &FakeResolver::default(),
+        &mut person,
+    )
+    .unwrap_err();
+    assert_eq!(
+        codes(&refused),
+        [&codes::BIND_NO_PROVIDER, &codes::SECRET_UNBOUND]
+    );
+    assert!(person.asked.is_empty(), "{:?}", person.asked);
+
+    let mut person = Person::typing("typed-test-value", false);
+    prepared(
+        &checkout.args(&[]),
+        &[("SHELF_API_PORT", "8080")],
+        &FakeResolver::default(),
+        &mut person,
+    )
+    .unwrap();
+    assert_eq!(
+        person.asked.first().map(String::as_str),
+        Some("secret SHELF_UPSTREAM_TOKEN")
+    );
+}
+
+/// A required provided variable, which fails resolution without a value.
+const REQUIRED_PORT: &str = r#"
+[variables.SHELF_API_PORT]
+purpose = "The port the api process listens on, which a host provides."
+type = "port"
+unset = "required"
+show = "shown"
+source = "provided"
+bind = { provided = "multiverse/port", process = "api" }
+"#;
+
+/// A spec with a bound secret and a generated one, which a run resolves
+/// through 1Password and the Keychain.
+const BOUND_AND_GENERATED: &str = r#"
+[variables.SHELF_MIRROR_TOKEN]
+purpose = "The token shelf sends to the catalogue mirror."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+bind = { one-password = "op://Personal/shelf mirror/token" }
+
+[variables.SHELF_SESSION_KEY]
+purpose = "Signs the cookies of the web view."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "generated"
+bytes = 48
+"#;
+
+/// A resolver that counts its calls and answers every lookup.
+#[derive(Default)]
+struct Counting {
+    calls: Cell<usize>,
+}
+
+impl Resolver for Counting {
+    fn resolve(
+        &self,
+        _lookup: Lookup<'_>,
+        _deadline: Instant,
+    ) -> Result<Secret<String>, SecretError> {
+        self.calls.set(self.calls.get() + 1);
+        Ok(Secret::new("from-the-store".to_owned()))
+    }
+}
+
+/// Parses `starmap run` with `flags` against the spec in `checkout`, and
+/// runs it with `resolver`, without input. The program is `true`.
+fn run_counted(checkout: &Checkout, flags: &[&str], resolver: &Counting) {
+    let spec = checkout.dir.join("starmap.toml");
+    let mut words = vec!["starmap", "run", "--no-input"];
+    words.extend_from_slice(flags);
+    words.extend(["--spec", spec.to_str().unwrap(), "--", "true"]);
+    let Ok((cli, output)) = crumbkit::parse_from::<Cli, _, _>(Cli::command(), &GUIDE, words) else {
+        panic!("the command line does not parse");
+    };
+    let Verb::Run(args) = cli.verb else {
+        panic!("the command line is not run");
+    };
+    let mut notes = Vec::new();
+    let _ = run_with(&args, Vec::new(), output, true, &mut notes, &[resolver]);
+}
+
+#[test]
+fn json_is_refused_before_any_secret_store_is_asked() {
+    let checkout = Checkout::with_spec(BOUND_AND_GENERATED, None);
+
+    let resolver = Counting::default();
+    run_counted(&checkout, &["--json"], &resolver);
+    assert_eq!(resolver.calls.get(), 0);
+
+    let resolver = Counting::default();
+    run_counted(&checkout, &[], &resolver);
+    assert_eq!(resolver.calls.get(), 2);
 }

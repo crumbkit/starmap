@@ -49,8 +49,10 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: clippy
         run: cargo clippy --locked --package starmap-resolve --all-targets --features keychain
-      # The tests create items in the runner's login keychain under the
-      # test-only service prefix `starmap.starmap-test-`, and delete them
-      # when they finish.
+      # The Keychain tests create items in the runner's login keychain under
+      # the test-only service prefix `starmap.starmap-test-`, and delete them
+      # when they finish. They are ignored by default, so `cargo test` on a
+      # Mac never writes to the developer's login keychain, and this lane
+      # runs them with --run-ignored all.
       - name: keychain
-        run: cargo nextest run --locked --package starmap-resolve --features keychain
+        run: cargo nextest run --locked --package starmap-resolve --features keychain --run-ignored all

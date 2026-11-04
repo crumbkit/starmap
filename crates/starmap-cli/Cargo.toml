@@ -49,7 +49,6 @@ crumbkit-child = { workspace = true }
 # `run` resolves every variable, reads `op://` binds through the 1Password
 # CLI, and keeps generated and typed secrets in the macOS Keychain.
 starmap-resolve = { workspace = true, features = ["one-password", "keychain"] }
-dotenvy = { workspace = true }
 rpassword = { workspace = true }
 # `run` zeroes the bytes of `.env` and each typed secret once it holds them.
 zeroize = { workspace = true }

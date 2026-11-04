@@ -77,3 +77,64 @@ fn a_file_over_the_limit_is_refused_as_unreadable() {
         [DotEnvFailure::Unreadable { .. }]
     ));
 }
+
+/// Returns the value that `.env` holding `line` gives `SHELF_DEBUG`.
+fn debug_value(line: &str) -> Result<String, Vec<DotEnvFailure>> {
+    let dotenv = read_text(format!("# first\n{line}\n").as_bytes())?;
+    let [(_, value)] = dotenv.values.as_slice() else {
+        panic!("{line}: {:?}", dotenv.values);
+    };
+    Ok(value.to_string_lossy().into_owned())
+}
+
+#[test]
+fn each_accepted_form_gives_its_value() {
+    let cases = [
+        ("SHELF_DEBUG=true", "true"),
+        ("export SHELF_DEBUG=true", "true"),
+        ("  SHELF_DEBUG = true  ", "true"),
+        ("SHELF_DEBUG=true # a comment", "true"),
+        ("SHELF_DEBUG='a b # c'", "a b # c"),
+        ("SHELF_DEBUG=\"a b # c\" # a comment", "a b # c"),
+        ("SHELF_DEBUG=", ""),
+        ("SHELF_DEBUG=$HOME", "$HOME"),
+        ("SHELF_DEBUG='${HOME}'", "${HOME}"),
+        ("SHELF_DEBUG=\"pre-$HOME\"", "pre-$HOME"),
+        ("SHELF_DEBUG=a\\b", "a\\b"),
+    ];
+    for (line, expected) in cases {
+        assert_eq!(debug_value(line).unwrap(), expected, "{line}");
+    }
+}
+
+#[test]
+fn blank_lines_and_comments_give_nothing() {
+    let dotenv = read_text(b"\n   \n# SHELF_DEBUG=true\n  # indented\n").unwrap();
+    assert!(dotenv.values.is_empty());
+    assert!(dotenv.undeclared.is_empty());
+}
+
+#[test]
+fn each_refused_line_names_its_number_only_and_its_twin_is_accepted() {
+    let cases = [
+        ("SHELF_DEBUG true", "SHELF_DEBUG=true"),
+        ("SHELF-DEBUG=true", "SHELF_DEBUG=true"),
+        ("=true", "SHELF_DEBUG=true"),
+        ("SHELF_DEBUG='multi", "SHELF_DEBUG='multi'"),
+        ("SHELF_DEBUG=\"a\\nb\"", "SHELF_DEBUG=\"anb\""),
+        ("SHELF_DEBUG='a' b", "SHELF_DEBUG='a b'"),
+        ("SHELF_DEBUG=it's", "SHELF_DEBUG=\"it's\""),
+    ];
+    for (refused, admitted) in cases {
+        let failures = debug_value(refused).unwrap_err();
+        let [DotEnvFailure::Syntax { at }] = failures.as_slice() else {
+            panic!("{refused}: {failures:?}");
+        };
+        assert!(at.ends_with(".env:2"), "{refused}: {at}");
+        assert!(
+            !failures[0].to_string().contains("SHELF_DEBUG"),
+            "{refused}"
+        );
+        assert!(debug_value(admitted).is_ok(), "{admitted}");
+    }
+}

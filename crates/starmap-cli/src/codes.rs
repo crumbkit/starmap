@@ -81,18 +81,10 @@ pub const BIND_NO_PLACE: Code = Code::new("starmap", "bind", "no_place");
 /// A required secret has no bind, no value in the shell and no saved
 /// value, and no person can type it.
 pub const SECRET_UNBOUND: Code = Code::new("starmap", "secret", "unbound");
-/// The secret store is locked or signed out.
-pub const SECRET_LOCKED: Code = Code::new("starmap", "secret", "locked");
-/// A secret's reference names no item or field.
-pub const SECRET_NOT_FOUND: Code = Code::new("starmap", "secret", "not_found");
-/// The person refused the secret store's prompt.
-pub const SECRET_DENIED: Code = Code::new("starmap", "secret", "denied");
-/// No resolver of this build or platform handles the secret.
-pub const SECRET_UNSUPPORTED: Code = Code::new("starmap", "secret", "unsupported");
-/// The program that reads the secret store failed.
+/// A secret store could not return a secret: it is locked, has no such
+/// item, was refused, is missing on this platform, failed, or did not
+/// answer in time. The message names which.
 pub const SECRET_UNREADABLE: Code = Code::new("starmap", "secret", "unreadable");
-/// Resolution passed its deadline.
-pub const SECRET_DEADLINE: Code = Code::new("starmap", "secret", "deadline");
 
 /// Every code above.
 pub const ALL: &[&Code] = &[
@@ -132,10 +124,5 @@ pub const ALL: &[&Code] = &[
     &BIND_NO_PROVIDER,
     &BIND_NO_PLACE,
     &SECRET_UNBOUND,
-    &SECRET_LOCKED,
-    &SECRET_NOT_FOUND,
-    &SECRET_DENIED,
-    &SECRET_UNSUPPORTED,
     &SECRET_UNREADABLE,
-    &SECRET_DEADLINE,
 ];

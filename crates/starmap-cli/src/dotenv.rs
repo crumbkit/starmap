@@ -2,9 +2,12 @@
 //! setting, inherited and provided values from. It is the only module that
 //! opens `.env`, and apps never read the file themselves.
 //!
-//! dotenvy parses the file as the ecosystem's tools do, including `$NAME`
-//! and `${NAME}`, which it expands from earlier lines of the file and then
-//! from the environment of the process that runs starmap.
+//! starmap reads a small part of the `.env` format: `NAME=value` lines, an
+//! optional `export ` before the name, values in single or double quotes,
+//! blank lines and `#` comments. It never expands anything, so every `$`
+//! is literal and the process environment is never read. Any other line,
+//! such as a value over several lines or an escape in double quotes, is
+//! refused.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -52,12 +55,11 @@ pub(crate) enum DotEnvFailure {
     /// A line does not follow the `.env` format.
     #[failure(
         code = DOTENV_SYNTAX,
-        hint = "write the line as NAME=value, and quote a value that holds spaces or #",
+        hint = "write the line as NAME=value on one line, and put a value that holds spaces, # or quotes in single quotes, without escapes",
         field(at = at.as_str()),
     )]
     Syntax {
-        /// The file and the line, such as `.env:4`, or the file alone
-        /// when the line cannot be found.
+        /// The file and the line, such as `.env:4`.
         at: String,
     },
     /// The file sets a secret or generated variable, which only its bind,
@@ -118,11 +120,22 @@ pub(crate) fn read(file: &Path, spec: &Spec) -> Result<DotEnv, Vec<DotEnvFailure
         let error = io::Error::other("the file is over 256 KiB");
         return Err(vec![DotEnvFailure::Unreadable { file: shown, error }]);
     }
+    let Ok(text) = std::str::from_utf8(&bytes) else {
+        let error = io::Error::other("the file is not UTF-8 text");
+        return Err(vec![DotEnvFailure::Unreadable { file: shown, error }]);
+    };
     let mut dotenv = DotEnv::default();
     let mut secrets = Vec::new();
-    for entry in dotenvy::from_read_iter(&bytes[..]) {
-        let (key, value) = entry.map_err(|error| vec![parse_failure(&shown, &bytes, error)])?;
-        let value = Zeroizing::new(value);
+    for (number, line) in text.lines().enumerate() {
+        let Some((key, value)) = entry(line).map_err(|()| {
+            let at = format!("{shown}:{}", number + 1);
+            vec![DotEnvFailure::Syntax { at }]
+        })?
+        else {
+            continue;
+        };
+        let key = key.to_owned();
+        let value = Zeroizing::new(value.to_owned());
         let declared = key
             .parse::<Name>()
             .ok()
@@ -149,38 +162,53 @@ pub(crate) fn read(file: &Path, spec: &Spec) -> Result<DotEnv, Vec<DotEnvFailure
     }
 }
 
-/// Returns the failure of a file whose bytes `bytes` dotenvy could not
-/// parse. A line that dotenvy names is found in the file by its text, and
-/// the failure names its number, never its text, which may hold a secret.
-fn parse_failure(file: &str, bytes: &[u8], error: dotenvy::Error) -> DotEnvFailure {
-    match error {
-        dotenvy::Error::LineParse(line, _) => {
-            let line = Zeroizing::new(line);
-            let text = Zeroizing::new(String::from_utf8_lossy(bytes).into_owned());
-            let at = text.find(line.as_str()).map_or_else(
-                || file.to_owned(),
-                |offset| {
-                    let number = text
-                        .get(..offset)
-                        .map_or(0, |before| before.matches('\n').count());
-                    format!("{file}:{}", number + 1)
-                },
-            );
-            DotEnvFailure::Syntax { at }
-        }
-        dotenvy::Error::Io(error) => DotEnvFailure::Unreadable {
-            file: file.to_owned(),
-            error,
-        },
-        dotenvy::Error::EnvVar(error) => DotEnvFailure::Unreadable {
-            file: file.to_owned(),
-            error: io::Error::other(error),
-        },
-        // A kind of error that a later dotenvy adds reads as a file that
-        // cannot be read, until this module learns it.
-        _ => DotEnvFailure::Unreadable {
-            file: file.to_owned(),
-            error: io::Error::other("dotenvy cannot parse the file"),
-        },
+/// Returns the name and value of one line of `.env`, or `None` for a
+/// blank line or a comment. The value is the text between its quotes, or
+/// the unquoted text before a ` #` comment, with spaces trimmed.
+///
+/// # Errors
+///
+/// Returns `Err` for a line that is not in the format starmap reads.
+fn entry(line: &str) -> Result<Option<(&str, &str)>, ()> {
+    let line = line.trim();
+    if line.is_empty() || line.starts_with('#') {
+        return Ok(None);
     }
+    let line = line.strip_prefix("export ").unwrap_or(line);
+    let (key, raw) = line.split_once('=').ok_or(())?;
+    let key = key.trim();
+    let named = key
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if !named {
+        return Err(());
+    }
+    let raw = raw.trim();
+    let quoted = ['\'', '"']
+        .into_iter()
+        .find_map(|quote| raw.strip_prefix(quote).map(|inner| (quote, inner)));
+    let value = match quoted {
+        Some((quote, inner)) => {
+            let (value, rest) = inner.split_once(quote).ok_or(())?;
+            let rest = rest.trim_start();
+            if (quote == '"' && value.contains('\\')) || !(rest.is_empty() || rest.starts_with('#'))
+            {
+                return Err(());
+            }
+            value
+        }
+        None => {
+            let value = raw
+                .split_once(" #")
+                .map_or(raw, |(value, _)| value)
+                .trim_end();
+            if value.contains(['\'', '"']) {
+                return Err(());
+            }
+            value
+        }
+    };
+    Ok(Some((key, value)))
 }

@@ -1,7 +1,0 @@
-# A spec whose required setting has no default.
-[variables.SHELF_NAME]
-purpose = "The name the catalogue shows."
-type = "string"
-unset = "required"
-show = "shown"
-source = "setting"

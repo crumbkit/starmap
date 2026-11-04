@@ -42,7 +42,11 @@ const RUN_FIXTURES: &str = "tests/fixtures/run";
 const RUN_RESOLVES: &str = "The example directory's spec reads a secret through op and keeps a generated value in the Keychain, which a test must not touch, and the examples run cargo, so tests/run.rs runs the command against fixtures without either and checks what the program receives.";
 
 /// The reason that the failures of `run` have no twin here.
-const RUN_TWINS: &str = "The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.";
+const RUN_TWINS: &str = "The twin check runs each admitted line with --json, which run refuses after it reads the spec, .env and --set, because the program takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.";
+
+/// The reason that the failures of `run` after resolution are not
+/// provoked here.
+const RUN_RESOLVES_FIRST: &str = "The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.";
 
 /// The reason that the examples of `init` do not run in the example
 /// directory.
@@ -69,11 +73,6 @@ const ALLOW: &[Allow] = &[
     Allow::untwinned(STARTS[25], RUN_TWINS),
     Allow::untwinned(STARTS[26], RUN_TWINS),
     Allow::untwinned(STARTS[27], RUN_TWINS),
-    Allow::untwinned(STARTS[28], RUN_TWINS),
-    Allow::untwinned(STARTS[29], RUN_TWINS),
-    Allow::untwinned(STARTS[30], RUN_TWINS),
-    Allow::untwinned(STARTS[31], RUN_TWINS),
-    Allow::untwinned(STARTS[32], RUN_TWINS),
     Allow::new(
         Rule::Items,
         "run",
@@ -359,63 +358,6 @@ const STARTS: &[Failing<'static>] = &[
             "/usr/bin/true",
         ],
     ),
-    run(
-        &codes::VARIABLE_MISSING,
-        &[
-            "run",
-            "--no-input",
-            "--spec",
-            "missing.toml",
-            "--",
-            "/usr/bin/true",
-        ],
-    ),
-    run(
-        &codes::VARIABLE_INVALID,
-        &[
-            "run",
-            "--no-input",
-            "--set",
-            "SHELF_PAGE_SIZE=1000",
-            "--",
-            "/usr/bin/true",
-        ],
-    ),
-    run(
-        &codes::BIND_NO_PROVIDER,
-        &[
-            "run",
-            "--no-input",
-            "--spec",
-            "provided.toml",
-            "--",
-            "/usr/bin/true",
-        ],
-    ),
-    run(
-        &codes::BIND_NO_PLACE,
-        &[
-            "run",
-            "--no-input",
-            "--spec",
-            "home.toml",
-            "--",
-            "/usr/bin/true",
-        ],
-    ),
-    run(
-        &codes::SECRET_UNBOUND,
-        &[
-            "run",
-            "--no-input",
-            "--spec",
-            "unbound.toml",
-            "--workspace",
-            "starmap-test-run",
-            "--",
-            "/usr/bin/true",
-        ],
-    ),
 ];
 
 /// A revision that starts with `-`, which diff refuses before git runs, so
@@ -434,19 +376,16 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
         &codes::REVISION_UNREADABLE,
         "Only a git that cannot start or cannot read the repository provokes it, which no fixture can set up portably.",
     ),
-    Unprovoked::new(&codes::SECRET_LOCKED, SECRET_STORE),
-    Unprovoked::new(&codes::SECRET_NOT_FOUND, SECRET_STORE),
-    Unprovoked::new(&codes::SECRET_DENIED, SECRET_STORE),
-    Unprovoked::new(&codes::SECRET_UNREADABLE, SECRET_STORE),
-    Unprovoked::new(&codes::SECRET_DEADLINE, SECRET_STORE),
+    Unprovoked::new(&codes::VARIABLE_MISSING, RUN_RESOLVES_FIRST),
+    Unprovoked::new(&codes::VARIABLE_INVALID, RUN_RESOLVES_FIRST),
+    Unprovoked::new(&codes::BIND_NO_PROVIDER, RUN_RESOLVES_FIRST),
+    Unprovoked::new(&codes::BIND_NO_PLACE, RUN_RESOLVES_FIRST),
+    Unprovoked::new(&codes::SECRET_UNBOUND, RUN_RESOLVES_FIRST),
     Unprovoked::new(
-        &codes::SECRET_UNSUPPORTED,
-        "Only a generated value on a platform without a Keychain provokes it, and on macOS the same line would create a Keychain item, so src/run/tests.rs and starmap-resolve's tests check the mapping instead.",
+        &codes::SECRET_UNREADABLE,
+        "Only 1Password or the Keychain provokes it, which a test must not touch, so starmap-resolve's tests provoke each SecretError through a fake op program and a fake resolver, and src/run/tests.rs checks how run reports one.",
     ),
 ];
-
-/// The reason that the failures of a secret store are not provoked.
-const SECRET_STORE: &str = "Only 1Password or the Keychain provokes it, which a test must not touch, so starmap-resolve's tests provoke each SecretError through a fake op program and a fake resolver, and src/run.rs maps each one to its code.";
 
 /// The settings of the recovery check.
 const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, &[codes::ALL])

@@ -12,9 +12,10 @@
 
 use std::ffi::OsString;
 use std::fmt;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 use crumbkit::{Failure, Output, Sink};
@@ -29,8 +30,7 @@ use starmap_resolve::{
 
 use crate::cli::{Assignment, RunArgs};
 use crate::codes::{
-    BIND_NO_PLACE, BIND_NO_PROVIDER, SECRET_DEADLINE, SECRET_DENIED, SECRET_LOCKED,
-    SECRET_NOT_FOUND, SECRET_UNBOUND, SECRET_UNREADABLE, SECRET_UNSUPPORTED, VARIABLE_INVALID,
+    BIND_NO_PLACE, BIND_NO_PROVIDER, SECRET_UNBOUND, SECRET_UNREADABLE, VARIABLE_INVALID,
     VARIABLE_MISSING, VARIABLE_SECRET, VARIABLE_UNKNOWN,
 };
 use crate::dotenv::{self, DotEnvFailure};
@@ -53,41 +53,69 @@ const RESOLVE_DEADLINE: Duration = Duration::from_secs(60);
 /// How long saving one typed secret to the Keychain may take.
 const SAVE_DEADLINE: Duration = Duration::from_secs(30);
 
-/// Why `--json` and `--fields` are refused.
+/// Why `--fields` is refused. crumbkit-child 0.1.0 keeps its own copy of
+/// this text private, so this one repeats it word for word.
 const TEXT_ONLY: &str = "this command hands the terminal to another program";
 
 /// Runs `args.program` with the environment that the spec declares, and
 /// returns its exit code. `vars` is the process environment, and `notes`
 /// receives each note before the program starts. `no_input` says whether
-/// the caller passed `--no-input`.
+/// the caller passed `--no-input`. 1Password and the Keychain resolve the
+/// secrets.
 pub(crate) fn run(
+    args: &RunArgs,
+    vars: Vec<(OsString, OsString)>,
+    output: Output,
+    no_input: bool,
+    notes: &mut dyn Write,
+) -> ExitCode {
+    let one_password = OnePassword::new(PathBuf::from("op"));
+    let keychain = Keychain::new();
+    run_with(
+        args,
+        vars,
+        output,
+        no_input,
+        notes,
+        &[&one_password, &keychain],
+    )
+}
+
+/// Runs `args.program` as [`run`] does, with `resolvers` resolving the
+/// secrets.
+fn run_with(
     args: &RunArgs,
     vars: Vec<(OsString, OsString)>,
     mut output: Output,
     no_input: bool,
     notes: &mut dyn Write,
+    resolvers: &[&dyn Resolver],
 ) -> ExitCode {
     let mut sink = Sink::standard();
     if let Some(code) = output.refuse_fields_for_text(&mut sink, TEXT_ONLY) {
         return code;
     }
     let mut command = child::command(&args.program);
-    // With --json, a failure prints as JSON for the caller that reads it,
-    // no question is asked, and crumbkit-child refuses to start the program
-    // once the environment is ready.
-    let interactive = !no_input && !output.is_json() && ask::terminals();
-    let one_password = OnePassword::new(PathBuf::from("op"));
-    let keychain = Keychain::new();
-    let resolvers: [&dyn Resolver; 2] = [&one_password, &keychain];
-    let prepared = {
-        let mut terminal = Terminal::new(&mut output, interactive);
-        prepare(args, vars, &resolvers, &mut terminal)
+    let gathered = match gather(args, vars) {
+        Ok(gathered) => gathered,
+        Err(refused) => return refuse(&mut sink, &mut output, &refused, notes),
     };
-    match prepared {
+    if output.is_json() {
+        print_notes(notes, &gathered.notes);
+        // crumbkit-child refuses --json before it starts anything, because
+        // the program takes the terminal. Refusing here, before
+        // resolution, means no secret store is asked and no Keychain item
+        // is created for a run that cannot start.
+        return crumbkit_child::hand_over(output, command);
+    }
+    let interactive = !no_input && ask::terminals();
+    let settled = {
+        let mut terminal = Terminal::new(&mut output, interactive);
+        settle(gathered, resolvers, &mut terminal)
+    };
+    match settled {
         Ok(ready) => {
-            for note in &ready.notes {
-                let _ = writeln!(notes, "{note}");
-            }
+            print_notes(notes, &ready.notes);
             ready.environment.apply(&mut command);
             // BASE-37: hand_over ignores SIGINT and SIGQUIT, which the
             // terminal sends to the program too, and forwards no signal.
@@ -96,19 +124,34 @@ pub(crate) fn run(
             // running. Signal forwarding in crumbkit-child replaces this.
             crumbkit_child::hand_over(output, command)
         }
-        Err(refused) => {
-            for failure in &refused.failures {
-                output.print_failure(&mut sink, failure);
-            }
-            for note in &refused.notes {
-                let _ = writeln!(notes, "{note}");
-            }
-            let code = refused
-                .failures
-                .first()
-                .map_or(1, |failure| output.failure_exit(failure.code()));
-            crumbkit::events::ended(code, None)
-        }
+        Err(refused) => refuse(&mut sink, &mut output, &refused, notes),
+    }
+}
+
+/// Prints each failure of `refused` and then its notes, and returns the
+/// exit code of its first failure.
+fn refuse<O: Write, E: Write>(
+    sink: &mut Sink<O, E>,
+    output: &mut Output,
+    refused: &Refused,
+    notes: &mut dyn Write,
+) -> ExitCode {
+    for failure in &refused.failures {
+        output.print_failure(sink, failure);
+    }
+    print_notes(notes, &refused.notes);
+    let code = refused
+        .failures
+        .first()
+        .map_or(1, |failure| output.failure_exit(failure.code()));
+    crumbkit::events::ended(code, None)
+}
+
+/// Writes each of `lines` to `notes`. A note that cannot be written is
+/// dropped, because the run's outcome does not depend on it.
+fn print_notes(notes: &mut dyn Write, lines: &[String]) {
+    for line in lines {
+        let _ = writeln!(notes, "{line}");
     }
 }
 
@@ -145,19 +188,28 @@ impl Refused {
     }
 }
 
-/// Reads the spec and `.env`, takes the caller's values, resolves every
-/// variable with `resolvers`, asks `ask` for each required secret that
-/// nothing supplies, and checks the result.
+/// Everything a run knows before it asks a secret store: the spec, the
+/// caller's values, the mode and the places.
+#[derive(Debug)]
+pub(crate) struct Gathered {
+    spec: Spec,
+    caller: Bindings,
+    mode: Mode,
+    places: Places,
+    /// The workspace and app that a typed secret is saved under. Both are
+    /// present unless the name rule of starmap-resolve changes so that a
+    /// [`label`] or `app` no longer fits it.
+    names: Option<(WorkspaceName, AppName)>,
+    notes: Vec<String>,
+}
+
+/// Reads the spec and `.env`, takes the caller's values and decides the
+/// mode. It asks no secret store.
 ///
 /// # Errors
 ///
-/// Returns every failure that stops the program from starting.
-pub(crate) fn prepare(
-    args: &RunArgs,
-    vars: Vec<(OsString, OsString)>,
-    resolvers: &[&dyn Resolver],
-    ask: &mut dyn Ask,
-) -> Result<Ready, Refused> {
+/// Returns every failure of the spec, `.env` or `--set`.
+pub(crate) fn gather(args: &RunArgs, vars: Vec<(OsString, OsString)>) -> Result<Gathered, Refused> {
     let mut notes = Vec::new();
     let path = &args.file.spec;
     let spec =
@@ -191,13 +243,45 @@ pub(crate) fn prepare(
     notes.push(mode_note);
 
     let label = label(&checkout);
-    let workspace = args.workspace.clone().unwrap_or_else(|| label.workspace());
-    let app = label.app();
-    let mut places =
-        Places::new(checkout.clone()).workspace(workspace.clone(), app.clone(), checkout);
+    let workspace = args.workspace.clone().or_else(|| named(&label));
+    let names = workspace.zip(named::<AppName>(&label));
+    let mut places = Places::new(checkout.clone());
+    if let Some((workspace, app)) = &names {
+        places = places.workspace(workspace.clone(), app.clone(), checkout);
+    }
     if let Some(home) = home {
         places = places.home(home);
     }
+    Ok(Gathered {
+        spec,
+        caller,
+        mode,
+        places,
+        names,
+        notes,
+    })
+}
+
+/// Resolves every variable of `gathered` with `resolvers`, asks `ask` for
+/// each required secret that nothing supplies when nothing else failed,
+/// and checks the result.
+///
+/// # Errors
+///
+/// Returns every failure that stops the program from starting.
+pub(crate) fn settle(
+    gathered: Gathered,
+    resolvers: &[&dyn Resolver],
+    ask: &mut dyn Ask,
+) -> Result<Ready, Refused> {
+    let Gathered {
+        spec,
+        caller,
+        mode,
+        places,
+        names,
+        mut notes,
+    } = gathered;
     let deadline = Instant::now() + RESOLVE_DEADLINE;
     let mut context = Context::new(places, &caller, deadline);
     for resolver in resolvers {
@@ -208,19 +292,27 @@ pub(crate) fn prepare(
         notes.push(ignored_note(&spec, name));
     }
     let mut bindings = resolution.bindings;
-    let mut failures = Vec::new();
-    let held = Held {
-        workspace: &workspace,
-        app: &app,
-    };
-    for failure in resolution.failures {
-        if matches!(failure.problem, ResolveProblem::Unbound) {
-            match typed(&failure.name, held, resolvers, ask, &mut notes) {
-                Some(bound) => bindings.bind(failure.name, bound),
-                None => failures.push(RunFailure::Unbound { name: failure.name }),
+    let (unbound, other): (Vec<_>, Vec<_>) = resolution
+        .failures
+        .into_iter()
+        .partition(|failure| matches!(failure.problem, ResolveProblem::Unbound));
+    let mut failures: Vec<RunFailure> = other
+        .into_iter()
+        .map(|failure| RunFailure::resolve(failure.name, failure.problem))
+        .collect();
+    // A person is asked only when the typed values would let the program
+    // start, so nobody types a secret for a run that fails anyway.
+    let can_start = failures.is_empty();
+    for failure in unbound {
+        let typed = match (&names, can_start) {
+            (Some((workspace, app)), true) => {
+                typed(&failure.name, workspace, app, resolvers, ask, &mut notes)
             }
-        } else {
-            failures.push(RunFailure::resolve(failure.name, failure.problem));
+            _ => None,
+        };
+        match typed {
+            Some(bound) => bindings.bind(failure.name, bound),
+            None => failures.push(RunFailure::Unbound { name: failure.name }),
         }
     }
     if !failures.is_empty() {
@@ -249,19 +341,14 @@ fn checked(
     }
 }
 
-/// The workspace and app that a typed secret is saved under.
-#[derive(Debug, Clone, Copy)]
-struct Held<'a> {
-    workspace: &'a WorkspaceName,
-    app: &'a AppName,
-}
-
-/// Asks `ask` for the secret `name`, and offers to save the answer with the
-/// first of `resolvers` that keeps saved values. It returns `None` when no
-/// person can answer or the person typed nothing.
+/// Asks `ask` for the secret `name`, and offers to save the answer for
+/// `app` in `workspace` with the first of `resolvers` that keeps saved
+/// values. It returns `None` when no person can answer or the person typed
+/// nothing.
 fn typed(
     name: &Name,
-    held: Held<'_>,
+    workspace: &WorkspaceName,
+    app: &AppName,
     resolvers: &[&dyn Resolver],
     ask: &mut dyn Ask,
     notes: &mut Vec<String>,
@@ -270,17 +357,16 @@ fn typed(
         return None;
     }
     let secret = ask.secret(name)?;
+    let lookup = Lookup::Saved {
+        workspace,
+        app,
+        name,
+    };
+    let (workspace, app) = (workspace.as_str(), app.as_str());
     let question = format!(
-        "Save {name} to the Keychain for workspace {} and app {}, so later runs find it?",
-        held.workspace.as_str(),
-        held.app.as_str()
+        "Save {name} to the Keychain for workspace {workspace} and app {app}, so later runs find it?"
     );
     if ask.save(&question) {
-        let lookup = Lookup::Saved {
-            workspace: held.workspace,
-            app: held.app,
-            name,
-        };
         let deadline = Instant::now() + SAVE_DEADLINE;
         let mut result = Err(SecretError::Unsupported);
         for resolver in resolvers {
@@ -289,11 +375,12 @@ fn typed(
                 break;
             }
         }
+        // The Keychain keeps a value it already holds for the same item,
+        // so the note says what the Keychain holds, not that it took the
+        // typed value.
         notes.push(match result {
             Ok(()) => format!(
-                "starmap saved {name} to the Keychain as service starmap.{} and account {}/{name}.",
-                held.workspace.as_str(),
-                held.app.as_str()
+                "The Keychain holds {name} as service starmap.{workspace} and account {app}/{name}, and later runs read it from there."
             ),
             Err(error) => format!(
                 "starmap could not save {name} to the Keychain, because {error}, so only this run has it."
@@ -354,39 +441,21 @@ fn checkout(path: &Path) -> Result<PathBuf, Refused> {
         })
 }
 
-/// The name of a checkout's directory as a workspace and app name.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Label(String);
-
-impl Label {
-    /// Returns the label as the workspace name.
-    fn workspace(&self) -> WorkspaceName {
-        self.0
-            .parse()
-            .unwrap_or_else(|_| Self::fallback().workspace())
-    }
-
-    /// Returns the label as the app name.
-    fn app(&self) -> AppName {
-        self.0.parse().unwrap_or_else(|_| Self::fallback().app())
-    }
-
-    /// The label of a directory without a name, such as `/`.
-    fn fallback() -> Self {
-        Self("app".to_owned())
-    }
+/// Returns `label` as a workspace or app name, or `app` when `label` does
+/// not fit the name rule.
+fn named<T: FromStr>(label: &str) -> Option<T> {
+    label.parse().or_else(|_| "app".parse()).ok()
 }
 
 /// Returns the label of the directory `dir`: its name in lower case, with
 /// each character other than a letter, a digit or a hyphen written as a
 /// hyphen, and `app-` before a name that does not start with a letter. So
-/// `My_App` gives `my-app` and `.tmp9` gives `app--tmp9`.
-pub(crate) fn label(dir: &Path) -> Label {
-    let Some(name) = dir.file_name() else {
-        return Label::fallback();
-    };
-    let text: String = name
-        .to_string_lossy()
+/// `My_App` gives `my-app`, `.tmp9` gives `app--tmp9` and `/` gives `app`.
+pub(crate) fn label(dir: &Path) -> String {
+    let text: String = dir
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default()
         .chars()
         .map(|c| {
             let c = c.to_ascii_lowercase();
@@ -398,9 +467,9 @@ pub(crate) fn label(dir: &Path) -> Label {
         })
         .collect();
     match text.chars().next() {
-        Some(first) if first.is_ascii_lowercase() => Label(text),
-        Some(_) => Label(format!("app-{text}")),
-        None => Label::fallback(),
+        Some(first) if first.is_ascii_lowercase() => text,
+        Some(_) => format!("app-{text}"),
+        None => "app".to_owned(),
     }
 }
 
@@ -492,67 +561,17 @@ pub(crate) enum RunFailure {
         /// The variable.
         name: Name,
     },
-    /// The secret store is locked.
-    #[failure(
-        code = SECRET_LOCKED,
-        hint = "unlock 1Password or the Keychain, then run the command again",
-        field(key = name.as_str()),
-    )]
-    Locked {
-        /// The variable.
-        name: Name,
-    },
-    /// The secret's reference names no item or field.
-    #[failure(
-        code = SECRET_NOT_FOUND,
-        hint = "correct the bind of {name} in starmap.toml",
-        field(key = name.as_str()),
-    )]
-    NotFound {
-        /// The variable.
-        name: Name,
-    },
-    /// The person refused the secret store's prompt.
-    #[failure(
-        code = SECRET_DENIED,
-        hint = "run the command again and allow access",
-        field(key = name.as_str()),
-    )]
-    Denied {
-        /// The variable.
-        name: Name,
-    },
-    /// No resolver of this build or platform handles the secret.
-    #[failure(
-        code = SECRET_UNSUPPORTED,
-        hint = "run starmap run on macOS, where the Keychain keeps the value, or start the app under a host that supplies {name}",
-        field(key = name.as_str()),
-    )]
-    Unsupported {
-        /// The variable.
-        name: Name,
-    },
-    /// The program that reads the secret store failed.
+    /// A secret store could not return the secret.
     #[failure(
         code = SECRET_UNREADABLE,
-        hint = "check that the 1Password CLI op is installed and signed in, then run the command again",
+        hint = "check the bind of {name} in starmap.toml, unlock 1Password or the Keychain, and check that the 1Password CLI op is installed and signed in, then run the command again",
         field(key = name.as_str()),
     )]
-    Unreadable {
+    Secret {
         /// The variable.
         name: Name,
-        /// What failed.
-        problem: String,
-    },
-    /// Resolution passed its deadline.
-    #[failure(
-        code = SECRET_DEADLINE,
-        hint = "run the command again; {name} was the variable that waited",
-        field(key = name.as_str()),
-    )]
-    Deadline {
-        /// The variable.
-        name: Name,
+        /// What the secret store returned.
+        error: SecretError,
     },
 }
 
@@ -564,28 +583,25 @@ impl RunFailure {
             ResolveProblem::NoProvider(kind) => Self::NoProvider { name, kind },
             ResolveProblem::Placeholder(placeholder) => Self::NoPlace { name, placeholder },
             ResolveProblem::Unbound => Self::Unbound { name },
-            ResolveProblem::Deadline | ResolveProblem::Secret(SecretError::Deadline) => {
-                Self::Deadline { name }
-            }
-            ResolveProblem::Secret(SecretError::Locked) => Self::Locked { name },
-            ResolveProblem::Secret(SecretError::NotFound) => Self::NotFound { name },
-            ResolveProblem::Secret(SecretError::Denied) => Self::Denied { name },
-            ResolveProblem::NoResolver | ResolveProblem::Secret(SecretError::Unsupported) => {
-                Self::Unsupported { name }
-            }
-            ResolveProblem::Secret(error) => Self::Unreadable {
+            ResolveProblem::Secret(error) => Self::Secret { name, error },
+            ResolveProblem::Deadline => Self::Secret {
                 name,
-                problem: error.to_string(),
+                error: SecretError::Deadline,
             },
-            ResolveProblem::Provider(error) => Self::Unreadable {
+            ResolveProblem::NoResolver => Self::Secret {
                 name,
-                problem: error.to_string(),
+                error: SecretError::Unsupported,
             },
-            // A problem that a later starmap-resolve adds reads as a store
-            // that failed, until this command learns it.
-            _ => Self::Unreadable {
+            // run registers no provider, so a provider error reads as a
+            // store that failed. So does a problem that a later
+            // starmap-resolve adds, until this command learns it.
+            ResolveProblem::Provider(error) => Self::Secret {
                 name,
-                problem: "the value could not be resolved".to_owned(),
+                error: SecretError::Program(io::Error::other(error.to_string())),
+            },
+            _ => Self::Secret {
+                name,
+                error: SecretError::Program(io::Error::other("the value could not be resolved")),
             },
         }
     }
@@ -652,29 +668,9 @@ impl fmt::Display for RunFailure {
                 formatter,
                 "{name} is a secret with no bind, no value in this shell and no value saved in the Keychain"
             ),
-            Self::Locked { name } => write!(
-                formatter,
-                "{name} could not be read, because its secret store is locked"
-            ),
-            Self::NotFound { name } => write!(
-                formatter,
-                "{name} could not be read, because its bind names no item or field"
-            ),
-            Self::Denied { name } => write!(
-                formatter,
-                "{name} could not be read, because access to its secret store was refused"
-            ),
-            Self::Unsupported { name } => write!(
-                formatter,
-                "{name} needs a secret store that this build of starmap or this platform lacks"
-            ),
-            Self::Unreadable { name, problem } => {
-                write!(formatter, "{name} could not be read: {problem}")
+            Self::Secret { name, error } => {
+                write!(formatter, "{name} could not be read, because {error}")
             }
-            Self::Deadline { name } => write!(
-                formatter,
-                "{name} could not be read in time, because resolution passed its deadline"
-            ),
         }
     }
 }
@@ -684,6 +680,7 @@ impl std::error::Error for RunFailure {
         match self {
             Self::Spec(failure) => failure.source(),
             Self::DotEnv(failure) => failure.source(),
+            Self::Secret { error, .. } => Some(error),
             _ => None,
         }
     }

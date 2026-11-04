@@ -137,6 +137,7 @@ mod macos {
     }
 
     #[test]
+    #[ignore = "it writes to the login Keychain, so only the macOS lane runs it, with --run-ignored all"]
     fn a_generated_value_has_the_declared_bytes_and_is_returned_unchanged_afterwards() {
         let keychain = Keychain::new();
         let shelf = workspace("generate");
@@ -153,6 +154,7 @@ mod macos {
     }
 
     #[test]
+    #[ignore = "it writes to the login Keychain, so only the macOS lane runs it, with --run-ignored all"]
     fn forget_deletes_every_item_of_one_workspace_and_no_other() {
         let keychain = Keychain::new();
         // The kept workspace's name starts with the forgotten one's name.
@@ -174,6 +176,7 @@ mod macos {
     }
 
     #[test]
+    #[ignore = "it writes to the login Keychain, so only the macOS lane runs it, with --run-ignored all"]
     fn a_saved_secret_is_found_by_a_later_lookup_and_forgotten_with_its_workspace() {
         let keychain = Keychain::new();
         let saving = workspace("save");
@@ -204,6 +207,7 @@ mod macos {
     }
 
     #[test]
+    #[ignore = "it writes to the login Keychain, so only the macOS lane runs it, with --run-ignored all"]
     fn a_passed_deadline_returns_deadline_and_creates_nothing() {
         let keychain = Keychain::new();
         let late = workspace("deadline");
@@ -222,6 +226,7 @@ mod macos {
     }
 
     #[test]
+    #[ignore = "it writes to the login Keychain, so only the macOS lane runs it, with --run-ignored all"]
     fn a_second_store_of_the_same_item_returns_the_first_value_unchanged() {
         let keychain = Keychain::new();
         let raced = workspace("store");

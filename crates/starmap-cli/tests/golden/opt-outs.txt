@@ -1,4 +1,4 @@
-starmap has 18 opt-outs from the conventions.
+starmap has 13 opt-outs from the conventions.
 
 examples/run: starmap self usage
   Reason: The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.
@@ -26,39 +26,19 @@ examples/run: starmap run -- cargo run
   Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
 
 twins/no-twin: starmap run --no-input --spec dotenv-secret/starmap.toml -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
+  Reason: The twin check runs each admitted line with --json, which run refuses after it reads the spec, .env and --set, because the program takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
   Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
 
 twins/no-twin: starmap run --no-input --spec dotenv-syntax/starmap.toml -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
+  Reason: The twin check runs each admitted line with --json, which run refuses after it reads the spec, .env and --set, because the program takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
   Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
 
 twins/no-twin: starmap run --no-input --spec dotenv-unreadable/starmap.toml -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
+  Reason: The twin check runs each admitted line with --json, which run refuses after it reads the spec, .env and --set, because the program takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
   Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
 
 twins/no-twin: starmap run --no-input --set SHELF_UPSTREAM_TOKEN=x -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
-  Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
-
-twins/no-twin: starmap run --no-input --spec missing.toml -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
-  Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
-
-twins/no-twin: starmap run --no-input --set SHELF_PAGE_SIZE=1000 -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
-  Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
-
-twins/no-twin: starmap run --no-input --spec provided.toml -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
-  Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
-
-twins/no-twin: starmap run --no-input --spec home.toml -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
-  Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
-
-twins/no-twin: starmap run --no-input --spec unbound.toml --workspace starmap-test-run -- /usr/bin/true
-  Reason: The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
+  Reason: The twin check runs each admitted line with --json, which run refuses after it reads the spec, .env and --set, because the program takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.
   Cost: No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason.
 
 effects/items: starmap run

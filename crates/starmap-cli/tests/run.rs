@@ -181,7 +181,7 @@ fn a_required_secret_without_a_bind_is_refused_under_no_input() {
 }
 
 #[test]
-fn json_is_refused_before_anything_starts() {
+fn json_is_refused_after_the_spec_and_before_any_secret_or_the_program() {
     let run = starmap(
         Path::new(FIXTURES),
         &["run", "--json", "--", "sh", "-c", "echo started"],
@@ -191,6 +191,25 @@ fn json_is_refused_before_anything_starts() {
     let stdout = String::from_utf8_lossy(&run.get_output().stdout).into_owned();
     assert!(stdout.contains("starmap::cli::usage"), "{stdout}");
     assert!(!stdout.contains("started\n"), "{stdout}");
+}
+
+#[test]
+fn json_prints_a_failure_of_dotenv_as_json() {
+    let run = starmap(
+        Path::new(FIXTURES),
+        &[
+            "run",
+            "--json",
+            "--spec",
+            "dotenv-secret/starmap.toml",
+            "--",
+            "/usr/bin/true",
+        ],
+        &[],
+    )
+    .code(1);
+    let stdout = String::from_utf8_lossy(&run.get_output().stdout).into_owned();
+    assert!(stdout.contains("starmap::dotenv::secret"), "{stdout}");
 }
 
 #[test]
