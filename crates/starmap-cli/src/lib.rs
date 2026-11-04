@@ -1,4 +1,4 @@
-//! The `starmap` command, which writes, checks and explains an
+//! The `starmap` command, which writes, checks, explains and runs an
 //! application's declared environment.
 //!
 //! The library holds the whole command, and the `starmap` binary calls
@@ -12,11 +12,13 @@ mod cli;
 #[doc(hidden)]
 pub mod codes;
 mod diff;
+mod dotenv;
 mod explain;
 mod files;
 mod git;
 mod init;
 mod mode;
+mod run;
 mod scan;
 mod spec;
 
@@ -36,8 +38,8 @@ use crate::spec::SpecFailure;
 
 /// Parses `args`, runs the command and returns the process's exit code. The
 /// first argument is the program's name. `vars` is the process environment,
-/// which `main` reads once (BASE-6), and `check` and `explain` read the
-/// declared variables from it.
+/// which `main` reads once (BASE-6), and `check`, `explain` and `run` read
+/// the declared variables from it.
 ///
 /// `crumbkit::parse_from` prints help or a refused command line and returns
 /// the exit code. `crumbkit::finish` prints the result or the failure in
@@ -63,6 +65,15 @@ where
             crumbkit::finish(output, explain::EXPLAIN, explain::explain(&args, vars))
         }
         Verb::Diff(args) => crumbkit::finish(output, diff::DIFF, diff::diff(&args)),
+        Verb::Run(args) => {
+            let no_input = cli.no_input != crumbkit::NoInput::default();
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "run prints its notes on standard error before the child takes the terminal, after which nothing of starmap prints"
+            )]
+            let mut notes = std::io::stderr();
+            run::run(&args, vars, output, no_input, &mut notes)
+        }
         // `commands list`, `schemas` and `self usage` read the command tree through
         // `&mut output`, so each runs before `finish` takes `output`.
         Verb::Commands {

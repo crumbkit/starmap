@@ -1,0 +1,22 @@
+# A spec for starmap run: a setting with a default, a boolean setting and
+# an optional secret without a bind.
+[variables.SHELF_PAGE_SIZE]
+purpose = "How many books one page of a listing holds."
+type = { integer = { min = 1, max = 100 } }
+unset = { default = "20" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_DEBUG]
+purpose = "Logs each catalogue query."
+type = "boolean"
+unset = { default = "false" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_UPSTREAM_TOKEN]
+purpose = "The token shelf sends to the upstream catalogue."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "secret"

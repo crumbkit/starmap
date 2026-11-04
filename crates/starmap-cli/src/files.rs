@@ -77,3 +77,13 @@ pub(crate) fn write_new(path: &Path, text: &str) -> io::Result<()> {
 pub(crate) fn exists(path: &Path) -> bool {
     path.exists()
 }
+
+/// Returns the absolute path of `path` with every symbolic link resolved,
+/// which `starmap run` reads the checkout's directory name from.
+///
+/// # Errors
+///
+/// Returns the I/O error of a path that does not exist or cannot be read.
+pub(crate) fn canonical(path: &Path) -> io::Result<PathBuf> {
+    fs::canonicalize(path)
+}

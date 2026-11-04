@@ -1,0 +1,8 @@
+# A spec whose required setting has a path bind under the home directory.
+[variables.SHELF_DATA]
+purpose = "The directory that holds the catalogue."
+type = "path"
+unset = "required"
+show = "shown"
+source = "setting"
+bind = { path = "{home}/shelf" }

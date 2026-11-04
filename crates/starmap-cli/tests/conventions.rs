@@ -33,6 +33,17 @@ const SPEC_FIXTURES: &str = "../starmap/tests/spec";
 /// source, relative to this package.
 const SOURCE_FIXTURES: &str = "tests/fixtures";
 
+/// The directory that holds the specs and `.env` files of `run`, relative
+/// to this package.
+const RUN_FIXTURES: &str = "tests/fixtures/run";
+
+/// The reason that the examples of `run` do not run in the example
+/// directory.
+const RUN_RESOLVES: &str = "The example directory's spec reads a secret through op and keeps a generated value in the Keychain, which a test must not touch, and the examples run cargo, so tests/run.rs runs the command against fixtures without either and checks what the program receives.";
+
+/// The reason that the failures of `run` have no twin here.
+const RUN_TWINS: &str = "The twin check runs each admitted line with --json, which run refuses once the environment is ready, because the program then takes the terminal, so src/run/tests.rs pins each refusal of run beside an admitted line that differs in one value.";
+
 /// The reason that the examples of `init` do not run in the example
 /// directory.
 const INIT_RUNS_ELSEWHERE: &str = "The example directory holds starmap.toml, which init refuses to replace, so tests/init.rs runs init in a checkout without one and pins its output.";
@@ -53,6 +64,32 @@ const ALLOW: &[Allow] = &[
     Allow::example("init", &[], INIT_RUNS_ELSEWHERE),
     Allow::example("init", &["--dry-run"], INIT_RUNS_ELSEWHERE),
     Allow::example("diff", &["main"], DIFF_NEEDS_GIT),
+    Allow::example("run", &["--", "cargo", "run"], RUN_RESOLVES),
+    Allow::untwinned(STARTS[24], RUN_TWINS),
+    Allow::untwinned(STARTS[25], RUN_TWINS),
+    Allow::untwinned(STARTS[26], RUN_TWINS),
+    Allow::untwinned(STARTS[27], RUN_TWINS),
+    Allow::untwinned(STARTS[28], RUN_TWINS),
+    Allow::untwinned(STARTS[29], RUN_TWINS),
+    Allow::untwinned(STARTS[30], RUN_TWINS),
+    Allow::untwinned(STARTS[31], RUN_TWINS),
+    Allow::untwinned(STARTS[32], RUN_TWINS),
+    Allow::new(
+        Rule::Items,
+        "run",
+        "The words after -- are the command line of the one program that run starts, and run changes at most one Keychain item, after the person agrees.",
+    ),
+    Allow::option(
+        Rule::RepeatsAndCommas,
+        "run",
+        "--set",
+        "A value of --set is any text, which may hold commas, so each use gives one NAME=VALUE whole.",
+    ),
+    Allow::example(
+        "run",
+        &["--set", "SHELF_DEBUG=true", "--", "cargo", "run"],
+        RUN_RESOLVES,
+    ),
     Allow::untwinned(
         DASH_REVISION,
         "Every revision that diff accepts needs a git repository, and the example directory is not one, so tests/diff.rs pins an accepted revision there.",
@@ -194,6 +231,12 @@ const fn source(code: &'static Code, words: &'static [&'static str]) -> Failing<
     Failing::new(code, words).dir(SOURCE_FIXTURES)
 }
 
+/// Returns the command line `words`, which runs in [`RUN_FIXTURES`] and
+/// fails with `code`.
+const fn run(code: &'static Code, words: &'static [&'static str]) -> Failing<'static> {
+    Failing::new(code, words).dir(RUN_FIXTURES)
+}
+
 /// The command lines that fail, one for each declared code that a command
 /// line provokes. Each spec failure checks one fixture of
 /// [`SPEC_FIXTURES`], whose first problem has the failure's kind. The
@@ -272,6 +315,107 @@ const STARTS: &[Failing<'static>] = &[
         &["check", "--spec", "unreadable/starmap.toml"],
     ),
     DASH_REVISION,
+    run(
+        &codes::DOTENV_SECRET,
+        &[
+            "run",
+            "--no-input",
+            "--spec",
+            "dotenv-secret/starmap.toml",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
+    run(
+        &codes::DOTENV_SYNTAX,
+        &[
+            "run",
+            "--no-input",
+            "--spec",
+            "dotenv-syntax/starmap.toml",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
+    run(
+        &codes::DOTENV_UNREADABLE,
+        &[
+            "run",
+            "--no-input",
+            "--spec",
+            "dotenv-unreadable/starmap.toml",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
+    run(
+        &codes::VARIABLE_SECRET,
+        &[
+            "run",
+            "--no-input",
+            "--set",
+            "SHELF_UPSTREAM_TOKEN=x",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
+    run(
+        &codes::VARIABLE_MISSING,
+        &[
+            "run",
+            "--no-input",
+            "--spec",
+            "missing.toml",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
+    run(
+        &codes::VARIABLE_INVALID,
+        &[
+            "run",
+            "--no-input",
+            "--set",
+            "SHELF_PAGE_SIZE=1000",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
+    run(
+        &codes::BIND_NO_PROVIDER,
+        &[
+            "run",
+            "--no-input",
+            "--spec",
+            "provided.toml",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
+    run(
+        &codes::BIND_NO_PLACE,
+        &[
+            "run",
+            "--no-input",
+            "--spec",
+            "home.toml",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
+    run(
+        &codes::SECRET_UNBOUND,
+        &[
+            "run",
+            "--no-input",
+            "--spec",
+            "unbound.toml",
+            "--workspace",
+            "starmap-test-run",
+            "--",
+            "/usr/bin/true",
+        ],
+    ),
 ];
 
 /// A revision that starts with `-`, which diff refuses before git runs, so
@@ -290,7 +434,19 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
         &codes::REVISION_UNREADABLE,
         "Only a git that cannot start or cannot read the repository provokes it, which no fixture can set up portably.",
     ),
+    Unprovoked::new(&codes::SECRET_LOCKED, SECRET_STORE),
+    Unprovoked::new(&codes::SECRET_NOT_FOUND, SECRET_STORE),
+    Unprovoked::new(&codes::SECRET_DENIED, SECRET_STORE),
+    Unprovoked::new(&codes::SECRET_UNREADABLE, SECRET_STORE),
+    Unprovoked::new(&codes::SECRET_DEADLINE, SECRET_STORE),
+    Unprovoked::new(
+        &codes::SECRET_UNSUPPORTED,
+        "Only a generated value on a platform without a Keychain provokes it, and on macOS the same line would create a Keychain item, so src/run/tests.rs and starmap-resolve's tests check the mapping instead.",
+    ),
 ];
+
+/// The reason that the failures of a secret store are not provoked.
+const SECRET_STORE: &str = "Only 1Password or the Keychain provokes it, which a test must not touch, so starmap-resolve's tests provoke each SecretError through a fake op program and a fake resolver, and src/run.rs maps each one to its code.";
 
 /// The settings of the recovery check.
 const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, &[codes::ALL])

@@ -39,6 +39,14 @@ fn a_lookup_by_reference_is_left_to_another_resolver() {
     assert!(matches!(result, Err(SecretError::Unsupported)));
 }
 
+#[test]
+fn a_save_of_any_lookup_but_a_saved_one_is_left_to_another_resolver() {
+    let reference = SecretRef::OnePassword("op://Personal/shelf mirror/token".parse().unwrap());
+    let value = starmap::Secret::new("a-test-value".to_owned());
+    let result = Keychain::new().save(Lookup::Reference(&reference), &value, deadline());
+    assert!(matches!(result, Err(SecretError::Unsupported)));
+}
+
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
@@ -51,6 +59,20 @@ fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
     };
     assert!(matches!(
         keychain.resolve(lookup, deadline()),
+        Err(SecretError::Unsupported)
+    ));
+    let saved = Lookup::Saved {
+        workspace: &workspace("unsupported"),
+        app: &app("shelf"),
+        name: &name("SHELF_UPSTREAM_TOKEN"),
+    };
+    assert!(matches!(
+        keychain.resolve(saved, deadline()),
+        Err(SecretError::Unsupported)
+    ));
+    let value = starmap::Secret::new("a-test-value".to_owned());
+    assert!(matches!(
+        keychain.save(saved, &value, deadline()),
         Err(SecretError::Unsupported)
     ));
     assert!(matches!(
@@ -149,6 +171,36 @@ mod macos {
         assert_ne!(after, before);
         let unchanged = generated(&keychain, &kept, &app("shelf"), &key, size).unwrap();
         assert_eq!(unchanged, survivor);
+    }
+
+    #[test]
+    fn a_saved_secret_is_found_by_a_later_lookup_and_forgotten_with_its_workspace() {
+        let keychain = Keychain::new();
+        let saving = workspace("save");
+        let _cleanup = Cleanup(&keychain, vec![saving.clone()]);
+        let token = name("SHELF_UPSTREAM_TOKEN");
+        let shelf = app("shelf");
+        let lookup = Lookup::Saved {
+            workspace: &saving,
+            app: &shelf,
+            name: &token,
+        };
+
+        assert!(matches!(
+            keychain.resolve(lookup, deadline()),
+            Err(SecretError::NotFound)
+        ));
+        let typed = Secret::new("a-typed-test-value".to_owned());
+        keychain.save(lookup, &typed, deadline()).unwrap();
+        assert_eq!(
+            text(&keychain.resolve(lookup, deadline()).unwrap()),
+            "a-typed-test-value"
+        );
+        assert_eq!(keychain.forget(&saving).unwrap(), 1);
+        assert!(matches!(
+            keychain.resolve(lookup, deadline()),
+            Err(SecretError::NotFound)
+        ));
     }
 
     #[test]

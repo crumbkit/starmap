@@ -19,15 +19,15 @@ note = "The check counts the lines of each production `.rs` file that git lists,
 
 [[binding]]
 rule = "BASE-24"
-owners = ["crates/starmap/src/secret.rs", "crates/starmap/src/env.rs", "crates/starmap-resolve/src/resolve.rs"]
+owners = ["crates/starmap/src/secret.rs", "crates/starmap/src/env.rs", "crates/starmap-resolve/src/resolve.rs", "crates/starmap-resolve/src/keychain.rs"]
 checks = ["clippy disallowed_methods (clippy.toml), which refuses `expose_secret` and `starmap::Secret::expose` outside an `#[expect]` that gives its reason"]
-note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the only caller of `expose_secret`, which `Secret::expose` and the crate-private `Secret::duplicate` call. env.rs calls `Secret::expose` where `Environment::apply` sets a withheld value in a child's environment. starmap-resolve's resolve.rs calls it where it copies a caller's withheld value straight into a new `Secret`."
+note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the only caller of `expose_secret`, which `Secret::expose` and the crate-private `Secret::duplicate` call. env.rs calls `Secret::expose` where `Environment::apply` sets a withheld value in a child's environment. starmap-resolve's resolve.rs calls it where it copies a caller's withheld value straight into a new `Secret`, and keychain.rs where `Keychain::save` writes a typed secret into the Keychain."
 
 [[binding]]
 rule = "PROC-1"
-owners = ["crates/starmap-resolve/src/process.rs", "crates/starmap-cli/src/git.rs"]
+owners = ["crates/starmap-resolve/src/process.rs", "crates/starmap-cli/src/git.rs", "crates/starmap-cli/src/run/child.rs"]
 checks = ["clippy disallowed_methods and disallowed_types (clippy.toml), which refuse `Command::new`, its runs and `Child` outside an `#[expect]` that gives its reason"]
-note = "starmap reads PROC-1 as one module that starts processes in each crate. starmap-resolve's process.rs runs `op read`, and starmap-cli's git.rs runs `git rev-parse`, `git ls-tree` and `git cat-file` for `starmap diff`."
+note = "starmap reads PROC-1 as one module that starts processes in each crate. starmap-resolve's process.rs runs `op read`, and starmap-cli's git.rs runs `git rev-parse`, `git ls-tree` and `git cat-file` for `starmap diff`. starmap-cli's run/child.rs builds the command of the program that `starmap run` starts, and crumbkit-child starts and waits for it."
 
 [[decision]]
 id = "lanes"

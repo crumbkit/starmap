@@ -55,6 +55,27 @@ pub(super) fn generated(
     store(service, account, create(bytes)?, deadline)
 }
 
+/// Returns the value that [`save`] kept at `service` and `account`, or
+/// [`SecretError::NotFound`] when the Keychain holds none.
+pub(super) fn saved(
+    service: &str,
+    account: &str,
+    deadline: Instant,
+) -> Result<Secret<String>, SecretError> {
+    read(service, account, deadline)?.ok_or(SecretError::NotFound)
+}
+
+/// Keeps `value` at `service` and `account`. A value that the Keychain
+/// already holds there stays unchanged.
+pub(super) fn save(
+    service: &str,
+    account: &str,
+    value: Zeroizing<String>,
+    deadline: Instant,
+) -> Result<(), SecretError> {
+    store(service, account, value, deadline).map(drop)
+}
+
 /// Adds `value` at `service` and `account`, and returns the value that the
 /// Keychain then holds. When an item already exists, the Keychain refuses
 /// the add, and the call returns the existing value unchanged. So when two

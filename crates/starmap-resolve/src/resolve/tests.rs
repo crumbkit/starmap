@@ -242,6 +242,11 @@ enum Asked {
         name: String,
         bytes: u16,
     },
+    Saved {
+        workspace: String,
+        app: String,
+        name: String,
+    },
 }
 
 /// A resolver that answers each lookup with `secret:<n>` for the lookup's
@@ -298,6 +303,15 @@ impl Resolver for FakeResolver {
                 app: app.as_str().to_owned(),
                 name: name.as_str().to_owned(),
                 bytes: bytes.get(),
+            },
+            Lookup::Saved {
+                workspace,
+                app,
+                name,
+            } => Asked::Saved {
+                workspace: workspace.as_str().to_owned(),
+                app: app.as_str().to_owned(),
+                name: name.as_str().to_owned(),
             },
             _ => Asked::Reference("another reference".to_owned()),
         };
@@ -730,7 +744,8 @@ fn a_deadline_that_passes_partway_fails_each_later_variable_without_asking_its_p
     assert!(resolver.asked.borrow().is_empty());
 }
 
-/// A spec whose secret has no bind, so only the caller can supply it.
+/// A spec whose secret has no bind, so only the caller or a saved value can
+/// supply it.
 const UNBOUND_SECRET: &str = r#"
 [variables.SHELF_UPSTREAM_TOKEN]
 purpose = "The token shelf sends to the upstream catalogue."
@@ -778,4 +793,110 @@ fn a_host_builds_a_resolution_and_a_failure_for_its_own_tests() {
         Some(ResolveProblem::Deadline)
     ));
     assert_eq!(resolution.ignored, [name("SHELF_ENV")]);
+}
+
+/// A spec with an optional secret that has no bind.
+const OPTIONAL_UNBOUND_SECRET: &str = r#"
+[variables.SHELF_UPSTREAM_TOKEN]
+purpose = "The token shelf sends to the upstream catalogue."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "secret"
+"#;
+
+#[test]
+fn a_secret_without_a_bind_or_caller_value_asks_for_the_value_saved_in_its_workspace() {
+    let spec = Spec::parse(UNBOUND_SECRET).unwrap();
+    let caller = Bindings::new();
+    let resolver = FakeResolver::answering();
+    let context = Context::new(places(), &caller, later()).resolver(&resolver);
+    let resolution = resolve(&spec, Mode::Local, &context);
+
+    assert_eq!(
+        resolver.lookups(),
+        [Asked::Saved {
+            workspace: "shelf-dev".to_owned(),
+            app: "shelf".to_owned(),
+            name: "SHELF_UPSTREAM_TOKEN".to_owned(),
+        }]
+    );
+    assert_eq!(
+        bound(&resolution, "SHELF_UPSTREAM_TOKEN").as_deref(),
+        Some("secret:resolved-1")
+    );
+    assert!(resolution.failures.is_empty());
+}
+
+#[test]
+fn a_required_secret_without_a_bind_or_saved_value_is_unbound() {
+    let spec = Spec::parse(UNBOUND_SECRET).unwrap();
+    let caller = Bindings::new();
+    let resolver = FakeResolver::failing(|| SecretError::NotFound);
+    let context = Context::new(places(), &caller, later()).resolver(&resolver);
+    let resolution = resolve(&spec, Mode::Local, &context);
+
+    assert!(matches!(
+        problem(&resolution, "SHELF_UPSTREAM_TOKEN"),
+        Some(ResolveProblem::Unbound)
+    ));
+}
+
+#[test]
+fn a_required_secret_without_a_bind_is_unbound_without_a_workspace_or_resolver() {
+    let spec = Spec::parse(UNBOUND_SECRET).unwrap();
+    let caller = Bindings::new();
+    let resolver = FakeResolver::answering();
+    let no_workspace =
+        Context::new(Places::new(PathBuf::from("/checkout")), &caller, later()).resolver(&resolver);
+    let no_resolver = Context::new(places(), &caller, later());
+
+    for context in [no_workspace, no_resolver] {
+        let resolution = resolve(&spec, Mode::Local, &context);
+        assert!(matches!(
+            problem(&resolution, "SHELF_UPSTREAM_TOKEN"),
+            Some(ResolveProblem::Unbound)
+        ));
+    }
+    assert!(resolver.lookups().is_empty());
+}
+
+#[test]
+fn an_optional_secret_without_a_bind_or_saved_value_stays_unset() {
+    let spec = Spec::parse(OPTIONAL_UNBOUND_SECRET).unwrap();
+    let caller = Bindings::new();
+    let resolver = FakeResolver::failing(|| SecretError::NotFound);
+    let context = Context::new(places(), &caller, later()).resolver(&resolver);
+    let resolution = resolve(&spec, Mode::Local, &context);
+
+    assert!(resolution.failures.is_empty());
+    assert_eq!(bound(&resolution, "SHELF_UPSTREAM_TOKEN"), None);
+}
+
+#[test]
+fn a_locked_store_fails_a_secret_without_a_bind_as_locked() {
+    let spec = Spec::parse(UNBOUND_SECRET).unwrap();
+    let caller = Bindings::new();
+    let resolver = FakeResolver::failing(|| SecretError::Locked);
+    let context = Context::new(places(), &caller, later()).resolver(&resolver);
+    let resolution = resolve(&spec, Mode::Local, &context);
+
+    assert!(matches!(
+        problem(&resolution, "SHELF_UPSTREAM_TOKEN"),
+        Some(ResolveProblem::Secret(SecretError::Locked))
+    ));
+}
+
+#[test]
+fn a_resolver_that_only_reads_refuses_to_save_a_value() {
+    let resolver = FakeResolver::answering();
+    let workspace = "shelf-dev".parse().unwrap();
+    let app = "shelf".parse().unwrap();
+    let lookup = Lookup::Saved {
+        workspace: &workspace,
+        app: &app,
+        name: &name("SHELF_UPSTREAM_TOKEN"),
+    };
+    let saved = resolver.save(lookup, &Secret::new("typed".to_owned()), later());
+    assert!(matches!(saved, Err(SecretError::Unsupported)));
 }

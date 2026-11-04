@@ -4,7 +4,7 @@ This reference is generated from the help of `starmap`. Edit the help in the too
 
 ## `starmap`
 
-Write, check and explain the environment variables that an application declares in starmap.toml
+Write, check, explain and run the environment variables that an application declares in starmap.toml
 
 ### Commands
 
@@ -12,6 +12,7 @@ Write, check and explain the environment variables that an application declares 
 - [`starmap check`](#starmap-check): Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
 - [`starmap explain`](#starmap-explain): Describe each declared variable and the value it has in this shell
 - [`starmap diff`](#starmap-diff): List each variable that was added, changed or removed since a git revision's spec
+- [`starmap run`](#starmap-run): Run a program with the environment that starmap.toml declares
 - [`starmap commands`](#starmap-commands): Explore starmap's commands
 - [`starmap schemas`](#starmap-schemas): Explore the JSON documents that starmap prints
 - [`starmap self`](#starmap-self): Review starmap's own use
@@ -160,6 +161,39 @@ starmap diff main
 - `now`: The field's value in the working tree, or the type, show and source of an added variable; null for a removed variable.
 
 Effects: read-only, closed-world.
+
+## `starmap run`
+
+Run a program with the environment that starmap.toml declares.
+
+run resolves every variable, checks the values and starts the program with each declared variable set or removed. A value comes from --set, then the shell, then .env beside the spec, then the default. A secret comes from its bind, or from the shell or the Keychain when it has none; at a terminal, run asks for a missing one and offers to save it to the Keychain. .env and --set never give a secret.
+
+### Arguments
+
+- `--spec <FILE>`: Read the spec from this file. Default: `starmap.toml`.
+- `--workspace <NAME>`: Name the Keychain items of this checkout after this workspace; default: the checkout's directory name
+- `--set <NAME=VALUE>`: Give a setting or inherited variable this value for this run, as NAME=VALUE; repeat it for more. Takes more than one value.
+- `<PROGRAM>`: The program to run and its arguments, after --. Required. Takes more than one value.
+
+### Examples
+
+Run the app with the environment that starmap.toml declares.
+
+```sh
+starmap run -- cargo run
+```
+
+Run the app with one setting changed for this run.
+
+```sh
+starmap run --set SHELF_DEBUG=true -- cargo run
+```
+
+Effects: additive, not idempotent, closed-world.
+
+### Exit codes
+
+- `3-255`: starmap run passes on the exit code of the program it runs.
 
 ## `starmap commands`
 

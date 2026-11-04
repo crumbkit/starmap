@@ -1,0 +1,8 @@
+# A spec whose required variable needs a provider.
+[variables.SHELF_API_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "provided"
+bind = { provided = "multiverse/port", process = "api" }
