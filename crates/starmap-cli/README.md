@@ -13,9 +13,10 @@ checks every rule of the file, fails for each variable that `src` reads and
 the file does not declare, and names the mode that the shell's values
 decide. `starmap explain` prints each declared variable with its type,
 unset rule, source and value in the shell, and prints a withheld value as
-eight dots. [docs/commands.md](https://github.com/crumbkit/starmap/blob/main/crates/starmap-cli/docs/commands.md) is the
-reference of every command. The commands `diff` and `run` come in later
-releases. The repository's
+eight dots. `starmap diff <REVISION>` compares `starmap.toml` with the file
+at the same path in a git revision, and lists each variable that was added
+or removed and each field that changed. [docs/commands.md](https://github.com/crumbkit/starmap/blob/main/crates/starmap-cli/docs/commands.md) is the
+reference of every command. The command `run` comes in a later release. The repository's
 [README](https://github.com/crumbkit/starmap) describes the project.
 
 Licensed under either of Apache License, Version 2.0 or MIT license at your

@@ -1,0 +1,17 @@
+List each variable that was added, changed or removed since a git revision's spec
+
+Usage: starmap diff [OPTIONS] <REVISION>
+
+Arguments:
+  <REVISION>  The git revision to compare with, such as main or HEAD~3
+
+Options:
+      --spec <FILE>  Read the spec from this file [default: starmap.toml]
+  -h, --help         Print help (see more with '--help')
+
+Examples:
+  starmap diff main
+
+Effects: read-only, closed-world.
+Global flags: --json, --fields <FIELD>, --full, --no-input. `starmap diff --help` describes them.
+Next: starmap diff --help explains each column.

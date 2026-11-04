@@ -17,10 +17,15 @@
 //! the application never reads. It skips each file named `tests.rs` or
 //! ending in `_tests.rs`, where the Rust standards put unit tests, the
 //! item that follows `#[cfg(test)]`, up to its closing brace, a semicolon
-//! or a comma, and the rest of a module after `#![cfg(test)]`. The comma
-//! ends a test-only field, variant, match arm or argument. It also ends the
-//! skip inside a test-only function's generics, such as `fn f<A, B>()`, so
-//! the reads in that function count. The skip knows only the exact
+//! or a comma, and the rest of a module after `#![cfg(test)]`, so a file
+//! that begins with `#![cfg(test)]` is skipped whole. The comma ends a
+//! test-only field, variant, match arm or argument. Angle brackets are not
+//! token groups, so any comma outside brackets in a test-only item's header
+//! ends the skip too: in a function's generics such as `fn f<A, B>()`, in
+//! a return type such as `-> Result<(), E>`, in `impl<A, B>`, in a `where`
+//! clause, or in a `static` whose type is generic. The reads in the rest of
+//! that item then count, so the scan over-counts them, and `check` reports
+//! each one that the spec does not declare. The skip knows only the exact
 //! attribute `cfg(test)`, so code under `cfg(all(test, unix))` counts.
 //!
 //! The scan misses a read whose name is not a literal at the call, such as

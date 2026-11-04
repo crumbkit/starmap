@@ -39,6 +39,17 @@ pub(crate) fn load(path: &Path) -> Result<Spec, SpecFailure> {
     if bytes.len() > Spec::MAX_BYTES {
         return Err(SpecFailure::TooLarge { file });
     }
+    parse(file, bytes)
+}
+
+/// Parses `bytes`, the text of the spec that `file` names, which is at
+/// most [`Spec::MAX_BYTES`].
+///
+/// # Errors
+///
+/// Returns [`SpecFailure`] when the bytes are not UTF-8 text or do not
+/// parse.
+pub(crate) fn parse(file: String, bytes: Vec<u8>) -> Result<Spec, SpecFailure> {
     let text = String::from_utf8(bytes).map_err(|error| SpecFailure::NotUtf8 {
         file: file.clone(),
         at: error.utf8_error().valid_up_to(),

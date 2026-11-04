@@ -38,20 +38,20 @@ disallowed-methods = [
     { path = "std::io::stderr", reason = "print through crumbkit::finish in crates/starmap-cli/src/lib.rs" },
     { path = "std::io::stdin", reason = "read through crumbkit's Output in crates/starmap-cli/src/lib.rs, which knows whether input is a terminal" },
     # PROC-1
-    { path = "std::process::Command::new", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
-    { path = "std::process::Command::spawn", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
-    { path = "std::process::Command::status", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
-    { path = "std::process::Command::output", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read" },
+    { path = "std::process::Command::new", reason = "start processes in crates/starmap-resolve/src/process.rs, which runs op read, or crates/starmap-cli/src/git.rs, which runs git" },
+    { path = "std::process::Command::spawn", reason = "start processes in crates/starmap-resolve/src/process.rs, which runs op read, or crates/starmap-cli/src/git.rs, which runs git" },
+    { path = "std::process::Command::status", reason = "start processes in crates/starmap-resolve/src/process.rs, which runs op read, or crates/starmap-cli/src/git.rs, which runs git" },
+    { path = "std::process::Command::output", reason = "start processes in crates/starmap-resolve/src/process.rs, which runs op read, or crates/starmap-cli/src/git.rs, which runs git" },
     { path = "std::os::unix::process::CommandExt::exec", reason = "replacing this process bypasses the process module" },
-    { path = "tokio::process::Command::new", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read", allow-invalid = true },
-    { path = "tokio::process::Command::spawn", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read", allow-invalid = true },
-    { path = "tokio::process::Command::status", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read", allow-invalid = true },
-    { path = "tokio::process::Command::output", reason = "start processes in crates/starmap-resolve/src/process.rs, the module that runs op read", allow-invalid = true },
+    { path = "tokio::process::Command::new", reason = "start processes in crates/starmap-resolve/src/process.rs, which runs op read, or crates/starmap-cli/src/git.rs, which runs git", allow-invalid = true },
+    { path = "tokio::process::Command::spawn", reason = "start processes in crates/starmap-resolve/src/process.rs, which runs op read, or crates/starmap-cli/src/git.rs, which runs git", allow-invalid = true },
+    { path = "tokio::process::Command::status", reason = "start processes in crates/starmap-resolve/src/process.rs, which runs op read, or crates/starmap-cli/src/git.rs, which runs git", allow-invalid = true },
+    { path = "tokio::process::Command::output", reason = "start processes in crates/starmap-resolve/src/process.rs, which runs op read, or crates/starmap-cli/src/git.rs, which runs git", allow-invalid = true },
 ]
 
 disallowed-types = [
     # PROC-1
-    { path = "std::process::Child", reason = "let crates/starmap-resolve/src/process.rs hold the child, which owns its deadline and cleanup" },
+    { path = "std::process::Child", reason = "let crates/starmap-resolve/src/process.rs or crates/starmap-cli/src/git.rs hold the child, which owns its deadline and cleanup" },
 ]
 
 # BASE-7: the untyped-error macros of the project's error crates. starmap
