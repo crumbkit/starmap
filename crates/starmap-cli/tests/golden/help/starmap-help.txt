@@ -9,6 +9,7 @@ Verbs
 
 Commands
   commands  Explore starmap's commands
+  schemas   Explore the JSON documents that starmap prints
   self      Review starmap's own use
 
 Options:
@@ -23,6 +24,9 @@ Options:
 
       --full
           With --json, print every field of every row. The default prints only the fields of the columns.
+
+      --no-input
+          Fail instead of asking a question
 
   -h, --help
           Print help (see a summary with '-h')

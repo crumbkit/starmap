@@ -14,5 +14,5 @@ Examples:
   starmap commands list
 
 Effects: read-only, closed-world.
-Global flags: --json, --fields <FIELD>, --full. `starmap commands list --help` describes them.
+Global flags: --json, --fields <FIELD>, --full, --no-input. `starmap commands list --help` describes them.
 Next: starmap commands list --help explains each column.

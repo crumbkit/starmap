@@ -11,4 +11,4 @@ Examples:
   starmap check --json
 
 Effects: read-only, closed-world.
-Global flags: --json. `starmap check --help` describes them.
+Global flags: --json, --no-input. `starmap check --help` describes them.

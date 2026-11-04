@@ -8,5 +8,5 @@ Commands:
 Options:
   -h, --help  Print help (see more with '--help')
 
-Global flags: --json, --fields <FIELD>, --long, --full. `starmap commands --help` describes them.
+Global flags: --json, --fields <FIELD>, --long, --full, --no-input. `starmap commands --help` describes them.
 Next: starmap commands <COMMAND> -h

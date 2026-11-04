@@ -11,5 +11,5 @@ Examples:
   starmap self usage
 
 Effects: read-only, closed-world.
-Global flags: --json, --fields <FIELD>, --full. `starmap self usage --help` describes them.
+Global flags: --json, --fields <FIELD>, --full, --no-input. `starmap self usage --help` describes them.
 Next: starmap self usage --help explains each column.
