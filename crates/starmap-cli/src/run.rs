@@ -15,7 +15,6 @@ use std::fmt;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 use crumbkit::{Failure, Output, Sink};
@@ -25,7 +24,7 @@ use starmap::{
 };
 use starmap_resolve::{
     AppName, Context, Keychain, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError,
-    WorkspaceName, resolve,
+    WorkspaceName, names_of, resolve,
 };
 
 use crate::cli::{Assignment, RunArgs};
@@ -196,10 +195,10 @@ pub(crate) struct Gathered {
     caller: Bindings,
     mode: Mode,
     places: Places,
-    /// The workspace and app that a typed secret is saved under. Both are
-    /// present unless the name rule of starmap-resolve changes so that a
-    /// [`label`] or `app` no longer fits it.
-    names: Option<(WorkspaceName, AppName)>,
+    /// The workspace that a typed secret is saved under.
+    workspace: WorkspaceName,
+    /// The app that a typed secret is saved under.
+    app: AppName,
     notes: Vec<String>,
 }
 
@@ -242,13 +241,10 @@ pub(crate) fn gather(args: &RunArgs, vars: Vec<(OsString, OsString)>) -> Result<
     let (mode, mode_note) = mode::decide(&spec, &caller);
     notes.push(mode_note);
 
-    let label = label(&checkout);
-    let workspace = args.workspace.clone().or_else(|| named(&label));
-    let names = workspace.zip(named::<AppName>(&label));
-    let mut places = Places::new(checkout.clone());
-    if let Some((workspace, app)) = &names {
-        places = places.workspace(workspace.clone(), app.clone(), checkout);
-    }
+    let (default, app) = names_of(&checkout);
+    let workspace = args.workspace.clone().unwrap_or(default);
+    let mut places =
+        Places::new(checkout.clone()).workspace(workspace.clone(), app.clone(), checkout);
     if let Some(home) = home {
         places = places.home(home);
     }
@@ -257,7 +253,8 @@ pub(crate) fn gather(args: &RunArgs, vars: Vec<(OsString, OsString)>) -> Result<
         caller,
         mode,
         places,
-        names,
+        workspace,
+        app,
         notes,
     })
 }
@@ -279,7 +276,8 @@ pub(crate) fn settle(
         caller,
         mode,
         places,
-        names,
+        workspace,
+        app,
         mut notes,
     } = gathered;
     let deadline = Instant::now() + RESOLVE_DEADLINE;
@@ -301,14 +299,26 @@ pub(crate) fn settle(
         .map(|failure| RunFailure::resolve(failure.name, failure.problem))
         .collect();
     // A person is asked only when the typed values would let the program
-    // start, so nobody types a secret for a run that fails anyway.
+    // start, so nobody types a secret for a run that fails anyway. The
+    // check runs first on every value but the unbound secrets, which it
+    // refuses as missing until someone types them.
+    if failures.is_empty()
+        && !unbound.is_empty()
+        && let Verdict::Refused(refusals) = starmap::check(&spec, &bindings, mode)
+    {
+        failures.extend(
+            refusals
+                .iter()
+                .filter(|finding| !unbound.iter().any(|failure| failure.name == finding.name))
+                .map(|finding| RunFailure::check(finding.name.clone(), &finding.problem)),
+        );
+    }
     let can_start = failures.is_empty();
     for failure in unbound {
-        let typed = match (&names, can_start) {
-            (Some((workspace, app)), true) => {
-                typed(&failure.name, workspace, app, resolvers, ask, &mut notes)
-            }
-            _ => None,
+        let typed = if can_start {
+            typed(&failure.name, &workspace, &app, resolvers, ask, &mut notes)
+        } else {
+            None
         };
         match typed {
             Some(bound) => bindings.bind(failure.name, bound),
@@ -439,38 +449,6 @@ fn checkout(path: &Path) -> Result<PathBuf, Refused> {
                 Vec::new(),
             )
         })
-}
-
-/// Returns `label` as a workspace or app name, or `app` when `label` does
-/// not fit the name rule.
-fn named<T: FromStr>(label: &str) -> Option<T> {
-    label.parse().or_else(|_| "app".parse()).ok()
-}
-
-/// Returns the label of the directory `dir`: its name in lower case, with
-/// each character other than a letter, a digit or a hyphen written as a
-/// hyphen, and `app-` before a name that does not start with a letter. So
-/// `My_App` gives `my-app`, `.tmp9` gives `app--tmp9` and `/` gives `app`.
-pub(crate) fn label(dir: &Path) -> String {
-    let text: String = dir
-        .file_name()
-        .map(|name| name.to_string_lossy())
-        .unwrap_or_default()
-        .chars()
-        .map(|c| {
-            let c = c.to_ascii_lowercase();
-            if c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    match text.chars().next() {
-        Some(first) if first.is_ascii_lowercase() => text,
-        Some(_) => format!("app-{text}"),
-        None => "app".to_owned(),
-    }
 }
 
 /// A failure that stops `starmap run` from starting the program.

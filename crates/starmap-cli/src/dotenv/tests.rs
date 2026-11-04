@@ -94,6 +94,8 @@ fn each_accepted_form_gives_its_value() {
         ("export SHELF_DEBUG=true", "true"),
         ("  SHELF_DEBUG = true  ", "true"),
         ("SHELF_DEBUG=true # a comment", "true"),
+        ("SHELF_DEBUG=true\t# a comment", "true"),
+        ("SHELF_DEBUG=a#b", "a#b"),
         ("SHELF_DEBUG='a b # c'", "a b # c"),
         ("SHELF_DEBUG=\"a b # c\" # a comment", "a b # c"),
         ("SHELF_DEBUG=", ""),

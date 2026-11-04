@@ -5,7 +5,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Instant;
 
 use crumbkit::Code;
@@ -14,7 +14,7 @@ use starmap_resolve::{Lookup, ResolveProblem, Resolver, SecretError};
 
 use clap::CommandFactory as _;
 
-use super::{Ask, Ready, Refused, RunFailure, gather, label, run_with, settle};
+use super::{Ask, Ready, Refused, RunFailure, gather, run_with, settle};
 use crate::cli::{Assignment, RunArgs, SpecFile, Verb};
 use crate::codes;
 use crate::{Cli, GUIDE};
@@ -511,19 +511,6 @@ fn a_value_that_does_not_fit_its_type_is_refused_as_invalid() {
     );
 }
 
-#[test]
-fn a_checkout_directory_name_becomes_a_workspace_label() {
-    let cases = [
-        ("/src/shelf", "shelf"),
-        ("/src/My_App", "my-app"),
-        ("/tmp/.tmp9", "app--tmp9"),
-        ("/", "app"),
-    ];
-    for (dir, expected) in cases {
-        assert_eq!(label(Path::new(dir)), expected, "{dir}");
-    }
-}
-
 /// A spec with a required setting, a required provided variable and a
 /// required setting whose path bind is under the home directory.
 const REQUIRED: &str = r#"
@@ -681,13 +668,21 @@ impl Resolver for Counting {
     }
 }
 
-/// Parses `starmap run` with `flags` against the spec in `checkout`, and
-/// runs it with `resolver`, without input. The program is `true`.
-fn run_counted(checkout: &Checkout, flags: &[&str], resolver: &Counting) {
+/// Parses `starmap run --json` against the spec in `checkout`, and runs it
+/// with `resolver`, without input. The program is `true`, which `--json`
+/// never starts.
+fn run_json(checkout: &Checkout, resolver: &Counting) {
     let spec = checkout.dir.join("starmap.toml");
-    let mut words = vec!["starmap", "run", "--no-input"];
-    words.extend_from_slice(flags);
-    words.extend(["--spec", spec.to_str().unwrap(), "--", "true"]);
+    let words = [
+        "starmap",
+        "run",
+        "--no-input",
+        "--json",
+        "--spec",
+        spec.to_str().unwrap(),
+        "--",
+        "true",
+    ];
     let Ok((cli, output)) = crumbkit::parse_from::<Cli, _, _>(Cli::command(), &GUIDE, words) else {
         panic!("the command line does not parse");
     };
@@ -703,10 +698,45 @@ fn json_is_refused_before_any_secret_store_is_asked() {
     let checkout = Checkout::with_spec(BOUND_AND_GENERATED, None);
 
     let resolver = Counting::default();
-    run_counted(&checkout, &["--json"], &resolver);
+    run_json(&checkout, &resolver);
     assert_eq!(resolver.calls.get(), 0);
 
+    // The same run as text asks both stores. It runs through gather and
+    // settle, so no program starts inside the test process.
     let resolver = Counting::default();
-    run_counted(&checkout, &[], &resolver);
+    let ready = gather(&checkout.args(&[]), Vec::new())
+        .and_then(|gathered| settle(gathered, &[&resolver], &mut Person::absent()));
+    assert!(ready.is_ok(), "{ready:?}");
     assert_eq!(resolver.calls.get(), 2);
+}
+
+#[test]
+fn an_unbound_secret_is_not_asked_for_while_a_setting_fails_the_check() {
+    let checkout = Checkout::new(None);
+    let mut person = Person::typing("typed-test-value", true);
+    let refused = prepared(
+        &checkout.args(&[("SHELF_PAGE_SIZE", "1000")]),
+        &[],
+        &FakeResolver::default(),
+        &mut person,
+    )
+    .unwrap_err();
+    assert_eq!(
+        codes(&refused),
+        [&codes::VARIABLE_INVALID, &codes::SECRET_UNBOUND]
+    );
+    assert!(person.asked.is_empty(), "{:?}", person.asked);
+
+    let mut person = Person::typing("typed-test-value", false);
+    prepared(
+        &checkout.args(&[("SHELF_PAGE_SIZE", "30")]),
+        &[],
+        &FakeResolver::default(),
+        &mut person,
+    )
+    .unwrap();
+    assert_eq!(
+        person.asked.first().map(String::as_str),
+        Some("secret SHELF_UPSTREAM_TOKEN")
+    );
 }

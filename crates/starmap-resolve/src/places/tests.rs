@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use proptest::prelude::*;
 use starmap::{PathTemplate, Placeholder};
 
-use super::{AppName, Places, WorkspaceName, expand};
+use super::{AppName, Places, WorkspaceName, expand, names_of};
 
 /// Returns the template `text`.
 fn template(text: &str) -> PathTemplate {
@@ -134,5 +134,21 @@ proptest! {
             .collect::<Result<String, Placeholder>>()
             .map(PathBuf::from);
         prop_assert_eq!(expand(&template(&text), &places), expected);
+    }
+}
+
+#[test]
+fn names_of_a_directory_fit_the_name_rule() {
+    let cases = [
+        ("/src/shelf", "shelf"),
+        ("/src/My_App", "my-app"),
+        ("/tmp/.tmp9", "app--tmp9"),
+        ("/", "app"),
+    ];
+    for (dir, expected) in cases {
+        let (workspace, app) = names_of(std::path::Path::new(dir));
+        assert_eq!(workspace.as_str(), expected, "{dir}");
+        assert_eq!(app.as_str(), expected, "{dir}");
+        assert!(expected.parse::<WorkspaceName>().is_ok(), "{dir}");
     }
 }

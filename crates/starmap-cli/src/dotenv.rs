@@ -164,7 +164,8 @@ pub(crate) fn read(file: &Path, spec: &Spec) -> Result<DotEnv, Vec<DotEnvFailure
 
 /// Returns the name and value of one line of `.env`, or `None` for a
 /// blank line or a comment. The value is the text between its quotes, or
-/// the unquoted text before a ` #` comment, with spaces trimmed.
+/// the unquoted text before a `#` that follows whitespace, with
+/// whitespace trimmed.
 ///
 /// # Errors
 ///
@@ -200,9 +201,15 @@ fn entry(line: &str) -> Result<Option<(&str, &str)>, ()> {
             value
         }
         None => {
-            let value = raw
-                .split_once(" #")
-                .map_or(raw, |(value, _)| value)
+            let comment = raw.char_indices().find(|&(at, c)| {
+                c == '#'
+                    && raw
+                        .get(..at)
+                        .is_some_and(|before| before.ends_with(char::is_whitespace))
+            });
+            let value = comment
+                .and_then(|(at, _)| raw.get(..at))
+                .unwrap_or(raw)
                 .trim_end();
             if value.contains(['\'', '"']) {
                 return Err(());
