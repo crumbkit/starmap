@@ -224,6 +224,20 @@ pub enum Unset {
     Default(Value),
 }
 
+impl fmt::Display for Unset {
+    /// Writes `required`, `optional` or `default` and the default's value,
+    /// such as `default 0.0.0.0:8080`, as a program's `--help` describes a
+    /// variable. It writes a withheld variable's default too, so a caller
+    /// that describes a withheld variable checks [`Variable::show`] first.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Required => formatter.write_str("required"),
+            Self::Optional => formatter.write_str("optional"),
+            Self::Default(value) => write!(formatter, "default {value}"),
+        }
+    }
+}
+
 /// The SHA-256 digest of a spec's canonical form. It prints as
 /// `sha256:<hex>`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -397,6 +411,7 @@ const FORM_WORDS: &[(&str, Form)] = &[
     ("path", Form::Path { absolute: false }),
     ("port", Form::Port),
     ("url", Form::Url),
+    ("socket-address", Form::SocketAddress),
     ("boolean", Form::Boolean),
     ("string", Form::String),
 ];

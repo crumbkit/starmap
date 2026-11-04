@@ -11,9 +11,9 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `starmap::Name` checks the name of an environment variable: upper case
   letters, digits and underscores, not starting with a digit, and at most
   128 bytes.
-- `starmap::Form::parse` reads a raw value as a path, port, URL, boolean,
-  integer in a range, enumeration choice or string, and returns `Value` or
-  `FormError`. A path form with `absolute = true` treats a relative value
+- `starmap::Form::parse` reads a raw value as a path, port, URL, IP socket
+  address, boolean, integer in a range, enumeration choice or string, and
+  returns `Value` or `FormError`. A path form with `absolute = true` treats a relative value
   as unset.
 - `starmap::Port`, `IntegerRange`, `Choice` and `Choices` check the values
   of their forms, each through one constructor.
@@ -54,9 +54,9 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `#[starmap("...")]`. A run of capitals is one word, so `HTTPServer`
   reads as `http-server`, and two variants with the same value fail to
   compile.
-- A field's type is `PathBuf`, `Port`, `url::Url`, `bool`, an integer type
-  of at most 64 bits, `String`, `OsString`, `Secret<String>` or an
-  `Enumeration`, each inside an `Option` or not. Any other type fails to
+- A field's type is `PathBuf`, `Port`, `url::Url`, `SocketAddr`, `bool`, an
+  integer type of at most 64 bits, `String`, `OsString`, `Secret<String>`
+  or an `Enumeration`, each inside an `Option` or not. Any other type fails to
   compile with a message that lists them. `starmap::Field` describes each
   field with its `Shape`, `Presence` and `Show`, and a `FieldError` says
   which field cannot hold its value and why, as a `FieldProblem`.
@@ -67,6 +67,27 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   does not match the unset rule in either mode, fields whose show differs,
   and `Allow` entries that excuse nothing. Both panic when the spec text
   differs from the text the struct embeds.
+- A variable with `type = "socket-address"` takes an IP socket address,
+  such as `0.0.0.0:8080` or `[::1]:8080`, and a field of type
+  `std::net::SocketAddr` reads it. A host name such as `localhost:8080` is
+  refused with `FormError::NotSocketAddress`.
+- An empty value of an enumeration variable is refused with
+  `FormError::EmptyChoice`, whose text says the value is empty and lists
+  the choices. Any other value outside the choices is still
+  `FormError::NotChoice`.
+- `Form`, `Unset` and `Value` implement `Display` for a program's `--help`
+  text: a form writes what its values are, such as `an ip socket address`
+  or `one of dev, prod`, and an unset rule writes `required`, `optional`
+  or `default` with the default's value, which it writes for a withheld
+  variable too.
+- `Refusals` implements `Display`, which writes each finding with its
+  variable's name. A missing variable is `required in local mode` only
+  when the spec has a `[mode]` table, and `required` otherwise.
+  `ReadError::Refused` writes the same text with no prefix, so a program
+  can put its own words in front, such as `shelf cannot start:`.
+  `ReadError::Field` names the variable whose field cannot hold its value.
+- `Enumeration::value` returns a variant's value, and
+  `#[derive(Enumeration)]` implements it.
 - `starmap_resolve::resolve` resolves each variable of a spec in one mode
   from a `Context` of the caller's values, the `Places` of path templates,
   a `Provider` for each provided kind and a list of `Resolver`s. A caller

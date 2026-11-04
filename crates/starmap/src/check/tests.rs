@@ -568,3 +568,42 @@ proptest! {
         prop_assert_eq!(after, expected);
     }
 }
+
+// Refusals as text
+
+#[test]
+fn refusals_name_each_variable_and_the_mode_a_missing_one_is_required_in() {
+    let Verdict::Refused(refusals) = verdict(&[("SHELF_DEBUG", "maybe")]) else {
+        panic!("the port is missing and the debug flag is invalid");
+    };
+
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_PORT is required in local mode and has no value; \
+         SHELF_DEBUG: the value is not one of the words 1, 0, true, false, yes, no, on and off"
+    );
+}
+
+#[test]
+fn without_a_mode_table_a_missing_variable_is_required_without_a_mode() {
+    let spec = Spec::parse(
+        r#"
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+"#,
+    )
+    .unwrap();
+    let bindings = capture(&spec, vars(&[]));
+    let Verdict::Refused(refusals) = check(&spec, &bindings, Mode::Local) else {
+        panic!("the port is missing");
+    };
+
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_PORT is required and has no value"
+    );
+}

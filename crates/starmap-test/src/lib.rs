@@ -185,6 +185,7 @@ fn shape(field: &Field, form: &Form) -> Vec<String> {
         (Shape::Path, Form::Path { .. })
         | (Shape::Port, Form::Port)
         | (Shape::Url, Form::Url)
+        | (Shape::SocketAddress, Form::SocketAddress)
         | (Shape::Boolean, Form::Boolean)
         | (Shape::String | Shape::OsString, Form::String)
         | (Shape::OsString, Form::Path { .. }) => Vec::new(),
@@ -213,24 +214,9 @@ fn shape(field: &Field, form: &Form) -> Vec<String> {
             .collect(),
         (shape, form) => vec![format!(
             "starmap.toml types it as {}, and the field type {rust_type} holds {}",
-            form_words(form),
+            form,
             shape_words(shape)
         )],
-    }
-}
-
-/// Returns the words for a value of `form`, such as `a port`.
-fn form_words(form: &Form) -> String {
-    match form {
-        Form::Path { absolute: true } => "an absolute path".to_owned(),
-        Form::Path { absolute: false } => "a path".to_owned(),
-        Form::Port => "a port".to_owned(),
-        Form::Url => "a url".to_owned(),
-        Form::Boolean => "a boolean".to_owned(),
-        Form::Integer(range) => format!("a whole number from {} to {}", range.min(), range.max()),
-        Form::Enumeration(choices) => format!("one of {choices}"),
-        Form::String => "a string".to_owned(),
-        _ => "a type this check does not know".to_owned(),
     }
 }
 
@@ -240,6 +226,7 @@ fn shape_words(shape: Shape) -> &'static str {
         Shape::Path => "a path",
         Shape::Port => "a port",
         Shape::Url => "a url",
+        Shape::SocketAddress => "an ip socket address",
         Shape::Boolean => "a boolean",
         Shape::Integer { .. } => "a whole number",
         Shape::Enumeration(_) => "an enumeration",

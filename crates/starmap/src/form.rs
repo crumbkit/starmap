@@ -4,6 +4,7 @@
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::net::SocketAddr;
 use std::num::{IntErrorKind, NonZeroU16};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -33,6 +34,10 @@ pub enum Form {
     Port,
     /// An absolute URL.
     Url,
+    /// An IP socket address, such as `0.0.0.0:8080` or `[::1]:8080`, as
+    /// [`SocketAddr`]'s `FromStr` reads it. A host name such as
+    /// `localhost:8080` is refused.
+    SocketAddress,
     /// One of the words 1, 0, true, false, yes, no, on and off, in any mix
     /// of ASCII case.
     Boolean,
@@ -68,10 +73,18 @@ impl Form {
             Self::String => Value::String(raw.to_os_string()),
             Self::Port => Value::Port(text(raw)?.parse().map_err(|_| FormError::NotPort)?),
             Self::Url => Value::Url(Url::parse(text(raw)?).map_err(FormError::NotUrl)?),
+            Self::SocketAddress => Value::SocketAddress(
+                text(raw)?
+                    .parse()
+                    .map_err(|_| FormError::NotSocketAddress)?,
+            ),
             Self::Boolean => Value::Boolean(boolean(text(raw)?)?),
             Self::Integer(range) => Value::Integer(range.parse(text(raw)?)?),
             Self::Enumeration(choices) => {
                 let text = text(raw)?;
+                if text.is_empty() {
+                    return Err(FormError::EmptyChoice(choices.clone()));
+                }
                 let choice = choices
                     .get(text)
                     .ok_or_else(|| FormError::NotChoice(choices.clone()))?;
@@ -79,6 +92,28 @@ impl Form {
             }
         };
         Ok(Some(value))
+    }
+}
+
+impl fmt::Display for Form {
+    /// Writes what a value of the form is, such as `a port` or `a whole
+    /// number from 1 to 100`, as a program's `--help` describes a variable.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Path { absolute: false } => formatter.write_str("a path"),
+            Self::Path { absolute: true } => formatter.write_str("an absolute path"),
+            Self::Port => formatter.write_str("a port"),
+            Self::Url => formatter.write_str("a url"),
+            Self::SocketAddress => formatter.write_str("an ip socket address"),
+            Self::Boolean => formatter.write_str("a boolean"),
+            Self::Integer(range) => write!(
+                formatter,
+                "a whole number from {} to {}",
+                range.min, range.max
+            ),
+            Self::Enumeration(choices) => write!(formatter, "one of {choices}"),
+            Self::String => formatter.write_str("a string"),
+        }
     }
 }
 
@@ -109,6 +144,8 @@ pub enum Value {
     Port(Port),
     /// The value of the URL form.
     Url(Url),
+    /// The value of the socket-address form.
+    SocketAddress(SocketAddr),
     /// The value of the boolean form.
     Boolean(bool),
     /// The value of an integer form, which lies in the form's range.
@@ -128,10 +165,19 @@ impl Value {
             Self::String(string) => string.clone(),
             Self::Port(port) => port.to_string().into(),
             Self::Url(url) => url.as_str().into(),
+            Self::SocketAddress(address) => address.to_string().into(),
             Self::Boolean(boolean) => boolean.to_string().into(),
             Self::Integer(number) => number.to_string().into(),
             Self::Choice(choice) => choice.as_str().into(),
         }
+    }
+}
+
+impl fmt::Display for Value {
+    /// Writes the text an environment holds, with each part that is not
+    /// Unicode replaced by U+FFFD.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.to_os_string().to_string_lossy())
     }
 }
 
@@ -146,6 +192,8 @@ pub enum FormError {
     NotPort,
     /// The value is not a URL, for the reason the parse error gives.
     NotUrl(url::ParseError),
+    /// The value is not an IP socket address.
+    NotSocketAddress,
     /// The value is not one of the eight boolean words.
     NotBoolean,
     /// The value is not a whole number.
@@ -159,6 +207,8 @@ pub enum FormError {
     },
     /// The value is not one of the form's choices.
     NotChoice(Choices),
+    /// The value is empty, and the form takes one of these choices.
+    EmptyChoice(Choices),
 }
 
 impl fmt::Display for FormError {
@@ -167,6 +217,9 @@ impl fmt::Display for FormError {
             Self::NotUnicode => formatter.write_str("the value is not unicode text"),
             Self::NotPort => formatter.write_str("the value is not a port from 1 to 65535"),
             Self::NotUrl(_) => formatter.write_str("the value is not a url"),
+            Self::NotSocketAddress => formatter.write_str(
+                "the value is not an ip socket address, such as 127.0.0.1:8080 or [::1]:8080",
+            ),
             Self::NotBoolean => formatter.write_str(
                 "the value is not one of the words 1, 0, true, false, yes, no, on and off",
             ),
@@ -176,6 +229,12 @@ impl fmt::Display for FormError {
                 "the value is not a whole number from {min} to {max}"
             ),
             Self::NotChoice(choices) => write!(formatter, "the value is not one of {choices}"),
+            Self::EmptyChoice(choices) => {
+                write!(
+                    formatter,
+                    "the value is empty, and it must be one of {choices}"
+                )
+            }
         }
     }
 }

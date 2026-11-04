@@ -15,6 +15,7 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
     };
     let mut values: Vec<LitStr> = Vec::new();
     let mut arms = Vec::new();
+    let mut value_arms = Vec::new();
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new(
@@ -48,6 +49,7 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
         }
         let variant = &variant.ident;
         arms.push(quote! { #value => ::core::option::Option::Some(Self::#variant) });
+        value_arms.push(quote! { Self::#variant => #value });
         values.push(value);
     }
     Ok(quote! {
@@ -58,6 +60,12 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
                 match choice.as_str() {
                     #(#arms,)*
                     _ => ::core::option::Option::None,
+                }
+            }
+
+            fn value(&self) -> &'static str {
+                match *self {
+                    #(#value_arms,)*
                 }
             }
         }

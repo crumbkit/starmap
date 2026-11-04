@@ -5,7 +5,7 @@ error[E0277]: starmap cannot read a variable into `f64`
    |                ^^^ this field type is not one that starmap reads
    |
    = help: the trait `starmap::__private::FieldType` is not implemented for `f64`
-   = note: a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option
+   = note: a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option
    = help: the following other types implement trait `starmap::__private::FieldType`:
              i16
              i32
@@ -29,7 +29,7 @@ error[E0277]: starmap cannot read a variable into `Vec<u8>`
    |                      ^^^^^^^ this field type is not one that starmap reads
    |
    = help: the trait `starmap::__private::FieldType` is not implemented for `Vec<u8>`
-   = note: a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option
+   = note: a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option
    = help: the following other types implement trait `starmap::__private::FieldType`:
              PathBuf
              bool
@@ -53,7 +53,7 @@ error[E0277]: starmap cannot read a variable into `starmap::Secret<Vec<u8>>`
    |                  ^^^^^^^^^^^^^^^^^^^^^^^^ this field type is not one that starmap reads
    |
    = help: the trait `starmap::__private::FieldType` is not implemented for `starmap::Secret<Vec<u8>>`
-   = note: a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option
+   = note: a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option
 help: the trait `starmap::__private::FieldType` is implemented for `starmap::Secret<std::string::String>`
   --> src/field.rs
    |
