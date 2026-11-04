@@ -8,7 +8,7 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
-use crumbkit::{Batch, Code, Document, Failure, Field, Recovery, Row};
+use crumbkit::{Code, Document, Failure, Field, Listing, Recovery, Row};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{Form, Name, Source, Spec, Variable};
@@ -24,7 +24,7 @@ use crate::spec::{self, SpecFailure};
 mod tests;
 
 /// The document that `starmap diff` prints.
-pub(crate) const DIFF: Document<Batch<Change, crumbkit::Error>> = Document::new(
+pub(crate) const DIFF: Document<Listing<Change>> = Document::new(
     "starmap",
     "diff",
     1,
@@ -153,7 +153,7 @@ impl Failure for RevisionFailure {
 ///
 /// Returns [`Failed`] when either spec cannot be read or parsed, and when
 /// git cannot read the revision.
-pub(crate) fn diff(args: &DiffArgs) -> Result<Batch<Change, crumbkit::Error>, Failed> {
+pub(crate) fn diff(args: &DiffArgs) -> Result<Listing<Change>, Failed> {
     let path = &args.file.spec;
     let file = path.display().to_string();
     let now = spec::load(path)?;
@@ -203,14 +203,10 @@ pub(crate) fn diff(args: &DiffArgs) -> Result<Batch<Change, crumbkit::Error>, Fa
             " {revision} has no {file}, so every variable counts as added."
         ));
     }
-    // A batch answers one key with each result, so each change's key is
-    // its variable's name, and a spec with no change gives a batch with no
-    // key, which prints nothing on standard output.
     let changes = changes(was.as_ref(), &now);
-    let keys: Vec<&str> = changes.iter().map(|change| change.name.as_str()).collect();
-    let mut batch = Batch::new(&["diff"], "revision", &keys).note(note);
-    batch.extend(changes.into_iter().map(Ok));
-    Ok(batch)
+    let count = changes.len();
+    let noun = if count == 1 { "change" } else { "changes" };
+    Ok(Listing::new(changes, count).note(note).described(noun))
 }
 
 /// Returns the changes from `was`, or an empty spec when it is `None`, to

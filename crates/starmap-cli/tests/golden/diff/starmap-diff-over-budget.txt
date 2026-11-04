@@ -1,0 +1,2 @@
+CHANGE  NAME                NOW
+added   SHELF_MIRROR_TOKEN  string, withheld, secret

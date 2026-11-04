@@ -172,7 +172,7 @@ fn diff_exits_with_success_when_nothing_changed() {
     let dir = repository(Some(NOW));
     starmap(dir.path(), &["diff", "main"])
         .success()
-        .stdout_eq("")
+        .stdout_eq(file!["golden/diff/starmap-diff-same.txt"])
         .stderr_eq(file!["golden/diff/starmap-diff-same.stderr"]);
 }
 
@@ -202,6 +202,17 @@ fn diff_outside_a_git_repository_is_a_failure() {
         .code(1)
         .stdout_eq("")
         .stderr_eq(file!["golden/diff/starmap-diff-no-repository.stderr"]);
+}
+
+#[test]
+fn a_result_over_the_output_budget_prints_the_changes_that_fit_and_says_how_many_it_left_out() {
+    let dir = repository(Some(WAS));
+    command(env!("CARGO_BIN_EXE_starmap"), dir.path(), &["diff", "main"])
+        .env("STARMAP_OUTPUT_BUDGET", "200")
+        .assert()
+        .success()
+        .stdout_eq(file!["golden/diff/starmap-diff-over-budget.txt"])
+        .stderr_eq(file!["golden/diff/starmap-diff-over-budget.stderr"]);
 }
 
 #[test]
