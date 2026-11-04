@@ -150,6 +150,22 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `undeclared`, and each variable that `src` reads and the file does not
   declare fails with `starmap::variable::undeclared`. A missing spec's next
   step is now `starmap init`.
+- `starmap diff REVISION` lists each variable that was added, changed or
+  removed since the spec at the same path in a git revision. A revision
+  without the file counts as an empty spec. diff reads only regular files,
+  never fetches from a remote, and refuses an empty revision.
+- `starmap run PROGRAM` resolves every declared variable, checks the
+  values and starts the program with each one set or removed. A setting
+  comes from `--set NAME=value`, then the shell, then `.env` beside the
+  spec, then its path bind, then its default. starmap reads `.env` itself,
+  with no `$` expansion, and refuses a secret or generated variable in it
+  or in `--set`. A secret comes from its bind, or from the shell or the
+  Keychain when it has none. At a terminal, and without `--no-input`, run
+  asks for a required secret that nothing supplies, only when everything
+  else passes the check, and offers to save it to the Keychain. `--json`
+  is refused before any secret store is asked. run passes on the
+  program's exit code.
+- `starmap`'s root help groups its commands under four goal headings.
 - `starmap explain` and `starmap diff` name a `socket-address` variable's
   type as `ip socket address`, where they printed `another type`, and
   `starmap explain` prints its value, such as `0.0.0.0:8080`, where it

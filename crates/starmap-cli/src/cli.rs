@@ -37,9 +37,10 @@ pub struct Cli {
     pub(crate) no_input: NoInput,
 }
 
-/// The `starmap` command's root verbs, leaves and their examples. `init`,
-/// `check`, `explain`, `diff` and `run` sit directly under the root,
-/// because a person types `starmap check` as one step of their work.
+/// The `starmap` command's goal headings, root verbs, leaves and their
+/// examples. `init`, `check`, `explain`, `diff` and `run` sit directly under
+/// the root, because a person types `starmap check` as one step of their
+/// work.
 pub const GUIDE: Guide = Guide::new()
     .groups(&[Group::new(
         &[],
