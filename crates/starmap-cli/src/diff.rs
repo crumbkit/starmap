@@ -3,6 +3,7 @@
 //! changed or removed.
 
 use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::fmt;
 use std::io;
 use std::path::Path;
@@ -161,11 +162,14 @@ pub(crate) fn diff(args: &DiffArgs) -> Result<Batch<Change, crumbkit::Error>, Fa
         Some(dir) if !dir.as_os_str().is_empty() => dir,
         _ => Path::new("."),
     };
-    let name = path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let at = git::read_at(dir, revision, &name).map_err(|error| match error {
+    let Some(name) = path.file_name().and_then(OsStr::to_str) else {
+        return Err(SpecFailure::Unreadable {
+            file,
+            error: io::Error::other("the file name is not UTF-8, so git cannot look it up"),
+        }
+        .into());
+    };
+    let at = git::read_at(dir, revision, name).map_err(|error| match error {
         GitError::NoRepository => RevisionFailure::NoRepository {
             dir: dir.display().to_string(),
         },
@@ -187,7 +191,9 @@ pub(crate) fn diff(args: &DiffArgs) -> Result<Batch<Change, crumbkit::Error>, Fa
         Entry::NotFile => {
             return Err(SpecFailure::Unreadable {
                 file: label,
-                error: io::Error::other("the revision holds a directory at this path"),
+                error: io::Error::other(
+                    "the revision holds a directory, a symlink or a submodule at this path",
+                ),
             }
             .into());
         }

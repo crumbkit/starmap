@@ -3,12 +3,12 @@ use std::path::Path;
 use super::*;
 
 #[test]
-fn a_tree_entry_reads_its_kind_id_and_size() {
+fn a_tree_entry_reads_its_mode_id_and_size() {
     let listed = b"100644 blob 3b18e512dba79e4c8300dd08aeb37f8e728b8dad     412\tstarmap.toml\0";
     assert_eq!(
         tree_entry(listed),
         Some(TreeEntry {
-            kind: "blob",
+            mode: "100644",
             id: "3b18e512dba79e4c8300dd08aeb37f8e728b8dad",
             size: Some(412),
         })
@@ -19,7 +19,7 @@ fn a_tree_entry_reads_its_kind_id_and_size() {
 fn a_tree_entry_of_a_directory_has_no_size() {
     let listed = b"040000 tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904       -\tstarmap.toml\0";
     let entry = tree_entry(listed).unwrap();
-    assert_eq!((entry.kind, entry.size), ("tree", None));
+    assert_eq!((entry.mode, entry.size), ("040000", None));
 }
 
 #[test]

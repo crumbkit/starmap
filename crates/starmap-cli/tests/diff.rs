@@ -84,10 +84,11 @@ fn path() -> std::ffi::OsString {
     std::env::var_os("PATH").unwrap_or_default()
 }
 
-/// Runs `program` with `args` in `dir`, with a cleared environment that
-/// holds only the search path, and stops git from reading any repository
-/// above `dir` or any configuration of the person who runs the tests.
-fn run(program: &str, dir: &Path, args: &[&str]) -> OutputAssert {
+/// Returns `program` with `args` in `dir`, with a cleared environment
+/// that holds only the search path, and stops git from reading any
+/// repository above `dir` or any configuration of the person who runs the
+/// tests.
+fn command(program: &str, dir: &Path, args: &[&str]) -> Command {
     Command::new(program)
         .args(args)
         .current_dir(dir)
@@ -97,33 +98,23 @@ fn run(program: &str, dir: &Path, args: &[&str]) -> OutputAssert {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", dir.join("no-gitconfig"))
         .env("XDG_STATE_HOME", dir.join("state"))
-        .assert()
 }
 
 /// Runs the built `starmap` binary with `args` in `dir`.
 fn starmap(dir: &Path, args: &[&str]) -> OutputAssert {
-    run(env!("CARGO_BIN_EXE_starmap"), dir, args)
+    command(env!("CARGO_BIN_EXE_starmap"), dir, args).assert()
 }
 
 /// Runs git with `args` in `dir`, and asserts that it succeeds.
 fn git(dir: &Path, args: &[&str]) {
-    run("git", dir, args).success();
+    command("git", dir, args).assert().success();
 }
 
-/// Returns a repository whose branch `main` has one commit that holds
-/// `committed` as starmap.toml, or holds a README without a spec when
-/// `committed` is `None`. The working tree's starmap.toml is [`NOW`].
-fn repository(committed: Option<&str>) -> TempDir {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path();
-    git(path, &["init", "--quiet", "--initial-branch", "main"]);
-    match committed {
-        Some(text) => fs::write(path.join("starmap.toml"), text).unwrap(),
-        None => fs::write(path.join("README"), "shelf\n").unwrap(),
-    }
-    git(path, &["add", "."]);
+/// Commits everything in the working tree of the repository at `dir`.
+fn commit(dir: &Path) {
+    git(dir, &["add", "."]);
     git(
-        path,
+        dir,
         &[
             "-c",
             "user.name=Test",
@@ -135,6 +126,26 @@ fn repository(committed: Option<&str>) -> TempDir {
             "First",
         ],
     );
+}
+
+/// Returns an empty repository whose branch is `main`.
+fn empty_repository() -> TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    git(dir.path(), &["init", "--quiet", "--initial-branch", "main"]);
+    dir
+}
+
+/// Returns a repository whose branch `main` has one commit that holds
+/// `committed` as starmap.toml, or holds a README without a spec when
+/// `committed` is `None`. The working tree's starmap.toml is [`NOW`].
+fn repository(committed: Option<&str>) -> TempDir {
+    let dir = empty_repository();
+    let path = dir.path();
+    match committed {
+        Some(text) => fs::write(path.join("starmap.toml"), text).unwrap(),
+        None => fs::write(path.join("README"), "shelf\n").unwrap(),
+    }
+    commit(path);
     fs::write(path.join("starmap.toml"), NOW).unwrap();
     dir
 }
@@ -191,4 +202,66 @@ fn diff_outside_a_git_repository_is_a_failure() {
         .code(1)
         .stdout_eq("")
         .stderr_eq(file!["golden/diff/starmap-diff-no-repository.stderr"]);
+}
+
+#[test]
+fn diff_compares_a_spec_in_a_subdirectory_with_the_same_path_at_the_revision() {
+    let dir = empty_repository();
+    let sub = dir.path().join("sub");
+    fs::create_dir(&sub).unwrap();
+    fs::write(sub.join("starmap.toml"), WAS).unwrap();
+    commit(dir.path());
+    fs::write(sub.join("starmap.toml"), NOW).unwrap();
+    starmap(dir.path(), &["diff", "main", "--spec", "sub/starmap.toml"])
+        .success()
+        .stdout_eq(file!["golden/diff/starmap-diff.txt"])
+        .stderr_eq(file!["golden/diff/starmap-diff-sub.stderr"]);
+}
+
+#[test]
+fn a_directory_at_the_spec_path_of_the_revision_is_unreadable() {
+    let dir = empty_repository();
+    fs::create_dir(dir.path().join("starmap.toml")).unwrap();
+    fs::write(dir.path().join("starmap.toml/README"), "shelf\n").unwrap();
+    commit(dir.path());
+    fs::remove_dir_all(dir.path().join("starmap.toml")).unwrap();
+    fs::write(dir.path().join("starmap.toml"), NOW).unwrap();
+    starmap(dir.path(), &["diff", "main"])
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/diff/starmap-diff-directory.stderr"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_at_the_spec_path_of_the_revision_is_unreadable() {
+    let dir = empty_repository();
+    fs::write(dir.path().join("other.toml"), WAS).unwrap();
+    std::os::unix::fs::symlink("other.toml", dir.path().join("starmap.toml")).unwrap();
+    commit(dir.path());
+    fs::remove_file(dir.path().join("starmap.toml")).unwrap();
+    fs::write(dir.path().join("starmap.toml"), NOW).unwrap();
+    starmap(dir.path(), &["diff", "main"])
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/diff/starmap-diff-symlink.stderr"]);
+}
+
+#[test]
+fn a_revision_that_starts_with_a_dash_names_no_revision() {
+    let dir = repository(Some(WAS));
+    starmap(dir.path(), &["diff", "--", "--output=out"])
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/diff/starmap-diff-dash.stderr"]);
+    assert!(!dir.path().join("out").exists());
+}
+
+#[test]
+fn an_empty_revision_is_refused() {
+    let dir = repository(Some(WAS));
+    starmap(dir.path(), &["diff", ""])
+        .code(2)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/diff/starmap-diff-empty.stderr"]);
 }

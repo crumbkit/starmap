@@ -40,6 +40,15 @@
         "The example's output is not counted, so the command's output weight is too low when this example prints the most."
       ],
       "budget": null
+    },
+    {
+      "rule": "twins/no-twin",
+      "applies_to": "starmap diff -- -x",
+      "reason": "Every revision that diff accepts needs a git repository, and the example directory is not one, so tests/diff.rs pins an accepted revision there.",
+      "costs": [
+        "No test shows which word of the command line causes the failure, so a test of the refusal can pass while the command fails for another reason."
+      ],
+      "budget": null
     }
   ],
   "customisations": [

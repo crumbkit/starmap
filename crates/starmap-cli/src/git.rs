@@ -10,15 +10,22 @@
 //! - Arguments: fixed words and the revision, each a separate value. No
 //!   shell parses them. A revision that starts with `-` is refused before
 //!   git runs, so git never reads it as an option.
+//!   `--literal-pathspecs` makes git read the file name as a path, so a
+//!   name such as `*.toml` matches only itself.
 //! - Environment: the child inherits the whole environment of the process
 //!   that runs starmap, so git reads the repository and configuration that
 //!   the person's own `git` commands read, such as `GIT_DIR` and `HOME`.
+//!   starmap adds `GIT_NO_LAZY_FETCH=1`, so git in a partial clone never
+//!   fetches a missing object from the remote, and `GIT_TERMINAL_PROMPT=0`,
+//!   so git never asks for a password on the terminal.
 //! - Streams and deadline: standard input is empty, so git cannot wait for
 //!   typed input. Standard output and standard error are captured whole.
 //!   Each run prints at most one object id or one tree entry, except
 //!   `git cat-file blob`, which runs only after `git ls-tree` reports that
-//!   the blob is at most [`Spec::MAX_BYTES`]. A run has no deadline: git
-//!   reads only the local repository, and starmap waits for it to exit.
+//!   the blob is at most [`Spec::MAX_BYTES`]. A run has no deadline: with
+//!   lazy fetching off, git reads only the local repository, and starmap
+//!   waits for it to exit. An object that a partial clone has not fetched
+//!   makes git fail, and starmap reports that git cannot read the revision.
 //! - End: `Command::output` waits for git to exit and reaps it, and the
 //!   exit status decides the result. The commands only read the
 //!   repository, so a run that stops early leaves nothing behind.
@@ -46,7 +53,8 @@ pub(crate) struct At {
 pub(crate) enum Entry {
     /// No file is at the path.
     Missing,
-    /// The path names something other than a file, such as a directory.
+    /// The path names something other than a regular file, such as a
+    /// directory, a symlink or a submodule.
     NotFile,
     /// The file is over [`Spec::MAX_BYTES`], so it is not read.
     TooLarge,
@@ -84,16 +92,32 @@ pub(crate) fn read_at(dir: &Path, revision: &str, name: &str) -> Result<At, GitE
         return Err(GitError::NoRepository);
     }
     let commit = format!("{revision}^{{commit}}");
-    let verified = git(dir, &["rev-parse", "--verify", "--quiet", &commit]);
-    let verified = succeeded(verified.map_err(GitError::Failed)?).ok_or(GitError::NotFound)?;
-    let commit = text(&verified.stdout).trim().to_owned();
+    let verified =
+        git(dir, &["rev-parse", "--verify", "--quiet", &commit]).map_err(GitError::Failed)?;
+    if !verified.status.success() {
+        return Err(GitError::NotFound);
+    }
+    let commit = String::from_utf8_lossy(&verified.stdout).trim().to_owned();
     let listed = checked(
         "git ls-tree",
-        git(dir, &["ls-tree", "-l", "-z", &commit, "--", name]),
+        git(
+            dir,
+            &[
+                "--literal-pathspecs",
+                "ls-tree",
+                "-l",
+                "-z",
+                &commit,
+                "--",
+                name,
+            ],
+        ),
     )?;
     let entry = match tree_entry(&listed.stdout) {
         None => Entry::Missing,
-        Some(entry) if entry.kind != "blob" => Entry::NotFile,
+        // 100644 and 100755 are a regular file; 120000 is a symlink and
+        // 160000 a submodule.
+        Some(entry) if !matches!(entry.mode, "100644" | "100755") => Entry::NotFile,
         Some(entry) if entry.size.is_none_or(|size| size > Spec::MAX_BYTES) => Entry::TooLarge,
         Some(entry) => {
             let read = checked("git cat-file", git(dir, &["cat-file", "blob", entry.id]))?;
@@ -113,14 +137,11 @@ fn git(dir: &Path, args: &[&str]) -> io::Result<Output> {
     let output = Command::new("git")
         .args(args)
         .current_dir(dir)
+        .env("GIT_NO_LAZY_FETCH", "1")
+        .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
         .output();
     output
-}
-
-/// Returns `output` when git exited with success.
-fn succeeded(output: Output) -> Option<Output> {
-    output.status.success().then_some(output)
 }
 
 /// Returns the output of the git run `command` when it exited with
@@ -131,7 +152,7 @@ fn checked(command: &str, run: io::Result<Output>) -> Result<Output, GitError> {
     if output.status.success() {
         return Ok(output);
     }
-    let printed = text(&output.stderr);
+    let printed = String::from_utf8_lossy(&output.stderr);
     let printed = printed.trim();
     let message = if printed.is_empty() {
         format!("{command} failed")
@@ -141,16 +162,12 @@ fn checked(command: &str, run: io::Result<Output>) -> Result<Output, GitError> {
     Err(GitError::Failed(io::Error::other(message)))
 }
 
-/// Returns `bytes` as text, with each byte that is not UTF-8 replaced.
-fn text(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).into_owned()
-}
-
 /// One entry that `git ls-tree -l -z` prints.
 #[derive(Debug, PartialEq, Eq)]
 struct TreeEntry<'a> {
-    /// The kind of object, such as `blob` or `tree`.
-    kind: &'a str,
+    /// The entry's mode, such as `100644` for a file or `040000` for a
+    /// directory.
+    mode: &'a str,
     /// The object's id.
     id: &'a str,
     /// The blob's size in bytes, or `None` for an object that is not a
@@ -166,9 +183,9 @@ fn tree_entry(listed: &[u8]) -> Option<TreeEntry<'_>> {
     let head = line.split(|&byte| byte == b'\t').next()?;
     let head = std::str::from_utf8(head).ok()?;
     let mut words = head.split_whitespace();
-    let (_mode, kind, id, size) = (words.next()?, words.next()?, words.next()?, words.next()?);
+    let (mode, _kind, id, size) = (words.next()?, words.next()?, words.next()?, words.next()?);
     Some(TreeEntry {
-        kind,
+        mode,
         id,
         size: size.parse().ok(),
     })

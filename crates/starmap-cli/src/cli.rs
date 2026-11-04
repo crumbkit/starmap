@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use clap::builder::NonEmptyStringValueParser;
 use clap::{Args, Parser, Subcommand};
 use crumbkit::commands::{COMMANDS_LIST, CommandsList};
 use crumbkit::help::{Effects, Example, Guide, Leaf};
@@ -225,7 +226,7 @@ pub(crate) struct ExplainArgs {
 #[derive(Debug, Args)]
 pub(crate) struct DiffArgs {
     /// The git revision to compare with, such as main or HEAD~3
-    #[arg(value_name = "REVISION")]
+    #[arg(value_name = "REVISION", value_parser = NonEmptyStringValueParser::new())]
     pub(crate) revision: String,
 
     /// The file that holds the spec.
