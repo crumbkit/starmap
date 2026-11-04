@@ -207,6 +207,26 @@ fn every_command_matches_the_checked_in_command_reference() {
 }
 
 #[test]
+fn the_root_help_lists_the_commands_under_four_goal_headings_in_order() {
+    let goals: Vec<(&str, &[&str])> = GUIDE
+        .get_groups()
+        .iter()
+        .filter(|group| group.path().is_empty())
+        .flat_map(|group| group.goals())
+        .map(|goal| (goal.heading(), goal.commands()))
+        .collect();
+    assert_eq!(
+        goals,
+        [
+            ("Write and check starmap.toml", &["init", "check"][..]),
+            ("Run a program with its environment", &["run"][..]),
+            ("Read the variables", &["explain", "diff"][..]),
+            ("Explore commands", &["commands", "schemas", "self"][..]),
+        ]
+    );
+}
+
+#[test]
 fn every_opt_out_matches_the_opt_out_report() {
     crumbkit_test::check_opt_outs(
         &Cli::command(),

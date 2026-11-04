@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Args, Parser, Subcommand};
 use crumbkit::commands::{COMMANDS_LIST, CommandsList};
-use crumbkit::help::{Effects, Example, Exit, Guide, Leaf};
+use crumbkit::help::{Effects, Example, Exit, Goal, Group, Guide, Leaf};
 use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
 use crumbkit::{Call, DryRun, NoInput, ViewFlags};
 use crumbkit_usage::{SELF_USAGE, SelfUsage};
@@ -41,6 +41,15 @@ pub struct Cli {
 /// `check`, `explain`, `diff` and `run` sit directly under the root,
 /// because a person types `starmap check` as one step of their work.
 pub const GUIDE: Guide = Guide::new()
+    .groups(&[Group::new(
+        &[],
+        &[
+            Goal::new("Write and check starmap.toml", &["init", "check"]),
+            Goal::new("Run a program with its environment", &["run"]),
+            Goal::new("Read the variables", &["explain", "diff"]),
+            Goal::new("Explore commands", &["commands", "schemas", "self"]),
+        ],
+    )])
     .root_verbs(
         &["init", "check", "explain", "diff", "run"],
         "starmap acts on one file, starmap.toml, so its commands need no resource word.",
