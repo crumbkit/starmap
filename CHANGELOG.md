@@ -110,6 +110,14 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   deadline. A signed-out account returns `SecretError::Locked`, a
   missing vault, item or field returns `SecretError::NotFound`, and a
   dismissed prompt returns `SecretError::Denied`.
+- `Resolver::prepare` readies a resolution's secrets before `resolve` asks
+  for them one at a time, and `Resolver::finish` drops what was readied and
+  not taken when the resolution ends. `starmap_resolve::resolve` calls both
+  on each resolver. `OnePassword::prepare` reads every reference whose parts
+  hold only letters, digits, spaces, `_`, `.` and `-` with one `op inject`,
+  so one 1Password prompt covers them, and leaves each other reference to
+  its own `op read`. A locked store, a dismissed prompt or the deadline
+  ends every read still to come, so the person sees no further prompt.
 - `Variable::capture` binds one raw value by the variable's show, as
   `starmap::capture` binds each value. `PathTemplate::fill` returns the path
   a template names when a function gives each placeholder's directory.

@@ -1,8 +1,8 @@
 //! The one module of starmap-resolve that starts a process (PROC-1). Its
-//! one operation is [`op_read`], which reads one secret with the 1Password
-//! CLI.
+//! operations are [`op_read`], which reads one secret with the 1Password
+//! CLI, and [`op_inject`], which reads several with one run of it.
 
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::process::{self, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
@@ -14,21 +14,22 @@ use zeroize::Zeroizing;
 #[cfg(test)]
 mod tests;
 
-/// The most bytes of standard output that `op read` may print. A longer
+/// The most bytes of standard output that `op read` may print, and that
+/// each reference of an `op inject` template adds to its limit. A longer
 /// output is refused, because no secret that starmap reads is that long.
 pub(crate) const OUTPUT_LIMIT: usize = 64 * 1024;
 
 /// The most bytes of standard error that the operation keeps.
 const ERROR_LIMIT: usize = 16 * 1024;
 
-/// How a run of `op read` ended.
-pub(crate) enum OpRead {
+/// How a run of `op` ended.
+pub(crate) enum OpRun {
     /// `op` exited with success and printed these bytes.
     Printed(Zeroizing<Vec<u8>>),
     /// `op` exited with `status` and printed `message` on standard error.
     Failed { status: ExitStatus, message: String },
-    /// `op` printed more than [`OUTPUT_LIMIT`] bytes, and the operation
-    /// stopped it.
+    /// `op` printed more than its output limit, and the operation stopped
+    /// it.
     TooLong,
     /// The deadline passed before `op` closed its output, and the
     /// operation stopped it.
@@ -42,7 +43,8 @@ enum Stream {
 }
 
 /// Runs `op read` for `reference` and returns how it ended. It states the
-/// five items of PROC-2.
+/// five items of PROC-2, and [`op_inject`] differs from it only where its
+/// own list says.
 ///
 /// - Program: `program`, the path the host passed to
 ///   [`crate::OnePassword::new`]. The host chooses the program and trusts
@@ -81,17 +83,74 @@ enum Stream {
 /// Returns the error of starting `op`, such as [`io::ErrorKind::NotFound`]
 /// for a program that does not exist, of starting a reader thread, or of
 /// waiting for it. A reader thread that cannot start stops `op` first.
-pub(crate) fn op_read(program: &Path, reference: &str, deadline: Instant) -> io::Result<OpRead> {
+pub(crate) fn op_read(program: &Path, reference: &str, deadline: Instant) -> io::Result<OpRun> {
+    run(
+        read_command(program, reference),
+        None,
+        OUTPUT_LIMIT,
+        deadline,
+    )
+}
+
+/// Runs `op inject` with `template` on its standard input and returns how
+/// it ended. `op` prints the template with each `{{ op://… }}` reference
+/// replaced by its value. It states the items of PROC-2 where they differ
+/// from [`op_read`].
+///
+/// - Arguments: `inject` alone. `op` reads the template from standard
+///   input and prints to standard output, so it writes no file.
+/// - Streams: standard input holds `template`, which a writer thread
+///   writes and then closes, so `op` cannot wait for typed input. The
+///   template holds references and boundary markers, and no value.
+///   Standard output is kept up to `references` times [`OUTPUT_LIMIT`]
+///   plus the template's length, which fits a full value for every
+///   reference. The buffer holds that limit from the start, and reserving
+///   it does not touch the pages until `op` writes to them.
+///
+/// # Errors
+///
+/// Returns the errors of [`op_read`], and the error of starting the writer
+/// thread, which stops `op` first.
+pub(crate) fn op_inject(
+    program: &Path,
+    template: String,
+    references: usize,
+    deadline: Instant,
+) -> io::Result<OpRun> {
+    let limit = OUTPUT_LIMIT
+        .saturating_mul(references)
+        .saturating_add(template.len());
+    run(
+        inject_command(program),
+        Some(template.into_bytes()),
+        limit,
+        deadline,
+    )
+}
+
+/// Starts `command`, writes `input` to its standard input when there is
+/// one, keeps up to `limit` bytes of its standard output, and stops it as
+/// [`op_read`] describes.
+fn run(
+    mut command: Command,
+    input: Option<Vec<u8>>,
+    limit: usize,
+    deadline: Instant,
+) -> io::Result<OpRun> {
     #[expect(
         clippy::disallowed_methods,
-        reason = "PROC-1: op_read is the operation that starts op"
+        reason = "PROC-1: run starts op for op_read and op_inject"
     )]
-    let mut child = command(program, reference).spawn()?;
+    let mut child = command.spawn()?;
     let (sender, receiver) = mpsc::channel();
-    let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
+    let (stdin, stdout, stderr) = (child.stdin.take(), child.stdout.take(), child.stderr.take());
     let started = stdout
-        .map_or(Ok(()), |pipe| read_output(pipe, sender.clone()))
-        .and_then(|()| stderr.map_or(Ok(()), |pipe| read_error(pipe, sender)));
+        .map_or(Ok(()), |pipe| read_output(pipe, limit, sender.clone()))
+        .and_then(|()| stderr.map_or(Ok(()), |pipe| read_error(pipe, sender)))
+        .and_then(|()| match (stdin, input) {
+            (Some(pipe), Some(input)) => write_input(pipe, input),
+            _ => Ok(()),
+        });
     if let Err(error) = started {
         // The thread's error is the one reported, so a failure to stop the
         // child adds nothing.
@@ -103,15 +162,15 @@ pub(crate) fn op_read(program: &Path, reference: &str, deadline: Instant) -> io:
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
         match receiver.recv_timeout(left) {
-            Ok(Stream::Output(bytes)) if bytes.len() > OUTPUT_LIMIT => {
+            Ok(Stream::Output(bytes)) if bytes.len() > limit => {
                 stop(&mut child)?;
-                return Ok(OpRead::TooLong);
+                return Ok(OpRun::TooLong);
             }
             Ok(Stream::Output(bytes)) => output = bytes,
             Ok(Stream::Error(bytes)) => error = bytes,
             Err(RecvTimeoutError::Timeout) => {
                 stop(&mut child)?;
-                return Ok(OpRead::Deadline);
+                return Ok(OpRun::Deadline);
             }
             // Both readers have sent their stream.
             Err(RecvTimeoutError::Disconnected) => break,
@@ -119,9 +178,9 @@ pub(crate) fn op_read(program: &Path, reference: &str, deadline: Instant) -> io:
     }
     let status = stop(&mut child)?;
     if status.success() {
-        Ok(OpRead::Printed(output))
+        Ok(OpRun::Printed(output))
     } else {
-        Ok(OpRead::Failed {
+        Ok(OpRun::Failed {
             status,
             message: String::from_utf8_lossy(&error).into_owned(),
         })
@@ -130,10 +189,10 @@ pub(crate) fn op_read(program: &Path, reference: &str, deadline: Instant) -> io:
 
 /// Returns the command of `op read` for `reference`, which [`op_read`]
 /// starts.
-fn command(program: &Path, reference: &str) -> Command {
+fn read_command(program: &Path, reference: &str) -> Command {
     #[expect(
         clippy::disallowed_methods,
-        reason = "PROC-1: op_read is the operation that starts op"
+        reason = "PROC-1: op_read is an operation that starts op"
     )]
     let mut command = Command::new(program);
     command
@@ -144,11 +203,26 @@ fn command(program: &Path, reference: &str) -> Command {
     command
 }
 
+/// Returns the command of `op inject`, which [`op_inject`] starts.
+fn inject_command(program: &Path) -> Command {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "PROC-1: op_inject is an operation that starts op"
+    )]
+    let mut command = Command::new(program);
+    command
+        .arg("inject")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command
+}
+
 /// Kills `child`, waits for it, and returns its exit status. The child is
 /// reaped whatever the kill returns.
 #[expect(
     clippy::disallowed_types,
-    reason = "PROC-1: op_read owns its child and stops it"
+    reason = "PROC-1: run owns its child and stops it"
 )]
 fn stop(child: &mut process::Child) -> io::Result<ExitStatus> {
     // A kill fails only for a child that is already reaped, which the wait
@@ -157,16 +231,32 @@ fn stop(child: &mut process::Child) -> io::Result<ExitStatus> {
     child.wait()
 }
 
-/// Reads standard output on a new thread, up to one byte over
-/// [`OUTPUT_LIMIT`], and sends it when the pipe closes or the limit is
-/// passed. The buffer holds the limit from the start, so reading never
-/// moves the secret and leaves a copy behind.
-fn read_output(pipe: impl Read + Send + 'static, sender: Sender<Stream>) -> io::Result<()> {
+/// Writes `input` to standard input on a new thread and then closes it, so
+/// a large template cannot block the operation past its deadline.
+fn write_input(mut pipe: impl Write + Send + 'static, input: Vec<u8>) -> io::Result<()> {
     thread::Builder::new().spawn(move || {
-        let mut bytes = Zeroizing::new(Vec::with_capacity(OUTPUT_LIMIT + 1));
+        // A write fails when op exits without reading its input, and the
+        // exit status then reports the failure.
+        let _ = pipe.write_all(&input);
+    })?;
+    Ok(())
+}
+
+/// Reads standard output on a new thread, up to one byte over `most`, and
+/// sends it when the pipe closes or the limit is passed. The buffer holds
+/// the limit from the start, so reading never moves the secret and leaves
+/// a copy behind.
+fn read_output(
+    pipe: impl Read + Send + 'static,
+    most: usize,
+    sender: Sender<Stream>,
+) -> io::Result<()> {
+    let most = most.saturating_add(1);
+    thread::Builder::new().spawn(move || {
+        let mut bytes = Zeroizing::new(Vec::with_capacity(most));
         // A read that fails keeps the bytes read until then, and the exit
         // status reports the failure.
-        let _ = pipe.take(limit(OUTPUT_LIMIT + 1)).read_to_end(&mut bytes);
+        let _ = pipe.take(limit(most)).read_to_end(&mut bytes);
         // The operation stops listening when it stops the child, so a
         // failed send is not a problem.
         let _ = sender.send(Stream::Output(bytes));

@@ -900,3 +900,76 @@ fn a_resolver_that_only_reads_refuses_to_save_a_value() {
     let saved = resolver.save(lookup, &Secret::new("typed".to_owned()), later());
     assert!(matches!(saved, Err(SecretError::Unsupported)));
 }
+
+/// A resolver that records, in order, each call it receives, and answers
+/// each lookup.
+#[derive(Default)]
+struct Recorder {
+    calls: RefCell<Vec<String>>,
+}
+
+impl Resolver for Recorder {
+    fn prepare(&self, lookups: &[Lookup<'_>], _deadline: Instant) {
+        let references: Vec<&str> = lookups
+            .iter()
+            .map(|lookup| match lookup {
+                Lookup::Reference(starmap::SecretRef::OnePassword(reference)) => reference.as_str(),
+                _ => "another lookup",
+            })
+            .collect();
+        self.calls
+            .borrow_mut()
+            .push(format!("prepare {}", references.join(", ")));
+    }
+
+    fn finish(&self) {
+        self.calls.borrow_mut().push("finish".to_owned());
+    }
+
+    fn resolve(
+        &self,
+        lookup: Lookup<'_>,
+        _deadline: Instant,
+    ) -> Result<Secret<String>, SecretError> {
+        let asked = match lookup {
+            Lookup::Reference(_) => "resolve reference",
+            Lookup::Generated { .. } => "resolve generated",
+            _ => "resolve another lookup",
+        };
+        self.calls.borrow_mut().push(asked.to_owned());
+        Ok(Secret::new("value".to_owned()))
+    }
+}
+
+#[test]
+fn each_resolver_prepares_every_bound_secret_before_any_lookup_and_finishes_after_the_last() {
+    let caller = Bindings::new();
+    let (first, second) = (Recorder::default(), Recorder::default());
+    let context = Context::new(places(), &caller, later())
+        .resolver(&first)
+        .resolver(&second);
+    let _resolution = resolve(&spec(), Mode::Local, &context);
+
+    assert_eq!(
+        *first.calls.borrow(),
+        [
+            "prepare op://Personal/shelf mirror/token",
+            "resolve reference",
+            "resolve generated",
+            "finish",
+        ]
+    );
+    assert_eq!(
+        *second.calls.borrow(),
+        ["prepare op://Personal/shelf mirror/token", "finish"]
+    );
+}
+
+#[test]
+fn a_passed_deadline_prepares_nothing_and_still_finishes() {
+    let caller = Bindings::new();
+    let recorder = Recorder::default();
+    let context = Context::new(places(), &caller, Instant::now()).resolver(&recorder);
+    let _resolution = resolve(&spec(), Mode::Local, &context);
+    assert_eq!(*recorder.calls.borrow(), ["finish"]);
+}

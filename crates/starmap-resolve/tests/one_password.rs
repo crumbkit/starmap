@@ -5,6 +5,9 @@
 
 #![cfg(all(unix, feature = "one-password"))]
 
+#[path = "one_password/batch.rs"]
+mod batch;
+
 use std::fs;
 use std::io;
 use std::os::unix::fs::PermissionsExt as _;

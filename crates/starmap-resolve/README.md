@@ -11,7 +11,9 @@ caller's own values, the directories that fill path templates, a provider
 for each provided kind, and resolvers of secrets. It returns the bindings
 that `starmap::check` checks, with a failure for each variable it could not
 resolve. The `one-password` feature adds `OnePassword`, a resolver that
-runs `op read` for each `op://` reference. The `keychain` feature adds
+reads all of a resolution's `op://` references with one `op inject`, so one
+1Password prompt covers them, and reads a reference that a template would
+change, such as one holding `$`, with its own `op read`. The `keychain` feature adds
 `Keychain`, which creates each generated value on first use and returns it
 unchanged afterwards, keeps a secret without a bind that a host saves with
 `Resolver::save`, and `Keychain::forget` deletes a workspace's values.

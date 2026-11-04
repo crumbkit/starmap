@@ -15,12 +15,18 @@ include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 # Resolution reads a starmap `Spec` and returns the `Bindings` that
 # `starmap::check` checks.
 starmap.workspace = true
-# zeroize zeroes the bytes that `op read` printed when they do not become a
-# secret, such as output that is not UTF-8, for the `one-password` feature.
+# zeroize zeroes the bytes that `op read` and `op inject` printed when they
+# do not become a secret, such as output that is not UTF-8, for the
+# `one-password` feature.
 # For the `keychain` feature, it zeroes the random bytes of a generated value
 # once they are written as text, and the bytes a Keychain item held when they
 # are not UTF-8.
 zeroize = { workspace = true, optional = true }
+# getrandom gives the random bytes of the markers that split the output of
+# one `op inject` into a value for each reference, for the `one-password`
+# feature. It reads the operating system's random source and adds no
+# generator of its own.
+getrandom = { version = "0.4.3", default-features = false, optional = true }
 
 [dev-dependencies]
 # `std` gives the strategies that generate strings from a regular
@@ -44,8 +50,9 @@ base64 = { version = "0.23.1", default-features = false, features = ["alloc"], o
 
 # No feature is on by default (LIB-6).
 [features]
-# one-password reads a secret through the 1Password CLI's `op read`.
-one-password = ["dep:zeroize"]
+# one-password reads secrets through the 1Password CLI's `op inject` and
+# `op read`.
+one-password = ["dep:zeroize", "dep:getrandom"]
 # keychain creates, reads and forgets generated secrets in the macOS Keychain.
 keychain = ["dep:security-framework", "dep:core-foundation", "dep:base64", "dep:zeroize"]
 
