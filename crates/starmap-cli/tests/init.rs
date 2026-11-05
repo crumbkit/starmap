@@ -93,7 +93,7 @@ fn check_refuses_every_guess_in_the_file_that_init_wrote() {
     // source.
     let problems = failure["fields"]["problems"].as_array().unwrap();
     assert_eq!(problems.len(), 45);
-    assert!(problems.iter().all(|kind| kind == "guess"));
+    assert!(problems.iter().all(|kind| kind == "starmap::spec::guess"));
 }
 
 #[test]

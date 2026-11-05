@@ -19,12 +19,12 @@ use std::time::{Duration, Instant};
 
 use crumbkit::{Failure, Output, Sink};
 use starmap::{
-    Bindings, Bound, Environment, Mode, Name, Placeholder, Problem, ProviderKind, Source, Spec,
-    Verdict,
+    Bindings, Bound, Environment, Mode, Name, NoPlace, Placeholder, Problem, ProviderKind, Source,
+    Spec, Verdict,
 };
 use starmap_resolve::{
-    AppName, Context, Keychain, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError,
-    WorkspaceName, names_of, resolve,
+    AppName, Context, Item, Keychain, Lookup, OnePassword, Places, ResolveProblem, Resolver,
+    SecretError, WorkspaceName, app_name_of, resolve,
 };
 
 use crate::cli::{Assignment, RunArgs};
@@ -241,8 +241,11 @@ pub(crate) fn gather(args: &RunArgs, vars: Vec<(OsString, OsString)>) -> Result<
     let (mode, mode_note) = mode::decide(&spec, &caller);
     notes.push(mode_note);
 
-    let (default, app) = names_of(&checkout);
-    let workspace = args.workspace.clone().unwrap_or(default);
+    let app = app_name_of(&checkout);
+    let workspace = args
+        .workspace
+        .clone()
+        .unwrap_or_else(|| WorkspaceName::from(app.clone()));
     let mut places =
         Places::new(checkout.clone()).workspace(workspace.clone(), app.clone(), checkout);
     if let Some(home) = home {
@@ -316,7 +319,12 @@ pub(crate) fn settle(
     let can_start = failures.is_empty();
     for failure in unbound {
         let typed = if can_start {
-            typed(&failure.name, &workspace, &app, resolvers, ask, &mut notes)
+            typed(
+                Item::new(&workspace, &app, &failure.name),
+                resolvers,
+                ask,
+                &mut notes,
+            )
         } else {
             None
         };
@@ -351,14 +359,11 @@ fn checked(
     }
 }
 
-/// Asks `ask` for the secret `name`, and offers to save the answer for
-/// `app` in `workspace` with the first of `resolvers` that keeps saved
-/// values. It returns `None` when no person can answer or the person typed
-/// nothing.
+/// Asks `ask` for the secret of `item`, and offers to save the answer with
+/// the first of `resolvers` that keeps saved values. It returns `None` when
+/// no person can answer or the person typed nothing.
 fn typed(
-    name: &Name,
-    workspace: &WorkspaceName,
-    app: &AppName,
+    item: Item<'_>,
     resolvers: &[&dyn Resolver],
     ask: &mut dyn Ask,
     notes: &mut Vec<String>,
@@ -366,13 +371,10 @@ fn typed(
     if !ask.can_ask() {
         return None;
     }
+    let name = item.name;
     let secret = ask.secret(name)?;
-    let lookup = Lookup::Saved {
-        workspace,
-        app,
-        name,
-    };
-    let (workspace, app) = (workspace.as_str(), app.as_str());
+    let lookup = Lookup::Saved { item };
+    let (workspace, app) = (item.workspace.as_str(), item.app.as_str());
     let question = format!(
         "Save {name} to the Keychain for workspace {workspace} and app {app}, so later runs find it?"
     );
@@ -539,6 +541,17 @@ pub(crate) enum RunFailure {
         /// The variable.
         name: Name,
     },
+    /// No secret store that run registers handles the variable's lookup,
+    /// such as a generated value where the session has no login keychain.
+    #[failure(
+        code = SECRET_UNREADABLE,
+        hint = "on macOS, run starmap run in a session that has a login keychain; elsewhere, make {name} a secret with a one-password bind in starmap.toml",
+        field(key = name.as_str()),
+    )]
+    NoStore {
+        /// The variable.
+        name: Name,
+    },
     /// A secret store could not return the secret.
     #[failure(
         code = SECRET_UNREADABLE,
@@ -559,17 +572,14 @@ impl RunFailure {
     fn resolve(name: Name, problem: ResolveProblem) -> Self {
         match problem {
             ResolveProblem::NoProvider(kind) => Self::NoProvider { name, kind },
-            ResolveProblem::Placeholder(placeholder) => Self::NoPlace { name, placeholder },
+            ResolveProblem::NoPlace(NoPlace(placeholder)) => Self::NoPlace { name, placeholder },
             ResolveProblem::Unbound => Self::Unbound { name },
             ResolveProblem::Secret(error) => Self::Secret { name, error },
             ResolveProblem::Deadline => Self::Secret {
                 name,
                 error: SecretError::Deadline,
             },
-            ResolveProblem::NoResolver => Self::Secret {
-                name,
-                error: SecretError::Unsupported,
-            },
+            ResolveProblem::NoResolver => Self::NoStore { name },
             // run registers no provider, so a provider error reads as a
             // store that failed. So does a problem that a later
             // starmap-resolve adds, until this command learns it.
@@ -645,6 +655,10 @@ impl fmt::Display for RunFailure {
             Self::Unbound { name } => write!(
                 formatter,
                 "{name} is a secret with no bind, no value in this shell and no value saved in the Keychain"
+            ),
+            Self::NoStore { name } => write!(
+                formatter,
+                "no secret store that starmap run uses can hold {name} here, because starmap run keeps generated values only in the macOS login keychain"
             ),
             Self::Secret { name, error } => {
                 write!(formatter, "{name} could not be read, because {error}")

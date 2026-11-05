@@ -14,9 +14,9 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use starmap::{Mode, Secret, SecretRef, Spec};
+use starmap::{Mode, Name, Secret, SecretRef, Spec};
 use starmap_resolve::{
-    AppName, Context, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError,
+    AppName, Context, Item, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError,
     WorkspaceName, resolve,
 };
 
@@ -227,10 +227,9 @@ fn a_generated_lookup_is_left_to_another_resolver() {
     let program = fake_op("generated", "touch '{dir}/ran'");
     let workspace: WorkspaceName = "shelf-dev".parse().unwrap();
     let app: AppName = "shelf".parse().unwrap();
+    let key: Name = "SHELF_SESSION_KEY".parse().unwrap();
     let lookup = Lookup::Generated {
-        workspace: &workspace,
-        app: &app,
-        name: &"SHELF_SESSION_KEY".parse().unwrap(),
+        item: Item::new(&workspace, &app, &key),
         bytes: starmap::SecretBytes::new(32).unwrap(),
     };
     let error = OnePassword::new(program.clone())

@@ -5,7 +5,7 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
-use crumbkit::{Code, Failure, Field, FieldValue, Recovery};
+use crumbkit::{Code, Failure, Field, FieldValue, Recovery, Spelling};
 use miette::{Diagnostic, LabeledSpan, NamedSource, SourceCode};
 use starmap::{Spec, SpecError, SpecProblemKind};
 
@@ -282,30 +282,16 @@ impl Failure for SpecFailure {
     }
 }
 
-/// Returns the code of a spec problem of `kind`. A kind that a later
-/// release of starmap adds reports as a syntax problem until this list
-/// names it.
+/// Returns the code of a spec problem of `kind`: the code in
+/// [`codes::ALL`] that spells as [`SpecProblemKind::code`]. A kind that a
+/// later release of starmap adds reports as a syntax problem until
+/// `codes` declares its code.
 fn code(kind: SpecProblemKind) -> &'static Code {
-    match kind {
-        SpecProblemKind::TooLarge => &codes::SPEC_TOO_LARGE,
-        SpecProblemKind::UnknownField => &codes::SPEC_UNKNOWN_FIELD,
-        SpecProblemKind::MissingField => &codes::SPEC_MISSING_FIELD,
-        SpecProblemKind::BadValue => &codes::SPEC_BAD_VALUE,
-        SpecProblemKind::BadName => &codes::SPEC_BAD_NAME,
-        SpecProblemKind::Guess => &codes::SPEC_GUESS,
-        SpecProblemKind::BadDefault => &codes::SPEC_BAD_DEFAULT,
-        SpecProblemKind::BadRange => &codes::SPEC_BAD_RANGE,
-        SpecProblemKind::EmptyEnumeration => &codes::SPEC_EMPTY_ENUMERATION,
-        SpecProblemKind::ShownSecret => &codes::SPEC_SHOWN_SECRET,
-        SpecProblemKind::SecretForm => &codes::SPEC_SECRET_FORM,
-        SpecProblemKind::BindMismatch => &codes::SPEC_BIND_MISMATCH,
-        SpecProblemKind::BadBytes => &codes::SPEC_BAD_BYTES,
-        SpecProblemKind::UnknownPlaceholder => &codes::SPEC_UNKNOWN_PLACEHOLDER,
-        SpecProblemKind::ModeUndeclared => &codes::SPEC_MODE_UNDECLARED,
-        SpecProblemKind::ModeSource => &codes::SPEC_MODE_SOURCE,
-        // `Syntax`, and any kind that a later release adds.
-        _ => &codes::SPEC_SYNTAX,
-    }
+    codes::ALL
+        .iter()
+        .copied()
+        .find(|code| Spelling::COLONS.spell(code) == kind.code())
+        .unwrap_or(&codes::SPEC_SYNTAX)
 }
 
 /// Returns the next step for a spec problem of `kind`.

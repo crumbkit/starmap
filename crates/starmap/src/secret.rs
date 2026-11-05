@@ -56,13 +56,20 @@ impl<T: Zeroize> Secret<T> {
 
 impl<T: Zeroize + Clone> Secret<T> {
     /// Returns a second secret that holds a copy of the value, without the
-    /// value passing through any other type.
+    /// value passing through any other type. It is the one way to copy a
+    /// secret: `Secret` has no `Clone`, so a copy is a deliberate call.
+    ///
+    /// ```
+    /// let secret = starmap::Secret::new(String::from("token"));
+    /// let copy = secret.duplicate();
+    /// assert_eq!(format!("{copy:?}"), "Secret(••••••••)");
+    /// ```
     #[must_use]
     #[expect(
         clippy::disallowed_methods,
         reason = "BASE-24: the copy goes straight into a new Secret"
     )]
-    pub(crate) fn duplicate(&self) -> Self {
+    pub fn duplicate(&self) -> Self {
         Self::new(self.0.expose_secret().clone())
     }
 }

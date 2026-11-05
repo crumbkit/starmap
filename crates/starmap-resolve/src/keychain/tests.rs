@@ -51,10 +51,10 @@ fn a_save_of_any_lookup_but_a_saved_one_is_left_to_another_resolver() {
 #[test]
 fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
     let keychain = Keychain::new();
+    let (unsupported, shelf) = (workspace("unsupported"), app("shelf"));
+    let (key, token) = (name("SHELF_SESSION_KEY"), name("SHELF_UPSTREAM_TOKEN"));
     let lookup = Lookup::Generated {
-        workspace: &workspace("unsupported"),
-        app: &app("shelf"),
-        name: &name("SHELF_SESSION_KEY"),
+        item: crate::Item::new(&unsupported, &shelf, &key),
         bytes: starmap::SecretBytes::DEFAULT,
     };
     assert!(matches!(
@@ -62,9 +62,7 @@ fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
         Err(SecretError::Unsupported)
     ));
     let saved = Lookup::Saved {
-        workspace: &workspace("unsupported"),
-        app: &app("shelf"),
-        name: &name("SHELF_UPSTREAM_TOKEN"),
+        item: crate::Item::new(&unsupported, &shelf, &token),
     };
     assert!(matches!(
         keychain.resolve(saved, deadline()),
@@ -93,7 +91,7 @@ mod macos {
     use super::super::macos::{problem, store};
     use super::super::service;
     use super::{Keychain, app, deadline, name, workspace};
-    use crate::{AppName, Lookup, Resolver, SecretError, WorkspaceName};
+    use crate::{AppName, Item, Lookup, Resolver, SecretError, WorkspaceName};
 
     /// Forgets the test workspaces when a test ends, whether it passed or
     /// failed, so no test leaves an item in the Keychain.
@@ -128,9 +126,7 @@ mod macos {
         bytes: SecretBytes,
     ) -> Result<String, SecretError> {
         let lookup = Lookup::Generated {
-            workspace,
-            app,
-            name,
+            item: Item::new(workspace, app, name),
             bytes,
         };
         Ok(text(&keychain.resolve(lookup, deadline())?))
@@ -184,9 +180,7 @@ mod macos {
         let token = name("SHELF_UPSTREAM_TOKEN");
         let shelf = app("shelf");
         let lookup = Lookup::Saved {
-            workspace: &saving,
-            app: &shelf,
-            name: &token,
+            item: Item::new(&saving, &shelf, &token),
         };
 
         assert!(matches!(
@@ -212,10 +206,9 @@ mod macos {
         let keychain = Keychain::new();
         let late = workspace("deadline");
         let _cleanup = Cleanup(&keychain, vec![late.clone()]);
+        let (shelf, key) = (app("shelf"), name("SHELF_SESSION_KEY"));
         let lookup = Lookup::Generated {
-            workspace: &late,
-            app: &app("shelf"),
-            name: &name("SHELF_SESSION_KEY"),
+            item: Item::new(&late, &shelf, &key),
             bytes: SecretBytes::DEFAULT,
         };
 

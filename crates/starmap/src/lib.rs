@@ -24,6 +24,14 @@
 //! `derive` feature. [`Env::load`] reads the process environment, and
 //! [`Env::from_vars`] reads a fixed set of variables, as a test does.
 //!
+//! Each [`SpecProblemKind`] has a failure code of the form
+//! `starmap::<area>::<name>`, such as `starmap::spec::bad_default`, which
+//! a host prints as it is.
+//!
+//! The `url` crate is part of starmap's public API, because [`Value::Url`]
+//! holds a `url::Url` and [`FormError::NotUrl`] holds its parse error.
+//! starmap re-exports it as [`url`], so a host names the same version.
+//!
 //! The crate reads no environment variable itself. A caller passes each
 //! value in, and the `load` that the derive generates in the application
 //! crate reads the process environment.
@@ -43,7 +51,7 @@ mod secret;
 mod spec;
 
 pub use bind::{
-    Bindings, Bound, BytesError, Cache, OnePasswordRef, OnePasswordRefError, PathTemplate,
+    Bindings, Bound, BytesError, Cache, NoPlace, OnePasswordRef, OnePasswordRefError, PathTemplate,
     PathTemplateError, Placeholder, ProvidedRef, ProviderKind, ProviderKindError, QualifierError,
     SecretBind, SecretBytes, SecretRef,
 };
@@ -60,6 +68,7 @@ pub use secret::Secret;
 pub use spec::{
     Digest, Show, Source, Spec, SpecError, SpecProblem, SpecProblemKind, Unset, UnsetRule, Variable,
 };
+pub use url;
 
 /// Derives [`Enumeration`] for an enum of unit variants. A variant reads as
 /// its name in kebab case, such as `dry-run` for `DryRun`, and

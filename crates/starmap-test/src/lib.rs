@@ -6,9 +6,13 @@
 //! ```rust,ignore
 //! #[test]
 //! fn the_env_struct_matches_starmap_toml() {
-//!     starmap_test::check::<Env>(include_str!("../starmap.toml"));
+//!     starmap_test::check::<Env>();
 //! }
 //! ```
+//!
+//! The check reads the spec that the struct embeds, [`Env::SPEC`], which
+//! is the file the struct reads at run time, so a test cannot check the
+//! struct against another file.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -20,7 +24,14 @@ mod tests;
 
 /// A variable that `starmap.toml` declares and the struct need not read,
 /// such as one that only a dependency reads.
+///
+/// ```
+/// const ALLOW: &[starmap_test::Allow] =
+///     &[starmap_test::Allow::new("XDG_CONFIG_HOME", "only a dependency reads it")];
+/// assert_eq!(ALLOW[0].name, "XDG_CONFIG_HOME");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Allow {
     /// The name of the variable.
     pub name: &'static str,
@@ -28,17 +39,26 @@ pub struct Allow {
     pub reason: &'static str,
 }
 
-/// Checks that the struct `E` and the text of its `starmap.toml` agree, as
+impl Allow {
+    /// Returns the entry that lets the struct leave the variable `name`
+    /// unread, for `reason`.
+    #[must_use]
+    pub const fn new(name: &'static str, reason: &'static str) -> Self {
+        Self { name, reason }
+    }
+}
+
+/// Checks that the struct `E` and the `starmap.toml` it embeds agree, as
 /// [`check_allowing`] does with no [`Allow`] entries.
 ///
 /// # Panics
 ///
 /// Panics as [`check_allowing`] does.
-pub fn check<E: Env>(spec: &str) {
-    check_allowing::<E>(spec, &[]);
+pub fn check<E: Env>() {
+    check_allowing::<E>(&[]);
 }
 
-/// Checks that the struct `E` and the text of its `starmap.toml` agree,
+/// Checks that the struct `E` and the `starmap.toml` it embeds agree,
 /// where each of `allow` names a declared variable the struct need not
 /// read.
 ///
@@ -51,22 +71,15 @@ pub fn check<E: Env>(spec: &str) {
 ///
 /// # Panics
 ///
-/// Panics when `spec` differs from the text `E` embeds, which happens when
-/// the test reads another file than the derive names. Otherwise it panics
-/// with every disagreement at once when the spec does not parse or the
-/// struct and the spec disagree.
+/// Panics with every disagreement at once when the spec does not parse or
+/// the struct and the spec disagree.
 #[expect(
     clippy::panic,
     reason = "a failed check fails the test that calls it, as an assertion does"
 )]
-pub fn check_allowing<E: Env>(spec: &str, allow: &[Allow]) {
+pub fn check_allowing<E: Env>(allow: &[Allow]) {
     let type_name = std::any::type_name::<E>();
-    if spec != E::SPEC {
-        panic!(
-            "the spec text the test passes differs from the starmap.toml that {type_name} embeds, so the test reads another file than the derive names"
-        );
-    }
-    if let Err(report) = compare(type_name, E::FIELDS, spec, allow) {
+    if let Err(report) = compare(type_name, E::FIELDS, E::SPEC, allow) {
         panic!("{report}");
     }
 }

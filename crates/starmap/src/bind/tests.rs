@@ -7,8 +7,8 @@ use std::path::Path;
 use proptest::prelude::*;
 
 use super::{
-    Bindings, Bound, OnePasswordRef, PathTemplate, PathTemplateError, Placeholder, ProvidedRef,
-    ProviderKind, SecretBytes,
+    Bindings, Bound, NoPlace, OnePasswordRef, PathTemplate, PathTemplateError, Placeholder,
+    ProvidedRef, ProviderKind, SecretBytes,
 };
 use crate::Name;
 
@@ -130,7 +130,18 @@ fn a_path_template_fills_to_the_first_placeholder_that_has_no_place() {
         (placeholder == Placeholder::Checkout).then_some(Path::new("/checkout"))
     });
 
-    assert_eq!(path, Err(Placeholder::Home));
+    assert_eq!(path, Err(NoPlace(Placeholder::Home)));
+}
+
+#[test]
+fn a_placeholder_without_a_place_is_an_error_that_names_it() {
+    let template: PathTemplate = "{home}/books.db".parse().unwrap();
+    let error: Box<dyn std::error::Error> = template.fill(|_| None).unwrap_err().into();
+
+    assert_eq!(
+        error.to_string(),
+        "the template uses {home}, which has no directory"
+    );
 }
 
 #[test]

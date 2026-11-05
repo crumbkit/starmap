@@ -3,10 +3,10 @@
 
 use std::time::Instant;
 
-use starmap::{Name, Secret};
+use starmap::Secret;
 use zeroize::Zeroizing;
 
-use crate::{AppName, Lookup, Resolver, SecretError, WorkspaceName};
+use crate::{Item, Lookup, Resolver, SecretError, WorkspaceName};
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -75,17 +75,12 @@ impl Resolver for Keychain {
         deadline: Instant,
     ) -> Result<Secret<String>, SecretError> {
         match lookup {
-            Lookup::Generated {
-                workspace,
-                app,
-                name,
-                bytes,
-            } => platform::generated(&service(workspace), &account(app, name), bytes, deadline),
-            Lookup::Saved {
-                workspace,
-                app,
-                name,
-            } => platform::saved(&service(workspace), &account(app, name), deadline),
+            Lookup::Generated { item, bytes } => {
+                platform::generated(&service(item.workspace), &account(item), bytes, deadline)
+            }
+            Lookup::Saved { item } => {
+                platform::saved(&service(item.workspace), &account(item), deadline)
+            }
             _ => Err(SecretError::Unsupported),
         }
     }
@@ -108,22 +103,18 @@ impl Resolver for Keychain {
         value: &Secret<String>,
         deadline: Instant,
     ) -> Result<(), SecretError> {
-        let Lookup::Saved {
-            workspace,
-            app,
-            name,
-        } = lookup
-        else {
+        let Lookup::Saved { item } = lookup else {
             return Err(SecretError::Unsupported);
         };
         let value = Zeroizing::new(value.expose().clone());
-        platform::save(&service(workspace), &account(app, name), value, deadline)
+        platform::save(&service(item.workspace), &account(item), value, deadline)
     }
 }
 
-/// Returns the Keychain account of the variable `name` of `app`.
-fn account(app: &AppName, name: &Name) -> String {
-    format!("{}/{}", app.as_str(), name.as_str())
+/// Returns the Keychain account of `item`, which names its app and
+/// variable.
+fn account(item: Item<'_>) -> String {
+    format!("{}/{}", item.app.as_str(), item.name.as_str())
 }
 
 /// The calls on a platform without a Keychain, each of which returns

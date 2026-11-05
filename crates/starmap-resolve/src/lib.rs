@@ -14,7 +14,9 @@
 //! which keeps generated secrets in the macOS Keychain. Neither feature is
 //! on by default. The `agent` feature, on macOS and Linux, adds the
 //! `agent` module, which reads 1Password values from a per-user agent when
-//! one is running.
+//! one is running. Each `agent::AgentError` has a failure code of the form
+//! `starmap::<area>::<name>`, such as `starmap::agent::off`, which a host
+//! prints as it is.
 
 #[cfg(all(feature = "agent", any(target_os = "macos", target_os = "linux")))]
 pub mod agent;
@@ -33,6 +35,6 @@ pub use keychain::Keychain;
 #[cfg(feature = "one-password")]
 pub use one_password::OnePassword;
 
-pub use places::{AppName, LabelError, Places, WorkspaceName, expand, names_of};
+pub use places::{AppName, LabelError, Places, WorkspaceName, app_name_of, expand};
 pub use resolve::{Context, Resolution, ResolveFailure, ResolveProblem, resolve};
-pub use traits::{Cacheable, Lookup, Provider, ProviderError, Resolver, SecretError};
+pub use traits::{Cacheable, Item, Lookup, Provider, ProviderError, Resolver, SecretError};

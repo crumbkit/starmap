@@ -6,7 +6,9 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use starmap::{PathTemplate, Placeholder};
+use starmap::{Name, NoPlace, PathTemplate, Placeholder};
+
+use crate::Item;
 
 #[cfg(test)]
 mod tests;
@@ -26,9 +28,17 @@ pub struct Places {
 /// The workspace an app runs in.
 #[derive(Debug, Clone)]
 pub(crate) struct Workspace {
-    pub(crate) name: WorkspaceName,
-    pub(crate) app: AppName,
+    name: WorkspaceName,
+    app: AppName,
     dir: PathBuf,
+}
+
+impl Workspace {
+    /// Returns the item of the variable `name` of the app in this
+    /// workspace.
+    pub(crate) fn item<'a>(&'a self, name: &'a Name) -> Item<'a> {
+        Item::new(&self.name, &self.app, name)
+    }
 }
 
 impl Places {
@@ -88,16 +98,27 @@ impl Places {
 ///
 /// # Errors
 ///
-/// Returns the first placeholder of the template that has no place.
-pub fn expand(template: &PathTemplate, places: &Places) -> Result<PathBuf, Placeholder> {
+/// Returns [`NoPlace`] with the first placeholder of the template that has
+/// no place.
+pub fn expand(template: &PathTemplate, places: &Places) -> Result<PathBuf, NoPlace> {
     template.fill(|placeholder| places.place(placeholder))
 }
 
 /// The name of the workspace an app runs in, such as `shelf-dev`. It
 /// starts with a lower case ASCII letter and holds only lower case ASCII
-/// letters, digits and hyphens. [`FromStr`] is the only way to build one.
+/// letters, digits and hyphens. [`FromStr`] builds one from text, and
+/// `From<AppName>` names a workspace after the app it holds.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WorkspaceName(String);
+
+impl From<AppName> for WorkspaceName {
+    /// Returns the workspace named after `app`, as a host names the
+    /// workspace of a lone app. Both names follow the same rule, so this
+    /// never fails.
+    fn from(app: AppName) -> Self {
+        Self(app.0)
+    }
+}
 
 /// The name of an app within its workspace, such as `shelf`. It follows
 /// the rule of a [`WorkspaceName`]. [`FromStr`] is the only way to build
@@ -143,14 +164,15 @@ impl FromStr for AppName {
     }
 }
 
-/// Returns the workspace and app names that the directory `dir` gives a
-/// host by default: its name in lower case, with each character other
-/// than a letter, a digit or a hyphen written as a hyphen, and `app-`
-/// before a name that does not start with a letter. So `My_App` gives
-/// `my-app`, `.tmp9` gives `app--tmp9` and `/` gives `app`. The result
-/// always fits the name rule, so this never fails.
+/// Returns the app name that the directory `dir` gives a host by default:
+/// its name in lower case, with each character other than a letter, a
+/// digit or a hyphen written as a hyphen, and `app-` before a name that
+/// does not start with a letter. So `My_App` gives `my-app`, `.tmp9` gives
+/// `app--tmp9` and `/` gives `app`. The result always fits the name rule,
+/// so this never fails. A host that runs the app alone names its
+/// workspace after it with `WorkspaceName::from`.
 #[must_use]
-pub fn names_of(dir: &Path) -> (WorkspaceName, AppName) {
+pub fn app_name_of(dir: &Path) -> AppName {
     let text: String = dir
         .file_name()
         .map(|name| name.to_string_lossy())
@@ -170,7 +192,7 @@ pub fn names_of(dir: &Path) -> (WorkspaceName, AppName) {
         Some(_) => format!("app-{text}"),
         None => "app".to_owned(),
     };
-    (WorkspaceName(text.clone()), AppName(text))
+    AppName(text)
 }
 
 /// Returns `text` when it starts with a lower case ASCII letter and holds

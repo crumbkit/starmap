@@ -93,7 +93,10 @@ enum Entry {
     Failed(String),
 }
 
-/// A failure that ends the reads of a preparation.
+/// A failure that ends the reads of a preparation. It names the three
+/// variants of [`SecretError`] that end a preparation, and exists because
+/// `SecretError` is neither `Copy` nor `Clone`, since `Program` holds an
+/// `io::Error`, while each read still to come returns the same failure.
 #[derive(Debug, Clone, Copy)]
 enum Stop {
     Locked,

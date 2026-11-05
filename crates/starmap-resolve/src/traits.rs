@@ -151,29 +151,46 @@ pub enum Lookup<'a> {
         /// itself passes `None`.
         cacheable: Option<Cacheable>,
     },
-    /// The generated value of the variable `name` of `app` in `workspace`,
-    /// which the resolver creates with `bytes` random bytes on first use.
+    /// The generated value of `item`, which the resolver creates with
+    /// `bytes` random bytes on first use.
     Generated {
-        /// The workspace the app runs in.
-        workspace: &'a WorkspaceName,
-        /// The app that reads the variable.
-        app: &'a AppName,
-        /// The variable.
-        name: &'a Name,
+        /// The variable and the app and workspace it belongs to.
+        item: Item<'a>,
         /// How many random bytes a new value has.
         bytes: SecretBytes,
     },
-    /// The value that a person typed for the secret variable `name` of
-    /// `app` in `workspace`, which has no bind, and that a host kept with
-    /// [`Resolver::save`].
+    /// The value that a person typed for the secret variable of `item`,
+    /// which has no bind, and that a host kept with [`Resolver::save`].
     Saved {
-        /// The workspace the app runs in.
-        workspace: &'a WorkspaceName,
-        /// The app that reads the variable.
-        app: &'a AppName,
-        /// The variable.
-        name: &'a Name,
+        /// The variable and the app and workspace it belongs to.
+        item: Item<'a>,
     },
+}
+
+/// The variable that a generated or saved value belongs to: the variable
+/// `name` of `app` in `workspace`. A resolver that keeps such values keys
+/// each one by its item.
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
+pub struct Item<'a> {
+    /// The workspace the app runs in.
+    pub workspace: &'a WorkspaceName,
+    /// The app that reads the variable.
+    pub app: &'a AppName,
+    /// The variable.
+    pub name: &'a Name,
+}
+
+impl<'a> Item<'a> {
+    /// Returns the item of the variable `name` of `app` in `workspace`.
+    #[must_use]
+    pub fn new(workspace: &'a WorkspaceName, app: &'a AppName, name: &'a Name) -> Self {
+        Self {
+            workspace,
+            app,
+            name,
+        }
+    }
 }
 
 impl<'a> Lookup<'a> {

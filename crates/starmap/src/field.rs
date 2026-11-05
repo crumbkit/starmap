@@ -16,7 +16,9 @@ mod tests;
 
 /// One field of a struct that derives [`Env`](crate::Env): the variable it
 /// reads and what its type can hold. `starmap_test::check` compares each
-/// field with the variable's declaration.
+/// field with the variable's declaration. The derive builds each field,
+/// in [`Env::FIELDS`](crate::Env::FIELDS), and code outside starmap only
+/// reads them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Field {
@@ -36,7 +38,9 @@ pub struct Field {
 impl Field {
     /// Describes a field of type `T`, or `Option<T>` when `presence` is
     /// [`Presence::Maybe`], that reads the variable `name`. The derive
-    /// calls it, and `rust_type` is `T` as the struct writes it.
+    /// calls it, and `rust_type` is `T` as the struct writes it. It is
+    /// hidden because its bound is the derive's private `FieldType`.
+    #[doc(hidden)]
     #[must_use]
     pub const fn new<T: FieldType>(
         name: &'static str,

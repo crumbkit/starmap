@@ -199,6 +199,23 @@ impl fmt::Display for Placeholder {
     }
 }
 
+/// The reason a path template cannot be filled: it uses the placeholder
+/// this holds, which has no directory. [`PathTemplate::fill`] returns it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoPlace(pub Placeholder);
+
+impl fmt::Display for NoPlace {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "the template uses {}, which has no directory",
+            self.0
+        )
+    }
+}
+
+impl Error for NoPlace {}
+
 /// The path template of a setting's path bind, such as
 /// `{workspace}/books.db`.
 ///
@@ -236,15 +253,16 @@ impl PathTemplate {
     ///
     /// # Errors
     ///
-    /// Returns the first placeholder for which `place` gives no directory.
+    /// Returns [`NoPlace`] with the first placeholder for which `place`
+    /// gives no directory.
     pub fn fill<'p>(
         &self,
         mut place: impl FnMut(Placeholder) -> Option<&'p Path>,
-    ) -> Result<PathBuf, Placeholder> {
+    ) -> Result<PathBuf, NoPlace> {
         self.pieces()
             .try_fold(OsString::new(), |mut path, (placeholder, text)| {
                 if let Some(placeholder) = placeholder {
-                    path.push(place(placeholder).ok_or(placeholder)?);
+                    path.push(place(placeholder).ok_or(NoPlace(placeholder))?);
                 }
                 path.push(text);
                 Ok(path)
@@ -566,6 +584,9 @@ pub enum Bound {
     /// A withheld value.
     Secret(Secret<String>),
     /// A withheld value that is not Unicode, which a [`Secret<String>`]
-    /// cannot hold. [`check`](crate::check) refuses it.
+    /// cannot hold. [`check`](crate::check) refuses it. The variant exists
+    /// so that the refusal says the variable is set with a value it cannot
+    /// take, where leaving the variable unbound would report it as
+    /// missing.
     NotUnicode,
 }

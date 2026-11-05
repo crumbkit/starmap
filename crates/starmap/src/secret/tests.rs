@@ -28,3 +28,14 @@ fn expose_returns_the_value_the_secret_was_built_with() {
 
     assert_eq!(secret.expose(), "hunter2");
 }
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test checks the value that the copy holds"
+)]
+fn a_duplicate_holds_the_value_of_the_secret_it_copies() {
+    let secret = Secret::new("hunter2".to_owned());
+
+    assert_eq!(secret.duplicate().expose(), "hunter2");
+}

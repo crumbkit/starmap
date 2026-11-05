@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crumbkit::Failure as _;
+use crumbkit::{Failure as _, Spelling};
 use starmap::Spec;
 
 use super::{SpecFailure, load};
@@ -55,4 +55,26 @@ fn a_missing_file_is_not_found_and_a_directory_is_unreadable() {
 fn the_example_spec_loads() {
     let spec = load(Path::new("../starmap/tests/example/starmap.toml")).unwrap();
     assert_eq!(spec.variables().count(), 9);
+}
+
+#[test]
+fn each_problem_fixture_fails_with_the_code_its_first_problem_kind_names() {
+    let mut checked = 0;
+    for entry in fs::read_dir("../starmap/tests/spec").unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|extension| extension != "toml") {
+            continue;
+        }
+        let text = fs::read_to_string(&path).unwrap();
+        let kind = Spec::parse(&text).unwrap_err().problems()[0].kind();
+        let failure = load(&path).unwrap_err();
+        assert_eq!(
+            Spelling::COLONS.spell(failure.code()),
+            kind.code(),
+            "{}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(checked > 10, "{checked}");
 }

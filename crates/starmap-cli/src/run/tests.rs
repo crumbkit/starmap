@@ -140,11 +140,12 @@ impl FakeResolver {
 
 fn key(lookup: Lookup<'_>) -> Option<String> {
     match lookup {
-        Lookup::Saved {
-            workspace,
-            app,
-            name,
-        } => Some(format!("{}/{}/{name}", workspace.as_str(), app.as_str())),
+        Lookup::Saved { item } => Some(format!(
+            "{}/{}/{}",
+            item.workspace.as_str(),
+            item.app.as_str(),
+            item.name
+        )),
         _ => None,
     }
 }
@@ -574,10 +575,6 @@ fn each_secret_store_problem_is_unreadable_and_says_what_the_store_returned() {
             ResolveProblem::Deadline,
             "the secret store did not answer in time",
         ),
-        (
-            ResolveProblem::NoResolver,
-            "no resolver handles this secret",
-        ),
     ];
     for (problem, says) in cases {
         let failure = RunFailure::resolve(name("SHELF_MIRROR_TOKEN"), problem);
@@ -587,6 +584,26 @@ fn each_secret_store_problem_is_unreadable_and_says_what_the_store_returned() {
             format!("SHELF_MIRROR_TOKEN could not be read, because {says}")
         );
     }
+}
+
+#[test]
+fn a_generated_variable_that_no_store_keeps_says_where_run_keeps_generated_values() {
+    let checkout = Checkout::with_spec(BOUND_AND_GENERATED, None);
+    let refused = prepared(
+        &checkout.args(&[]),
+        &[],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+
+    assert_eq!(codes(&refused), [&codes::SECRET_UNREADABLE]);
+    assert_eq!(
+        refused.failures.first().map(ToString::to_string).as_deref(),
+        Some(
+            "no secret store that starmap run uses can hold SHELF_SESSION_KEY here, because starmap run keeps generated values only in the macOS login keychain"
+        )
+    );
 }
 
 #[test]
