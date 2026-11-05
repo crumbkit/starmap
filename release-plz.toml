@@ -25,7 +25,10 @@
 # 4. Create a crates.io API token with the scope `publish-new` and a short
 #    expiry, run `cargo publish --workspace --dry-run`, `cargo login`,
 #    `cargo publish --workspace` and `cargo logout` on the merged main, and
-#    push the tag v0.1.0. Revoke the token on crates.io afterwards.
+#    push the tag v0.1.0. Pushing the tag starts the Binaries run: wait for
+#    it to attach the archives to the release, and if it fails, run it again
+#    from the Actions tab with the tag v0.1.0. Revoke the token on crates.io
+#    afterwards.
 # 5. On crates.io, open each of the five crates' Settings, Trusted
 #    Publishing, and add a GitHub publisher with the owner `crumbkit`, the
 #    repository `starmap`, the workflow `release.yml` and the environment
