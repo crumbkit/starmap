@@ -78,3 +78,7 @@ keychain = ["dep:security-framework", "dep:core-foundation", "dep:base64", "dep:
 
 [lints]
 workspace = true
+
+# docs.rs documents every feature, because each one is off by default.
+[package.metadata.docs.rs]
+all-features = true

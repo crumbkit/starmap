@@ -2,7 +2,7 @@
 //! application's declared environment.
 //!
 //! The library holds the whole command, and the `starmap` binary calls
-//! [`run`]. It exports the parser, the guide and the failure codes, so the
+//! `run`. It exports the parser, the guide and the failure codes, so the
 //! integration tests can pass them to crumbkit-test's checks beside the
 //! built binary. It is not an API for other crates, so each public item is
 //! hidden from the documentation and outside the semver promise.

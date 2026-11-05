@@ -42,3 +42,7 @@ workspace = true
 # so no target links them, and cargo-shear would report them as unlinked.
 [package.metadata.cargo-shear]
 ignored-paths = ["tests/compile_fail/*.rs"]
+
+# docs.rs documents every feature, because each one is off by default.
+[package.metadata.docs.rs]
+all-features = true

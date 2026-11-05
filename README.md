@@ -12,7 +12,7 @@ child process.
 starmap 0.1.0 is the first release. `cargo install starmap-cli` installs
 the `starmap` command, and each
 [GitHub release](https://github.com/crumbkit/starmap/releases) attaches
-binaries for macOS, Linux and Windows.
+binaries for Apple silicon macOS, Linux and Windows.
 
 ## Crates
 

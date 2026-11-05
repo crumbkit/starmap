@@ -260,3 +260,5 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `OnePassword` no longer implements `Clone`, because it holds the values
   that `prepare` readied, which cannot be copied. A host that needs two
   resolvers calls `OnePassword::new` twice.
+
+[0.1.0]: https://github.com/crumbkit/starmap/releases/tag/v0.1.0
