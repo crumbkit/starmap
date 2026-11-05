@@ -200,3 +200,36 @@ fn a_socket_address_is_named_as_its_type_and_shows_its_value() {
     let default = row(&spec, "starmap.toml", &bindings, name).unwrap();
     assert_eq!(default.value.to_string(), "0.0.0.0:8080 (default)");
 }
+
+/// Returns the bind text of the one secret whose bind is `bind`.
+fn secret_bind(bind: &str) -> Option<String> {
+    let spec = Spec::parse(&format!(
+        "[variables.SHELF_TOKEN]\npurpose = \"The token.\"\ntype = \"string\"\n\
+         unset = \"required\"\nshow = \"withheld\"\nsource = \"secret\"\nbind = {bind}\n"
+    ))
+    .unwrap();
+    let variable = spec.variable(&"SHELF_TOKEN".parse().unwrap()).unwrap();
+    super::bind_text(variable.source())
+}
+
+#[test]
+fn a_bind_that_no_cache_may_keep_says_never_cached() {
+    assert_eq!(
+        secret_bind(r#"{ one-password = "op://Personal/shelf/token", cache = false }"#).as_deref(),
+        Some("op://Personal/shelf/token, never cached")
+    );
+}
+
+#[test]
+fn a_bind_that_a_cache_may_keep_shows_only_its_reference() {
+    for bind in [
+        r#"{ one-password = "op://Personal/shelf/token" }"#,
+        r#"{ one-password = "op://Personal/shelf/token", cache = true }"#,
+    ] {
+        assert_eq!(
+            secret_bind(bind).as_deref(),
+            Some("op://Personal/shelf/token"),
+            "{bind}"
+        );
+    }
+}

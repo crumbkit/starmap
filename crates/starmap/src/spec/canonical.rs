@@ -9,7 +9,7 @@ use super::{
     FORM_WORDS, SHOW_WORDS, SOURCE_WORDS, Source, SourceKind, Spec, UNSET_WORDS, Unset, UnsetRule,
     Variable, word_of,
 };
-use crate::{Form, Mode, SecretRef, Value};
+use crate::{Cache, Form, Mode, SecretBind, SecretRef, Value};
 
 /// Writes `spec` as TOML: the `[mode]` table, then one table per variable
 /// in the spec's order, each with its fields in the order of the field
@@ -100,14 +100,7 @@ fn source(source: &Source) -> (SourceKind, Option<Toml>) {
             bind.as_ref()
                 .map(|template| inline([("path", template.as_str().into())])),
         ),
-        Source::Secret { bind } => (
-            SourceKind::Secret,
-            bind.as_ref().map(|reference| match reference {
-                SecretRef::OnePassword(reference) => {
-                    inline([("one-password", reference.as_str().into())])
-                }
-            }),
-        ),
+        Source::Secret { bind } => (SourceKind::Secret, bind.as_ref().map(secret_bind)),
         Source::Generated { .. } => (SourceKind::Generated, None),
         Source::Inherited => (SourceKind::Inherited, None),
         Source::Provided(reference) => {
@@ -119,6 +112,22 @@ fn source(source: &Source) -> (SourceKind, Option<Toml>) {
             (SourceKind::Provided, Some(Toml::InlineTable(table)))
         }
     }
+}
+
+/// Returns a secret's bind as an inline table. `cache = false` is written
+/// only for [`Cache::Never`], so a bind that writes `cache = true` has the
+/// same canonical form as one without `cache`.
+fn secret_bind(bind: &SecretBind) -> Toml {
+    let mut table = InlineTable::new();
+    match bind.reference() {
+        SecretRef::OnePassword(reference) => {
+            table.insert("one-password", reference.as_str().into());
+        }
+    }
+    if bind.cache() == Cache::Never {
+        table.insert("cache", false.into());
+    }
+    Toml::InlineTable(table)
 }
 
 /// Writes a default's value as the text that its form reads back as an

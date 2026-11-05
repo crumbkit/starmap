@@ -218,7 +218,7 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
     let mut failures = Vec::new();
     let mut ignored = Vec::new();
     let _finish = Finish(context);
-    prepare(spec, context);
+    prepare(spec, mode, context);
     for (name, variable) in spec.variables() {
         let caller = context.caller.get(name);
         if caller.is_some()
@@ -229,7 +229,7 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
         {
             ignored.push(name.clone());
         }
-        match find(name, variable, caller, context) {
+        match find(name, variable, caller, mode, context) {
             Ok(Some(value)) => bindings.bind(name.clone(), value),
             Ok(None) => {}
             Err(problem) if problem.lacks_input() && !required(variable, mode) => {}
@@ -259,17 +259,15 @@ impl Drop for Finish<'_, '_> {
     }
 }
 
-/// Calls [`Resolver::prepare`] on each resolver with the lookup of every
-/// secret variable of `spec` that has a bind, which [`find`] asks for
-/// whatever the caller gives. Nothing is readied once the deadline has
+/// Calls [`Resolver::prepare`] on each resolver with the lookup in `mode`
+/// of every secret variable of `spec` that has a bind, which [`find`] asks
+/// for whatever the caller gives. Nothing is readied once the deadline has
 /// passed.
-fn prepare(spec: &Spec, context: &Context<'_>) {
+fn prepare(spec: &Spec, mode: Mode, context: &Context<'_>) {
     let lookups: Vec<Lookup<'_>> = spec
         .variables()
         .filter_map(|(_, variable)| match variable.source() {
-            Source::Secret {
-                bind: Some(reference),
-            } => Some(Lookup::Reference(reference)),
+            Source::Secret { bind: Some(bind) } => Some(Lookup::of_bind(bind, mode)),
             _ => None,
         })
         .collect();
@@ -284,12 +282,14 @@ fn prepare(spec: &Spec, context: &Context<'_>) {
     }
 }
 
-/// Finds the value of `variable` from its source, where `caller` is the
-/// caller's value. The caller's value is copied only when it is used.
+/// Finds the value of `variable` in `mode` from its source, where `caller`
+/// is the caller's value. The caller's value is copied only when it is
+/// used.
 fn find(
     name: &Name,
     variable: &Variable,
     caller: Option<&Bound>,
+    mode: Mode,
     context: &Context<'_>,
 ) -> Result<Option<Bound>, ResolveProblem> {
     match variable.source() {
@@ -319,9 +319,7 @@ fn find(
                 None => Err(ResolveProblem::NoProvider(kind.clone())),
             }
         }
-        Source::Secret {
-            bind: Some(reference),
-        } => context.ask(Lookup::Reference(reference)),
+        Source::Secret { bind: Some(bind) } => context.ask(Lookup::of_bind(bind, mode)),
         Source::Generated { bytes } => {
             let workspace = context
                 .places

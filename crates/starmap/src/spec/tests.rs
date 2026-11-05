@@ -10,7 +10,9 @@ use snapbox::assert::DEFAULT_ACTION_ENV;
 use snapbox::{Assert, Data};
 
 use super::{Show, Source, Spec, SpecError, SpecProblemKind, Unset};
-use crate::{Choice, Form, IntegerRange, Mode, Name, Placeholder, SecretBytes, SecretRef, Value};
+use crate::{
+    Cache, Choice, Form, IntegerRange, Mode, Name, Placeholder, SecretBytes, SecretRef, Value,
+};
 
 /// The illustrative `starmap.toml` of the build plan.
 const EXAMPLE: &str = include_str!("../../tests/example/starmap.toml");
@@ -258,13 +260,12 @@ fn the_example_spec_merges_each_source_with_its_bind() {
     assert_eq!(port.kind().as_str(), "multiverse/port");
     assert_eq!(port.qualifier("process"), Some("api"));
 
-    let Source::Secret {
-        bind: Some(SecretRef::OnePassword(reference)),
-    } = source("SHELF_MIRROR_TOKEN")
-    else {
-        panic!("SHELF_MIRROR_TOKEN has no one-password bind");
+    let Source::Secret { bind: Some(bind) } = source("SHELF_MIRROR_TOKEN") else {
+        panic!("SHELF_MIRROR_TOKEN has no bind");
     };
+    let SecretRef::OnePassword(reference) = bind.reference();
     assert_eq!(reference.as_str(), "op://Personal/shelf mirror/token");
+    assert_eq!(bind.cache(), Cache::Allowed);
 }
 
 #[test]
@@ -1014,4 +1015,86 @@ proptest! {
             }
         }
     }
+}
+
+// A secret's cache policy
+
+/// Returns a spec with one withheld secret whose bind is `bind`.
+fn secret(bind: &str) -> String {
+    one(&format!(
+        "purpose = \"A token.\"\ntype = \"string\"\nunset = \"required\"\n\
+         show = \"withheld\"\nsource = \"secret\"\nbind = {bind}"
+    ))
+}
+
+/// Returns the cache policy of the bind of `SHELF_X` in `text`.
+fn cache_of(text: &str) -> Cache {
+    let spec = spec(text);
+    let Some(Source::Secret { bind: Some(bind) }) =
+        spec.variable(&name("SHELF_X")).map(super::Variable::source)
+    else {
+        panic!("SHELF_X has no bind");
+    };
+    bind.cache()
+}
+
+#[test]
+fn a_one_password_bind_with_cache_false_is_never_cached() {
+    let text = secret("{ one-password = \"op://Personal/shelf mirror/token\", cache = false }");
+    assert_eq!(cache_of(&text), Cache::Never);
+}
+
+#[test]
+fn a_one_password_bind_without_cache_or_with_cache_true_may_be_cached() {
+    for bind in [
+        "{ one-password = \"op://Personal/shelf mirror/token\" }",
+        "{ one-password = \"op://Personal/shelf mirror/token\", cache = true }",
+    ] {
+        assert_eq!(cache_of(&secret(bind)), Cache::Allowed, "{bind}");
+    }
+}
+
+#[test]
+fn cache_on_a_path_bind_is_an_unknown_field() {
+    let text = one(
+        "purpose = \"A file.\"\ntype = \"path\"\nunset = \"optional\"\nshow = \"shown\"\n\
+         source = \"setting\"\nbind = { path = \"{workspace}/books.db\", cache = false }",
+    );
+    assert_eq!(kinds(&text), [SpecProblemKind::UnknownField]);
+}
+
+#[test]
+fn cache_that_is_not_true_or_false_is_refused() {
+    let text = secret("{ one-password = \"op://Personal/shelf mirror/token\", cache = \"no\" }");
+    assert_eq!(kinds(&text), [SpecProblemKind::BadValue]);
+}
+
+#[test]
+fn the_canonical_form_writes_cache_false_and_parses_back_to_the_same_spec() {
+    let never = spec(&secret(
+        "{ one-password = \"op://Personal/shelf mirror/token\", cache = false }",
+    ));
+    let toml = never.to_toml();
+    assert!(
+        toml.contains(
+            "bind = { one-password = \"op://Personal/shelf mirror/token\", cache = false }"
+        ),
+        "{toml}"
+    );
+    assert_eq!(Spec::parse(&toml).unwrap(), never);
+}
+
+#[test]
+fn cache_false_changes_the_digest_and_cache_true_does_not() {
+    let reference = "op://Personal/shelf mirror/token";
+    let plain = spec(&secret(&format!("{{ one-password = \"{reference}\" }}")));
+    let allowed = spec(&secret(&format!(
+        "{{ one-password = \"{reference}\", cache = true }}"
+    )));
+    let never = spec(&secret(&format!(
+        "{{ one-password = \"{reference}\", cache = false }}"
+    )));
+
+    assert_eq!(plain.digest(), allowed.digest());
+    assert_ne!(plain.digest(), never.digest());
 }

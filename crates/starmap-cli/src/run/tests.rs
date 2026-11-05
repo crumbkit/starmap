@@ -155,7 +155,7 @@ impl Resolver for FakeResolver {
         lookup: Lookup<'_>,
         _deadline: Instant,
     ) -> Result<Secret<String>, SecretError> {
-        if let Lookup::Reference(_) = lookup {
+        if let Lookup::Reference { .. } = lookup {
             return Ok(Secret::new("from-op".to_owned()));
         }
         let key = key(lookup).ok_or(SecretError::Unsupported)?;

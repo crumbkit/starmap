@@ -535,7 +535,7 @@ fn finish_drops_what_prepare_readied_so_a_later_resolve_reads_again() {
         .iter()
         .map(|(_, reference)| SecretRef::OnePassword(reference.parse().unwrap()))
         .collect();
-    let lookups: Vec<Lookup<'_>> = references.iter().map(Lookup::Reference).collect();
+    let lookups: Vec<Lookup<'_>> = references.iter().map(Lookup::reference).collect();
     let deadline = Instant::now() + PATIENT;
 
     one_password.prepare(&lookups, deadline);
@@ -563,7 +563,7 @@ fn two_threads_that_share_one_resolver_each_keep_the_values_they_prepared() {
                     .iter()
                     .map(|reference| SecretRef::OnePassword(reference.parse().unwrap()))
                     .collect();
-                let lookups: Vec<Lookup<'_>> = references.iter().map(Lookup::Reference).collect();
+                let lookups: Vec<Lookup<'_>> = references.iter().map(Lookup::reference).collect();
                 let deadline = Instant::now() + PATIENT;
                 one_password.prepare(&lookups, deadline);
                 // Both threads have prepared before either resolves.

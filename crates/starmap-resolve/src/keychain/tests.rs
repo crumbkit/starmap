@@ -35,7 +35,7 @@ fn app(text: &str) -> AppName {
 #[test]
 fn a_lookup_by_reference_is_left_to_another_resolver() {
     let reference = SecretRef::OnePassword("op://Personal/shelf mirror/token".parse().unwrap());
-    let result = Keychain::new().resolve(Lookup::Reference(&reference), deadline());
+    let result = Keychain::new().resolve(Lookup::reference(&reference), deadline());
     assert!(matches!(result, Err(SecretError::Unsupported)));
 }
 
@@ -43,7 +43,7 @@ fn a_lookup_by_reference_is_left_to_another_resolver() {
 fn a_save_of_any_lookup_but_a_saved_one_is_left_to_another_resolver() {
     let reference = SecretRef::OnePassword("op://Personal/shelf mirror/token".parse().unwrap());
     let value = starmap::Secret::new("a-test-value".to_owned());
-    let result = Keychain::new().save(Lookup::Reference(&reference), &value, deadline());
+    let result = Keychain::new().save(Lookup::reference(&reference), &value, deadline());
     assert!(matches!(result, Err(SecretError::Unsupported)));
 }
 

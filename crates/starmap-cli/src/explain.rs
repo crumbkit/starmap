@@ -10,7 +10,7 @@ use crumbkit::{Batch, Document, Failure, Recovery, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{
-    Bindings, Bound, Form, Mode, Name, SecretRef, Show, Source, Spec, Unset, Value, Variable,
+    Bindings, Bound, Cache, Form, Mode, Name, SecretRef, Show, Source, Spec, Unset, Value, Variable,
 };
 
 use crate::cli::{ExplainArgs, SpecFile};
@@ -294,9 +294,11 @@ pub(crate) fn source_text(source: &Source) -> String {
         Source::Setting { bind: None } => "setting".to_owned(),
         Source::Setting { bind: Some(_) } => "setting, path bind".to_owned(),
         Source::Secret { bind: None } => "secret".to_owned(),
-        Source::Secret {
-            bind: Some(SecretRef::OnePassword(_)),
-        } => "secret, 1Password".to_owned(),
+        Source::Secret { bind: Some(bind) } => match bind.reference() {
+            SecretRef::OnePassword(_) => "secret, 1Password".to_owned(),
+            // A reference that a later release of starmap adds.
+            _ => "secret".to_owned(),
+        },
         Source::Generated { .. } => "generated".to_owned(),
         Source::Inherited => "inherited".to_owned(),
         Source::Provided(reference) => format!("provided {}", reference.kind()),
@@ -306,15 +308,23 @@ pub(crate) fn source_text(source: &Source) -> String {
 }
 
 /// Returns a variable's bind, such as `op://Personal/shelf mirror/token`,
-/// or `None` for a variable without one.
+/// or `None` for a variable without one. A secret's bind that no cache may
+/// keep ends in `, never cached`.
 pub(crate) fn bind_text(source: &Source) -> Option<String> {
     match source {
         Source::Setting {
             bind: Some(template),
         } => Some(template.as_str().to_owned()),
-        Source::Secret {
-            bind: Some(SecretRef::OnePassword(reference)),
-        } => Some(reference.to_string()),
+        Source::Secret { bind: Some(bind) } => {
+            let SecretRef::OnePassword(reference) = bind.reference() else {
+                // A reference that a later release of starmap adds.
+                return None;
+            };
+            Some(match bind.cache() {
+                Cache::Never => format!("{reference}, never cached"),
+                Cache::Allowed => reference.to_string(),
+            })
+        }
         Source::Generated { bytes } => Some(format!("{} random bytes", bytes.get())),
         Source::Provided(reference) => {
             let mut text = reference.kind().to_string();

@@ -8,7 +8,9 @@ use std::fmt;
 use std::io;
 use std::time::Instant;
 
-use starmap::{Name, ProvidedRef, ProviderKind, Secret, SecretBytes, SecretRef};
+use starmap::{
+    Cache, Mode, Name, ProvidedRef, ProviderKind, Secret, SecretBind, SecretBytes, SecretRef,
+};
 
 use crate::{AppName, WorkspaceName};
 
@@ -129,7 +131,14 @@ pub trait Resolver {
 #[non_exhaustive]
 pub enum Lookup<'a> {
     /// The value a secret variable's bind refers to.
-    Reference(&'a SecretRef),
+    Reference {
+        /// The reference the bind names.
+        reference: &'a SecretRef,
+        /// Present when a cache of resolved values may keep the value.
+        /// Only [`crate::resolve`] sets it, so a host that builds a lookup
+        /// itself passes `None`.
+        cacheable: Option<Cacheable>,
+    },
     /// The generated value of the variable `name` of `app` in `workspace`,
     /// which the resolver creates with `bytes` random bytes on first use.
     Generated {
@@ -154,6 +163,39 @@ pub enum Lookup<'a> {
         name: &'a Name,
     },
 }
+
+impl<'a> Lookup<'a> {
+    /// Returns the lookup of `reference` without a [`Cacheable`] mark, as
+    /// a host builds one by hand.
+    #[must_use]
+    pub fn reference(reference: &'a SecretRef) -> Self {
+        Self::Reference {
+            reference,
+            cacheable: None,
+        }
+    }
+
+    /// Returns the lookup of `bind` in `mode`. It is [`Cacheable`] only
+    /// when the bind allows a cache and the mode is local, so no value
+    /// resolved in production mode is ever marked for a cache.
+    pub(crate) fn of_bind(bind: &'a SecretBind, mode: Mode) -> Self {
+        let cacheable =
+            (mode == Mode::Local && bind.cache() == Cache::Allowed).then_some(Cacheable(()));
+        Self::Reference {
+            reference: bind.reference(),
+            cacheable,
+        }
+    }
+}
+
+/// The mark on a [`Lookup::Reference`] that a cache of resolved values may
+/// keep its value: the bind does not say `cache = false`, and the
+/// resolution is in local mode. Only [`crate::resolve`] can build one.
+///
+/// The mark keeps a host that builds lookups by hand from caching a value
+/// by mistake. It does not stop a program that reaches a cache directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cacheable(());
 
 /// The reason a [`Resolver`] could not return a secret.
 #[derive(Debug)]

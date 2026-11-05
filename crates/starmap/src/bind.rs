@@ -353,6 +353,58 @@ pub enum SecretRef {
     OnePassword(OnePasswordRef),
 }
 
+/// A secret variable's bind: the reference a resolver reads the value
+/// from, and whether a cache of resolved values may keep the value.
+///
+/// ```
+/// use starmap::{Cache, SecretBind, SecretRef};
+///
+/// let reference = SecretRef::OnePassword("op://Personal/shelf mirror/token".parse()?);
+/// let bind = SecretBind::new(reference, Cache::Never);
+/// assert_eq!(bind.cache(), Cache::Never);
+/// # Ok::<(), starmap::OnePasswordRefError>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SecretBind {
+    reference: SecretRef,
+    cache: Cache,
+}
+
+impl SecretBind {
+    /// Returns the bind of `reference`, whose value a cache may keep when
+    /// `cache` allows it.
+    #[must_use]
+    pub fn new(reference: SecretRef, cache: Cache) -> Self {
+        Self { reference, cache }
+    }
+
+    /// Returns the reference a resolver reads the value from.
+    #[must_use]
+    pub fn reference(&self) -> &SecretRef {
+        &self.reference
+    }
+
+    /// Returns whether a cache of resolved values may keep the value.
+    #[must_use]
+    pub fn cache(&self) -> Cache {
+        self.cache
+    }
+}
+
+/// Whether a cache of resolved values, such as a per-user agent that
+/// keeps 1Password values in memory, may keep a secret's value. A
+/// `starmap.toml` writes `cache = false` on a one-password bind for
+/// [`Cache::Never`], and a bind without `cache` is [`Cache::Allowed`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Cache {
+    /// A cache may keep the value.
+    #[default]
+    Allowed,
+    /// No cache may keep the value, so each resolution reads it from its
+    /// store.
+    Never,
+}
+
 /// A 1Password secret reference, written
 /// `op://<vault>/<item>[/<section>]/<field>`.
 ///

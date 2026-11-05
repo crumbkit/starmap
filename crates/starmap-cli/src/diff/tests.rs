@@ -99,3 +99,31 @@ fn a_socket_address_is_named_when_it_is_added_and_when_a_type_changes_to_it() {
         }]
     );
 }
+
+#[test]
+fn turning_a_cache_off_is_a_change_of_the_bind() {
+    let now = TOKEN.replace(
+        r#"bind = { one-password = "op://Personal/shelf/token" }"#,
+        r#"bind = { one-password = "op://Personal/shelf/token", cache = false }"#,
+    );
+    let changes = changes(Some(&spec(TOKEN)), &spec(&now));
+    assert_eq!(
+        changes,
+        vec![Change {
+            change: Kind::Changed,
+            name: "SHELF_TOKEN".to_owned(),
+            field: Some("bind".to_owned()),
+            was: Some("op://Personal/shelf/token".to_owned()),
+            now: Some("op://Personal/shelf/token, never cached".to_owned()),
+        }]
+    );
+}
+
+#[test]
+fn writing_cache_true_is_no_change() {
+    let now = TOKEN.replace(
+        r#"bind = { one-password = "op://Personal/shelf/token" }"#,
+        r#"bind = { one-password = "op://Personal/shelf/token", cache = true }"#,
+    );
+    assert_eq!(changes(Some(&spec(TOKEN)), &spec(&now)), Vec::new());
+}
