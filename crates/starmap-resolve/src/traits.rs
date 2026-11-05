@@ -62,6 +62,32 @@ impl Error for ProviderError {}
 /// A source of secrets: the values of secret variables and the generated
 /// values a host keeps.
 pub trait Resolver {
+    /// Readies the secrets of `lookups` before [`Resolver::resolve`] asks
+    /// for them one at a time, so a resolver can read them together, such
+    /// as several 1Password references with one `op` call.
+    /// [`crate::resolve`] calls it once on each resolver, before it asks for
+    /// any secret, with the lookup of every secret variable that has a
+    /// bind. The resolver returns by `deadline`.
+    ///
+    /// The default readies nothing. A resolver that readies a secret keeps
+    /// it until `resolve` asks for it or [`Resolver::finish`] drops it. A
+    /// failure is reported by the `resolve` of each lookup it concerns, so
+    /// `prepare` returns nothing.
+    ///
+    /// The `prepare`, every `resolve` and the `finish` of one resolution
+    /// run on the same thread, as [`crate::resolve`] runs them. A resolver
+    /// may keep what it readied for the calling thread alone, as
+    /// `OnePassword` does.
+    fn prepare(&self, lookups: &[Lookup<'_>], deadline: Instant) {
+        let _ = (lookups, deadline);
+    }
+
+    /// Drops every secret that [`Resolver::prepare`] readied and
+    /// [`Resolver::resolve`] did not take, and forgets every failure it
+    /// recorded. [`crate::resolve`] calls it on each resolver when the
+    /// resolution ends. The default has nothing to drop.
+    fn finish(&self) {}
+
     /// Returns the secret that `lookup` names. The resolver returns by
     /// `deadline`, which covers the whole resolution.
     ///

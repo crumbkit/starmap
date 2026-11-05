@@ -206,11 +206,19 @@ impl ResolveProblem {
 /// required in `mode`. Every provider and resolver is asked under the
 /// context's one deadline, and each failure is reported against its own
 /// variable, so one call reports every problem.
+///
+/// Before it asks for any secret, it calls [`Resolver::prepare`] on each
+/// resolver with the lookup of every secret variable that has a bind, so a
+/// resolver can read them together. When it has asked for every variable,
+/// it calls [`Resolver::finish`] on each resolver, which drops what was
+/// readied and not taken.
 #[must_use]
 pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
     let mut bindings = Bindings::new();
     let mut failures = Vec::new();
     let mut ignored = Vec::new();
+    let _finish = Finish(context);
+    prepare(spec, context);
     for (name, variable) in spec.variables() {
         let caller = context.caller.get(name);
         if caller.is_some()
@@ -235,6 +243,44 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
         bindings,
         failures,
         ignored,
+    }
+}
+
+/// Calls [`Resolver::finish`] on each resolver of a context when it is
+/// dropped, so a resolution that ends early, even by a panic in a
+/// resolver, drops what was readied.
+struct Finish<'c, 'a>(&'c Context<'a>);
+
+impl Drop for Finish<'_, '_> {
+    fn drop(&mut self) {
+        for resolver in &self.0.resolvers {
+            resolver.finish();
+        }
+    }
+}
+
+/// Calls [`Resolver::prepare`] on each resolver with the lookup of every
+/// secret variable of `spec` that has a bind, which [`find`] asks for
+/// whatever the caller gives. Nothing is readied once the deadline has
+/// passed.
+fn prepare(spec: &Spec, context: &Context<'_>) {
+    let lookups: Vec<Lookup<'_>> = spec
+        .variables()
+        .filter_map(|(_, variable)| match variable.source() {
+            Source::Secret {
+                bind: Some(reference),
+            } => Some(Lookup::Reference(reference)),
+            _ => None,
+        })
+        .collect();
+    if lookups.is_empty() {
+        return;
+    }
+    for resolver in &context.resolvers {
+        if context.in_time().is_err() {
+            return;
+        }
+        resolver.prepare(&lookups, context.deadline);
     }
 }
 
