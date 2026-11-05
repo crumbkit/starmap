@@ -138,6 +138,18 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Only `resolve` can build a `Cacheable`. `Lookup::reference` builds a
   lookup without the mark, as a host builds one by hand. No resolver reads
   the mark yet.
+- starmap-resolve's `agent` feature, on macOS and Linux, adds
+  `agent::AgentSocket::for_user`, which returns the path of the per-user
+  agent's socket: `starmap-agent/agent.sock` in the directory that
+  `/usr/bin/getconf DARWIN_USER_TEMP_DIR` prints on macOS, and in
+  `/run/user/<uid>` on Linux. `TMPDIR` and `XDG_RUNTIME_DIR` play no part,
+  so a sandbox can deny exactly that path. It creates `starmap-agent/` with
+  mode 0700, and refuses one that is not the user's own with that mode
+  (`starmap::agent::unsafe_directory`) and a path that does not fit in
+  `sun_path` (`starmap::agent::path_too_long`). The agent is off
+  (`starmap::agent::off`) when the parent is shared, sticky or writable by
+  others, and on Linux when the kernel's Landlock cannot deny a sandboxed
+  app the socket. `agent::AgentError` carries each code.
 - `Variable::capture` binds one raw value by the variable's show, as
   `starmap::capture` binds each value. `PathTemplate::fill` returns the path
   a template names when a function gives each placeholder's directory.
