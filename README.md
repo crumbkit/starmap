@@ -9,7 +9,10 @@ the struct and the file disagree. Programs that start the application, such
 as a development host, resolve the declared values and apply them to the
 child process.
 
-starmap is under construction, and no crate has been published yet.
+starmap 0.1.0 is the first release. `cargo install starmap-cli` installs
+the `starmap` command, and each
+[GitHub release](https://github.com/crumbkit/starmap/releases) attaches
+binaries for macOS, Linux and Windows.
 
 ## Crates
 
