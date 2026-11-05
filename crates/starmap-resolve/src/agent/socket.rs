@@ -72,7 +72,7 @@ impl AgentSocket {
 
     /// Returns the socket in `parent/starmap-agent/` for `uid`, after the
     /// checks [`AgentSocket::for_user`] lists.
-    fn in_parent(parent: &Path, uid: u32) -> Result<Self, AgentError> {
+    pub(super) fn in_parent(parent: &Path, uid: u32) -> Result<Self, AgentError> {
         check_parent(parent, uid)?;
         let directory = parent.join(DIRECTORY);
         match DirBuilder::new().mode(0o700).create(&directory) {
