@@ -199,18 +199,16 @@ impl fmt::Display for Placeholder {
     }
 }
 
-/// The reason a path template cannot be filled: it uses the placeholder
-/// this holds, which has no directory. [`PathTemplate::fill`] returns it.
+/// A place that has no directory: the placeholder this holds. A path
+/// template that uses the placeholder cannot be filled, and
+/// [`PathTemplate::fill`] returns it. A host also returns it for a
+/// generated value, which needs the `{workspace}` place to name the value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NoPlace(pub Placeholder);
 
 impl fmt::Display for NoPlace {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "the template uses {}, which has no directory",
-            self.0
-        )
+        write!(formatter, "{} has no directory", self.0)
     }
 }
 
@@ -582,8 +580,8 @@ pub enum Bound {
     /// A value that may be shown, as the environment holds it.
     Plain(OsString),
     /// A withheld value.
-    Secret(Secret<String>),
-    /// A withheld value that is not Unicode, which a [`Secret<String>`]
+    Secret(Secret),
+    /// A withheld value that is not Unicode, which a [`Secret`]
     /// cannot hold. [`check`](crate::check) refuses it. The variant exists
     /// so that the refusal says the variable is set with a value it cannot
     /// take, where leaving the variable unbound would report it as

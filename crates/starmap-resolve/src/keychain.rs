@@ -6,7 +6,7 @@ use std::time::Instant;
 use starmap::Secret;
 use zeroize::Zeroizing;
 
-use crate::{Item, Lookup, Resolver, SecretError, WorkspaceName};
+use crate::{Lookup, Resolver, SecretError, Slot, WorkspaceName};
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -69,17 +69,13 @@ fn service(workspace: &WorkspaceName) -> String {
 }
 
 impl Resolver for Keychain {
-    fn resolve(
-        &self,
-        lookup: Lookup<'_>,
-        deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    fn resolve(&self, lookup: Lookup<'_>, deadline: Instant) -> Result<Secret, SecretError> {
         match lookup {
-            Lookup::Generated { item, bytes } => {
-                platform::generated(&service(item.workspace), &account(item), bytes, deadline)
+            Lookup::Generated { slot, bytes } => {
+                platform::generated(&service(slot.workspace), &account(slot), bytes, deadline)
             }
-            Lookup::Saved { item } => {
-                platform::saved(&service(item.workspace), &account(item), deadline)
+            Lookup::Saved { slot } => {
+                platform::saved(&service(slot.workspace), &account(slot), deadline)
             }
             _ => Err(SecretError::Unsupported),
         }
@@ -100,21 +96,21 @@ impl Resolver for Keychain {
     fn save(
         &self,
         lookup: Lookup<'_>,
-        value: &Secret<String>,
+        value: &Secret,
         deadline: Instant,
     ) -> Result<(), SecretError> {
-        let Lookup::Saved { item } = lookup else {
+        let Lookup::Saved { slot } = lookup else {
             return Err(SecretError::Unsupported);
         };
-        let value = Zeroizing::new(value.expose().clone());
-        platform::save(&service(item.workspace), &account(item), value, deadline)
+        let value = Zeroizing::new(value.expose().to_owned());
+        platform::save(&service(slot.workspace), &account(slot), value, deadline)
     }
 }
 
-/// Returns the Keychain account of `item`, which names its app and
+/// Returns the Keychain account of `slot`, which names its app and
 /// variable.
-fn account(item: Item<'_>) -> String {
-    format!("{}/{}", item.app.as_str(), item.name.as_str())
+fn account(slot: Slot<'_>) -> String {
+    format!("{}/{}", slot.app.as_str(), slot.name.as_str())
 }
 
 /// The calls on a platform without a Keychain, each of which returns
@@ -133,7 +129,7 @@ mod platform {
         _account: &str,
         _bytes: SecretBytes,
         _deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    ) -> Result<Secret, SecretError> {
         Err(SecretError::Unsupported)
     }
 
@@ -141,7 +137,7 @@ mod platform {
         _service: &str,
         _account: &str,
         _deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    ) -> Result<Secret, SecretError> {
         Err(SecretError::Unsupported)
     }
 

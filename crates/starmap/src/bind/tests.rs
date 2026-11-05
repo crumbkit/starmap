@@ -138,10 +138,7 @@ fn a_placeholder_without_a_place_is_an_error_that_names_it() {
     let template: PathTemplate = "{home}/books.db".parse().unwrap();
     let error: Box<dyn std::error::Error> = template.fill(|_| None).unwrap_err().into();
 
-    assert_eq!(
-        error.to_string(),
-        "the template uses {home}, which has no directory"
-    );
+    assert_eq!(error.to_string(), "{home} has no directory");
 }
 
 #[test]

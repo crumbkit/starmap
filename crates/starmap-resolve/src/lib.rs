@@ -35,6 +35,6 @@ pub use keychain::Keychain;
 #[cfg(feature = "one-password")]
 pub use one_password::OnePassword;
 
-pub use places::{AppName, LabelError, Places, WorkspaceName, app_name_of, expand};
+pub use places::{AppName, LabelError, Places, WorkspaceName, expand};
 pub use resolve::{Context, Resolution, ResolveFailure, ResolveProblem, resolve};
-pub use traits::{Cacheable, Item, Lookup, Provider, ProviderError, Resolver, SecretError};
+pub use traits::{Cacheable, Lookup, Provider, ProviderError, Resolver, SecretError, Slot};

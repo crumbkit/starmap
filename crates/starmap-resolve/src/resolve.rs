@@ -324,7 +324,7 @@ fn find(
                 .as_ref()
                 .ok_or(ResolveProblem::NoPlace(NoPlace(Placeholder::Workspace)))?;
             context.ask(Lookup::Generated {
-                item: workspace.item(name),
+                slot: workspace.slot(name),
                 bytes: *bytes,
             })
         }
@@ -343,7 +343,7 @@ fn saved(name: &Name, context: &Context<'_>) -> Result<Option<Bound>, ResolvePro
         return Err(ResolveProblem::Unbound);
     };
     let lookup = Lookup::Saved {
-        item: workspace.item(name),
+        slot: workspace.slot(name),
     };
     context.ask(lookup).map_err(|problem| match problem {
         ResolveProblem::NoResolver | ResolveProblem::Secret(SecretError::NotFound) => {

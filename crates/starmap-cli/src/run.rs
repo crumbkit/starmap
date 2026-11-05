@@ -23,8 +23,8 @@ use starmap::{
     Spec, Verdict,
 };
 use starmap_resolve::{
-    AppName, Context, Item, Keychain, Lookup, OnePassword, Places, ResolveProblem, Resolver,
-    SecretError, WorkspaceName, app_name_of, resolve,
+    AppName, Context, Keychain, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError,
+    Slot, WorkspaceName, resolve,
 };
 
 use crate::cli::{Assignment, RunArgs};
@@ -241,11 +241,11 @@ pub(crate) fn gather(args: &RunArgs, vars: Vec<(OsString, OsString)>) -> Result<
     let (mode, mode_note) = mode::decide(&spec, &caller);
     notes.push(mode_note);
 
-    let app = app_name_of(&checkout);
+    let app = AppName::of_dir(&checkout);
     let workspace = args
         .workspace
         .clone()
-        .unwrap_or_else(|| WorkspaceName::from(app.clone()));
+        .unwrap_or_else(|| WorkspaceName::from(&app));
     let mut places =
         Places::new(checkout.clone()).workspace(workspace.clone(), app.clone(), checkout);
     if let Some(home) = home {
@@ -320,7 +320,7 @@ pub(crate) fn settle(
     for failure in unbound {
         let typed = if can_start {
             typed(
-                Item::new(&workspace, &app, &failure.name),
+                Slot::new(&workspace, &app, &failure.name),
                 resolvers,
                 ask,
                 &mut notes,
@@ -359,11 +359,11 @@ fn checked(
     }
 }
 
-/// Asks `ask` for the secret of `item`, and offers to save the answer with
+/// Asks `ask` for the secret of `slot`, and offers to save the answer with
 /// the first of `resolvers` that keeps saved values. It returns `None` when
 /// no person can answer or the person typed nothing.
 fn typed(
-    item: Item<'_>,
+    slot: Slot<'_>,
     resolvers: &[&dyn Resolver],
     ask: &mut dyn Ask,
     notes: &mut Vec<String>,
@@ -371,10 +371,10 @@ fn typed(
     if !ask.can_ask() {
         return None;
     }
-    let name = item.name;
+    let name = slot.name;
     let secret = ask.secret(name)?;
-    let lookup = Lookup::Saved { item };
-    let (workspace, app) = (item.workspace.as_str(), item.app.as_str());
+    let lookup = Lookup::Saved { slot };
+    let (workspace, app) = (slot.workspace.as_str(), slot.app.as_str());
     let question = format!(
         "Save {name} to the Keychain for workspace {workspace} and app {app}, so later runs find it?"
     );
@@ -545,7 +545,7 @@ pub(crate) enum RunFailure {
     /// such as a generated value where the session has no login keychain.
     #[failure(
         code = SECRET_UNREADABLE,
-        hint = "on macOS, run starmap run in a session that has a login keychain; elsewhere, make {name} a secret with a one-password bind in starmap.toml",
+        hint = "starmap run keeps generated values only in the macOS login keychain, so run it in a macOS session that has one, or make {name} a secret with a one-password bind in starmap.toml",
         field(key = name.as_str()),
     )]
     NoStore {
@@ -658,7 +658,7 @@ impl fmt::Display for RunFailure {
             ),
             Self::NoStore { name } => write!(
                 formatter,
-                "no secret store that starmap run uses can hold {name} here, because starmap run keeps generated values only in the macOS login keychain"
+                "no secret store that starmap run uses on this machine handles {name}"
             ),
             Self::Secret { name, error } => {
                 write!(formatter, "{name} could not be read, because {error}")

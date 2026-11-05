@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use proptest::prelude::*;
 use starmap::{NoPlace, PathTemplate, Placeholder};
 
-use super::{AppName, Places, WorkspaceName, app_name_of, expand};
+use super::{AppName, Places, WorkspaceName, expand};
 
 /// Returns the template `text`.
 fn template(text: &str) -> PathTemplate {
@@ -146,9 +146,9 @@ fn the_app_name_of_a_directory_fits_the_name_rule() {
         ("/", "app"),
     ];
     for (dir, expected) in cases {
-        let app = app_name_of(std::path::Path::new(dir));
+        let app = AppName::of_dir(std::path::Path::new(dir));
         assert_eq!(app.as_str(), expected, "{dir}");
-        assert_eq!(WorkspaceName::from(app).as_str(), expected, "{dir}");
+        assert_eq!(WorkspaceName::from(&app).as_str(), expected, "{dir}");
         assert!(expected.parse::<WorkspaceName>().is_ok(), "{dir}");
     }
 }

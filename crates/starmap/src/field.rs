@@ -131,7 +131,7 @@ pub enum Shape {
     /// One of these values, held as a type that derives
     /// [`Enumeration`](crate::Enumeration).
     Enumeration(&'static [&'static str]),
-    /// Unicode text, held as a `String`, or as a [`Secret<String>`] when
+    /// Unicode text, held as a `String`, or as a [`Secret`] when
     /// it is withheld.
     String,
     /// Text that need not be Unicode, from a string or a path variable,
@@ -155,7 +155,7 @@ pub enum Presence {
 #[diagnostic::on_unimplemented(
     message = "starmap cannot read a variable into `{Self}`",
     label = "this field type is not one that starmap reads",
-    note = "a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret<String> or a type that derives starmap::Enumeration, and each may be inside an Option"
+    note = "a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret or a type that derives starmap::Enumeration, and each may be inside an Option"
 )]
 pub trait FieldType: Sized {
     /// The kind of value the type holds.
@@ -282,7 +282,7 @@ pub fn read_choice<E: Enumeration>(
     .ok_or(FieldProblem::Disagreement)
 }
 
-impl FieldType for Secret<String> {
+impl FieldType for Secret {
     const SHAPE: Shape = Shape::String;
     const SHOW: Show = Show::Withheld;
 

@@ -54,7 +54,7 @@ fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
     let (unsupported, shelf) = (workspace("unsupported"), app("shelf"));
     let (key, token) = (name("SHELF_SESSION_KEY"), name("SHELF_UPSTREAM_TOKEN"));
     let lookup = Lookup::Generated {
-        item: crate::Item::new(&unsupported, &shelf, &key),
+        slot: crate::Slot::new(&unsupported, &shelf, &key),
         bytes: starmap::SecretBytes::DEFAULT,
     };
     assert!(matches!(
@@ -62,7 +62,7 @@ fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
         Err(SecretError::Unsupported)
     ));
     let saved = Lookup::Saved {
-        item: crate::Item::new(&unsupported, &shelf, &token),
+        slot: crate::Slot::new(&unsupported, &shelf, &token),
     };
     assert!(matches!(
         keychain.resolve(saved, deadline()),
@@ -91,7 +91,7 @@ mod macos {
     use super::super::macos::{problem, store};
     use super::super::service;
     use super::{Keychain, app, deadline, name, workspace};
-    use crate::{AppName, Item, Lookup, Resolver, SecretError, WorkspaceName};
+    use crate::{AppName, Lookup, Resolver, SecretError, Slot, WorkspaceName};
 
     /// Forgets the test workspaces when a test ends, whether it passed or
     /// failed, so no test leaves an item in the Keychain.
@@ -113,8 +113,8 @@ mod macos {
         clippy::disallowed_methods,
         reason = "the tests check the text that a stored secret holds"
     )]
-    fn text(secret: &Secret<String>) -> String {
-        secret.expose().clone()
+    fn text(secret: &Secret) -> String {
+        secret.expose().to_owned()
     }
 
     /// Returns the generated value of `name` as text.
@@ -126,7 +126,7 @@ mod macos {
         bytes: SecretBytes,
     ) -> Result<String, SecretError> {
         let lookup = Lookup::Generated {
-            item: Item::new(workspace, app, name),
+            slot: Slot::new(workspace, app, name),
             bytes,
         };
         Ok(text(&keychain.resolve(lookup, deadline())?))
@@ -180,7 +180,7 @@ mod macos {
         let token = name("SHELF_UPSTREAM_TOKEN");
         let shelf = app("shelf");
         let lookup = Lookup::Saved {
-            item: Item::new(&saving, &shelf, &token),
+            slot: Slot::new(&saving, &shelf, &token),
         };
 
         assert!(matches!(
@@ -208,7 +208,7 @@ mod macos {
         let _cleanup = Cleanup(&keychain, vec![late.clone()]);
         let (shelf, key) = (app("shelf"), name("SHELF_SESSION_KEY"));
         let lookup = Lookup::Generated {
-            item: Item::new(&late, &shelf, &key),
+            slot: Slot::new(&late, &shelf, &key),
             bytes: SecretBytes::DEFAULT,
         };
 

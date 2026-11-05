@@ -160,7 +160,7 @@ fn disagreements(field: &Field, variable: &Variable, has_mode: bool) -> Vec<Stri
     let mut found = Vec::new();
     match (variable.show(), field.show) {
         (Show::Withheld, Show::Shown) => found.push(format!(
-            "starmap.toml withholds it, and the field type {rust_type} is not starmap::Secret<String>"
+            "starmap.toml withholds it, and the field type {rust_type} is not starmap::Secret"
         )),
         (Show::Shown, Show::Withheld) => found.push(format!(
             "starmap.toml shows it, and the field type {rust_type} holds a withheld value"

@@ -48,7 +48,7 @@ pub(super) fn generated(
     account: &str,
     bytes: SecretBytes,
     deadline: Instant,
-) -> Result<Secret<String>, SecretError> {
+) -> Result<Secret, SecretError> {
     if let Some(value) = read(service, account, deadline)? {
         return Ok(value);
     }
@@ -61,7 +61,7 @@ pub(super) fn saved(
     service: &str,
     account: &str,
     deadline: Instant,
-) -> Result<Secret<String>, SecretError> {
+) -> Result<Secret, SecretError> {
     read(service, account, deadline)?.ok_or(SecretError::NotFound)
 }
 
@@ -85,7 +85,7 @@ pub(super) fn store(
     account: &str,
     mut value: Zeroizing<String>,
     deadline: Instant,
-) -> Result<Secret<String>, SecretError> {
+) -> Result<Secret, SecretError> {
     in_time(deadline)?;
     let mut item = ItemAddOptions::new(ItemAddValue::Data {
         class: ItemClass::generic_password(),
@@ -135,11 +135,7 @@ pub(super) fn forget(service: &str) -> Result<usize, SecretError> {
 
 /// Returns the value at `service` and `account`, or `None` when the
 /// Keychain holds none.
-fn read(
-    service: &str,
-    account: &str,
-    deadline: Instant,
-) -> Result<Option<Secret<String>>, SecretError> {
+fn read(service: &str, account: &str, deadline: Instant) -> Result<Option<Secret>, SecretError> {
     in_time(deadline)?;
     match generic_password(PasswordOptions::new_generic_password(service, account)) {
         Ok(data) => match String::from_utf8(data) {

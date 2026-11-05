@@ -98,8 +98,7 @@ pub trait Resolver {
     /// Returns [`SecretError::Unsupported`] for a lookup the resolver does
     /// not handle, so that resolution asks the next resolver, and another
     /// [`SecretError`] when the secret cannot be read.
-    fn resolve(&self, lookup: Lookup<'_>, deadline: Instant)
-    -> Result<Secret<String>, SecretError>;
+    fn resolve(&self, lookup: Lookup<'_>, deadline: Instant) -> Result<Secret, SecretError>;
 
     /// Keeps `value` as the secret that `lookup` names, so a later
     /// [`Resolver::resolve`] of the same lookup returns it. A host calls it
@@ -118,7 +117,7 @@ pub trait Resolver {
     fn save(
         &self,
         lookup: Lookup<'_>,
-        value: &Secret<String>,
+        value: &Secret,
         deadline: Instant,
     ) -> Result<(), SecretError> {
         let _ = (lookup, value, deadline);
@@ -151,28 +150,28 @@ pub enum Lookup<'a> {
         /// itself passes `None`.
         cacheable: Option<Cacheable>,
     },
-    /// The generated value of `item`, which the resolver creates with
+    /// The generated value of `slot`, which the resolver creates with
     /// `bytes` random bytes on first use.
     Generated {
         /// The variable and the app and workspace it belongs to.
-        item: Item<'a>,
+        slot: Slot<'a>,
         /// How many random bytes a new value has.
         bytes: SecretBytes,
     },
-    /// The value that a person typed for the secret variable of `item`,
+    /// The value that a person typed for the secret variable of `slot`,
     /// which has no bind, and that a host kept with [`Resolver::save`].
     Saved {
         /// The variable and the app and workspace it belongs to.
-        item: Item<'a>,
+        slot: Slot<'a>,
     },
 }
 
 /// The variable that a generated or saved value belongs to: the variable
 /// `name` of `app` in `workspace`. A resolver that keeps such values keys
-/// each one by its item.
-#[derive(Debug, Clone, Copy)]
+/// each one by its slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub struct Item<'a> {
+pub struct Slot<'a> {
     /// The workspace the app runs in.
     pub workspace: &'a WorkspaceName,
     /// The app that reads the variable.
@@ -181,8 +180,8 @@ pub struct Item<'a> {
     pub name: &'a Name,
 }
 
-impl<'a> Item<'a> {
-    /// Returns the item of the variable `name` of `app` in `workspace`.
+impl<'a> Slot<'a> {
+    /// Returns the slot of the variable `name` of `app` in `workspace`.
     #[must_use]
     pub fn new(workspace: &'a WorkspaceName, app: &'a AppName, name: &'a Name) -> Self {
         Self {

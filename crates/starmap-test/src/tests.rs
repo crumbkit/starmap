@@ -32,9 +32,9 @@ struct Shelf {
     #[starmap("SHELF_PAGE_SIZE")]
     _page_size: u8,
     #[starmap("SHELF_MIRROR_TOKEN")]
-    _mirror_token: Option<starmap::Secret<String>>,
+    _mirror_token: Option<starmap::Secret>,
     #[starmap("SHELF_SESSION_KEY")]
-    _session_key: starmap::Secret<String>,
+    _session_key: starmap::Secret,
     #[starmap("XDG_STATE_HOME")]
     _state_home: Option<PathBuf>,
 }
@@ -65,7 +65,7 @@ struct Stale {
     #[starmap("SHELF_MIRROR_TOKEN")]
     _mirror_token: Option<String>,
     #[starmap("SHELF_SESSION_KEY")]
-    _session_key: starmap::Secret<String>,
+    _session_key: starmap::Secret,
     #[starmap("XDG_STATE_HOME")]
     _state_home: Option<PathBuf>,
     #[starmap("SHELF_THEME")]
@@ -86,9 +86,9 @@ struct EveryKind {
     #[starmap("SHELF_TOKEN")]
     _token: String,
     #[starmap("SHELF_COLOUR")]
-    _colour: starmap::Secret<String>,
+    _colour: starmap::Secret,
     #[starmap("SHELF_MIRROR_TOKEN")]
-    _mirror_token: starmap::Secret<String>,
+    _mirror_token: starmap::Secret,
     #[starmap("SHELF_DEBUG")]
     _debug: Option<bool>,
     #[starmap("SHELF_THEME")]
@@ -125,9 +125,9 @@ fn the_example_struct_agrees_with_its_spec() {
 }
 
 #[test]
-fn the_report_of_the_plan_example_names_each_disagreement() {
+fn the_report_of_a_stale_copy_of_the_example_names_each_disagreement() {
     let spec = EXAMPLE.replace("max = 100 }", "max = 1000 }");
-    golden(report::<Stale>(&spec, &[]), "plan_example.txt");
+    golden(report::<Stale>(&spec, &[]), "stale_example.txt");
 }
 
 #[test]

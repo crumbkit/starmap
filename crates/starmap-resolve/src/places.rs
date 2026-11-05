@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use starmap::{Name, NoPlace, PathTemplate, Placeholder};
 
-use crate::Item;
+use crate::Slot;
 
 #[cfg(test)]
 mod tests;
@@ -34,10 +34,10 @@ pub(crate) struct Workspace {
 }
 
 impl Workspace {
-    /// Returns the item of the variable `name` of the app in this
+    /// Returns the slot of the variable `name` of the app in this
     /// workspace.
-    pub(crate) fn item<'a>(&'a self, name: &'a Name) -> Item<'a> {
-        Item::new(&self.name, &self.app, name)
+    pub(crate) fn slot<'a>(&'a self, name: &'a Name) -> Slot<'a> {
+        Slot::new(&self.name, &self.app, name)
     }
 }
 
@@ -107,22 +107,22 @@ pub fn expand(template: &PathTemplate, places: &Places) -> Result<PathBuf, NoPla
 /// The name of the workspace an app runs in, such as `shelf-dev`. It
 /// starts with a lower case ASCII letter and holds only lower case ASCII
 /// letters, digits and hyphens. [`FromStr`] builds one from text, and
-/// `From<AppName>` names a workspace after the app it holds.
+/// `From<&AppName>` names a workspace after the app it holds.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WorkspaceName(String);
 
-impl From<AppName> for WorkspaceName {
+impl From<&AppName> for WorkspaceName {
     /// Returns the workspace named after `app`, as a host names the
     /// workspace of a lone app. Both names follow the same rule, so this
     /// never fails.
-    fn from(app: AppName) -> Self {
-        Self(app.0)
+    fn from(app: &AppName) -> Self {
+        Self(app.0.clone())
     }
 }
 
 /// The name of an app within its workspace, such as `shelf`. It follows
-/// the rule of a [`WorkspaceName`]. [`FromStr`] is the only way to build
-/// one.
+/// the rule of a [`WorkspaceName`]. [`FromStr`] builds one from text, and
+/// [`AppName::of_dir`] gives the default name of a directory.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AppName(String);
 
@@ -139,6 +139,37 @@ impl AppName {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Returns the app name that the directory `dir` gives a host by
+    /// default: its name in lower case, with each character other than a
+    /// letter, a digit or a hyphen written as a hyphen, and `app-` before a
+    /// name that does not start with a letter. So `My_App` gives `my-app`,
+    /// `.tmp9` gives `app--tmp9` and `/` gives `app`. The result always
+    /// fits the name rule, so this never fails. A host that runs the app
+    /// alone names its workspace after it with `WorkspaceName::from`.
+    #[must_use]
+    pub fn of_dir(dir: &Path) -> Self {
+        let text: String = dir
+            .file_name()
+            .map(|name| name.to_string_lossy())
+            .unwrap_or_default()
+            .chars()
+            .map(|c| {
+                let c = c.to_ascii_lowercase();
+                if c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect();
+        let text = match text.chars().next() {
+            Some(first) if first.is_ascii_lowercase() => text,
+            Some(_) => format!("app-{text}"),
+            None => "app".to_owned(),
+        };
+        Self(text)
     }
 }
 
@@ -162,37 +193,6 @@ impl FromStr for AppName {
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         label(text).map(Self)
     }
-}
-
-/// Returns the app name that the directory `dir` gives a host by default:
-/// its name in lower case, with each character other than a letter, a
-/// digit or a hyphen written as a hyphen, and `app-` before a name that
-/// does not start with a letter. So `My_App` gives `my-app`, `.tmp9` gives
-/// `app--tmp9` and `/` gives `app`. The result always fits the name rule,
-/// so this never fails. A host that runs the app alone names its
-/// workspace after it with `WorkspaceName::from`.
-#[must_use]
-pub fn app_name_of(dir: &Path) -> AppName {
-    let text: String = dir
-        .file_name()
-        .map(|name| name.to_string_lossy())
-        .unwrap_or_default()
-        .chars()
-        .map(|c| {
-            let c = c.to_ascii_lowercase();
-            if c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let text = match text.chars().next() {
-        Some(first) if first.is_ascii_lowercase() => text,
-        Some(_) => format!("app-{text}"),
-        None => "app".to_owned(),
-    };
-    AppName(text)
 }
 
 /// Returns `text` when it starts with a lower case ASCII letter and holds

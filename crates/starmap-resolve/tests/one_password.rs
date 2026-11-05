@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use starmap::{Mode, Name, Secret, SecretRef, Spec};
 use starmap_resolve::{
-    AppName, Context, Item, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError,
+    AppName, Context, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError, Slot,
     WorkspaceName, resolve,
 };
 
@@ -50,7 +50,7 @@ fn fake_op(test: &str, script: &str) -> PathBuf {
 
 /// Reads [`REFERENCE`] through `program` with `deadline`.
 #[expect(clippy::unwrap_used, reason = "the reference is a valid constant")]
-fn read(program: PathBuf, deadline: Instant) -> Result<Secret<String>, SecretError> {
+fn read(program: PathBuf, deadline: Instant) -> Result<Secret, SecretError> {
     let reference = SecretRef::OnePassword(REFERENCE.parse().unwrap());
     OnePassword::new(program).resolve(Lookup::reference(&reference), deadline)
 }
@@ -60,7 +60,7 @@ fn read(program: PathBuf, deadline: Instant) -> Result<Secret<String>, SecretErr
     clippy::disallowed_methods,
     reason = "the tests check the text that op read returned"
 )]
-fn text(secret: &Secret<String>) -> &str {
+fn text(secret: &Secret) -> &str {
     secret.expose()
 }
 
@@ -229,7 +229,7 @@ fn a_generated_lookup_is_left_to_another_resolver() {
     let app: AppName = "shelf".parse().unwrap();
     let key: Name = "SHELF_SESSION_KEY".parse().unwrap();
     let lookup = Lookup::Generated {
-        item: Item::new(&workspace, &app, &key),
+        slot: Slot::new(&workspace, &app, &key),
         bytes: starmap::SecretBytes::new(32).unwrap(),
     };
     let error = OnePassword::new(program.clone())

@@ -89,7 +89,7 @@ fn an_os_string_field_reads_a_path_variable() {
 fn a_secret_field_reads_a_copy_of_the_withheld_default() {
     let environment = environment(Vec::new());
 
-    let secret: Secret<String> = required(&environment, "SHELF_MIRROR_TOKEN").unwrap();
+    let secret: Secret = required(&environment, "SHELF_MIRROR_TOKEN").unwrap();
 
     assert_eq!(secret.expose(), "anonymous");
 }

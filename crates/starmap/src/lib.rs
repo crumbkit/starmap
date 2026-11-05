@@ -82,7 +82,7 @@ pub use starmap_derive::Enumeration;
 /// names, relative to the crate root. Each field names its variable with
 /// `#[starmap("NAME")]`, and its type is one of `PathBuf`,
 /// [`Port`], `url::Url`, `std::net::SocketAddr`, `bool`, an integer type
-/// of at most 64 bits, `String`, `OsString`, [`Secret<String>`] or a type
+/// of at most 64 bits, `String`, `OsString`, [`Secret`] or a type
 /// that derives [`Enumeration`], each inside an `Option` or not. Any
 /// other type fails to compile.
 #[cfg(feature = "derive")]

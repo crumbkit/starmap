@@ -140,22 +140,18 @@ impl FakeResolver {
 
 fn key(lookup: Lookup<'_>) -> Option<String> {
     match lookup {
-        Lookup::Saved { item } => Some(format!(
+        Lookup::Saved { slot } => Some(format!(
             "{}/{}/{}",
-            item.workspace.as_str(),
-            item.app.as_str(),
-            item.name
+            slot.workspace.as_str(),
+            slot.app.as_str(),
+            slot.name
         )),
         _ => None,
     }
 }
 
 impl Resolver for FakeResolver {
-    fn resolve(
-        &self,
-        lookup: Lookup<'_>,
-        _deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    fn resolve(&self, lookup: Lookup<'_>, _deadline: Instant) -> Result<Secret, SecretError> {
         if let Lookup::Reference { .. } = lookup {
             return Ok(Secret::new("from-op".to_owned()));
         }
@@ -174,11 +170,13 @@ impl Resolver for FakeResolver {
     fn save(
         &self,
         lookup: Lookup<'_>,
-        value: &Secret<String>,
+        value: &Secret,
         _deadline: Instant,
     ) -> Result<(), SecretError> {
         let key = key(lookup).ok_or(SecretError::Unsupported)?;
-        self.saved.borrow_mut().insert(key, value.expose().clone());
+        self.saved
+            .borrow_mut()
+            .insert(key, value.expose().to_owned());
         Ok(())
     }
 }
@@ -216,7 +214,7 @@ impl Ask for Person {
         self.present
     }
 
-    fn secret(&mut self, name: &Name) -> Option<Secret<String>> {
+    fn secret(&mut self, name: &Name) -> Option<Secret> {
         self.asked.push(format!("secret {name}"));
         self.typed
             .filter(|typed| !typed.is_empty())
@@ -256,7 +254,7 @@ fn secret(ready: &Ready, variable: &str) -> Option<String> {
     ready
         .environment
         .secret(&name(variable))
-        .map(|secret| secret.expose().clone())
+        .map(|secret| secret.expose().to_owned())
 }
 
 /// Returns the code of each failure.
@@ -587,7 +585,7 @@ fn each_secret_store_problem_is_unreadable_and_says_what_the_store_returned() {
 }
 
 #[test]
-fn a_generated_variable_that_no_store_keeps_says_where_run_keeps_generated_values() {
+fn a_generated_variable_that_no_store_handles_fails_as_unreadable_and_names_the_variable() {
     let checkout = Checkout::with_spec(BOUND_AND_GENERATED, None);
     let refused = prepared(
         &checkout.args(&[]),
@@ -600,9 +598,7 @@ fn a_generated_variable_that_no_store_keeps_says_where_run_keeps_generated_value
     assert_eq!(codes(&refused), [&codes::SECRET_UNREADABLE]);
     assert_eq!(
         refused.failures.first().map(ToString::to_string).as_deref(),
-        Some(
-            "no secret store that starmap run uses can hold SHELF_SESSION_KEY here, because starmap run keeps generated values only in the macOS login keychain"
-        )
+        Some("no secret store that starmap run uses on this machine handles SHELF_SESSION_KEY")
     );
 }
 
@@ -675,11 +671,7 @@ struct Counting {
 }
 
 impl Resolver for Counting {
-    fn resolve(
-        &self,
-        _lookup: Lookup<'_>,
-        _deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    fn resolve(&self, _lookup: Lookup<'_>, _deadline: Instant) -> Result<Secret, SecretError> {
         self.calls.set(self.calls.get() + 1);
         Ok(Secret::new("from-the-store".to_owned()))
     }
