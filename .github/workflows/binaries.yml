@@ -11,6 +11,11 @@
 # nothing. The tag is `v<version>`, where <version> is the workspace version
 # in Cargo.toml.
 #
+# Turning on immutable releases breaks the upload into a release that
+# release-plz created. If publish ever pushes its tag with the App token
+# instead of github.token, the tag push and the call from release.yml both
+# start this workflow, and the two runs race.
+#
 # No job uses rust-cache, because a poisoned cache would reach the released
 # binaries, and zizmor fails a release workflow that restores a cache.
 name: Binaries
@@ -47,7 +52,6 @@ jobs:
     permissions:
       contents: read # actions/checkout reads the repository.
     outputs:
-      ref: ${{ steps.tag.outputs.ref }}
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -65,16 +69,15 @@ jobs:
             tag=
           fi
           case "$tag" in
-            "") ref= ;;
-            v[0-9]*) ref=refs/tags/$tag ;;
+            "" | v[0-9]*) ;;
             *) echo "the tag is $tag, and a release tag starts with v and a digit" >&2; exit 1 ;;
           esac
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.tag.outputs.ref }}
+          ref: ${{ steps.tag.outputs.tag }}
           persist-credentials: false
+      - run: rustup toolchain install
       - id: version
         env:
           TAG: ${{ steps.tag.outputs.tag }}
@@ -97,7 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.version.outputs.ref }}
+          ref: ${{ needs.version.outputs.tag }}
           persist-credentials: false
       - run: rustup toolchain install
       - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
@@ -115,12 +118,15 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             os: macos-15
-          - target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-musl
             os: ubuntu-24.04-arm
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-musl
             os: ubuntu-24.04
+          # crt-static links the C runtime in, so the binary needs no VC++
+          # redistributable.
           - target: x86_64-pc-windows-msvc
             os: windows-2025
+            rustflags: -C target-feature=+crt-static
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
@@ -132,10 +138,11 @@ jobs:
     env:
       TARGET: ${{ matrix.target }}
       VERSION: ${{ needs.version.outputs.version }}
+      RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.version.outputs.ref }}
+          ref: ${{ needs.version.outputs.tag }}
           persist-credentials: false
       # rustup installs the toolchain that rust-toolchain.toml pins.
       - run: rustup target add "$TARGET"
@@ -154,11 +161,16 @@ jobs:
             exit 1
           fi
       - run: |
-          mkdir dist
-          cd "target/$TARGET/release"
+          name=starmap-$VERSION-$TARGET
+          mkdir -p "dist" "$name"
+          cp LICENSE-MIT LICENSE-APACHE README.md "$name/"
           case "$TARGET" in
-            *-windows-*) 7z a "$GITHUB_WORKSPACE/dist/starmap-$VERSION-$TARGET.zip" starmap.exe ;;
-            *) tar -czf "$GITHUB_WORKSPACE/dist/starmap-$VERSION-$TARGET.tar.gz" starmap ;;
+            *-windows-*)
+              cp "target/$TARGET/release/starmap.exe" "$name/"
+              7z a "dist/$name.zip" "$name" ;;
+            *)
+              cp "target/$TARGET/release/starmap" "$name/"
+              tar -czf "dist/$name.tar.gz" "$name" ;;
           esac
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
