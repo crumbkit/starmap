@@ -9,7 +9,7 @@ use serde_json::Value;
 use snapbox::cmd::Command;
 use starmap_cli::{Cli, GUIDE};
 
-/// The directory that holds the build plan's illustrative `starmap.toml`,
+/// The directory that holds the example `starmap.toml`,
 /// relative to this package.
 const EXAMPLE: &str = "../starmap/tests/example";
 

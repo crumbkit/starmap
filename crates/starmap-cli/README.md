@@ -18,11 +18,11 @@ at the same path in a git revision, and lists each variable that was added
 or removed and each field that changed. `starmap run -- <program>` resolves
 every declared variable, checks the values and starts the program with each
 declared variable set or removed. A value comes from `--set`, then the
-shell, then the `.env` file beside the spec, then the default, and `.env`
-and `--set` never give a secret. A secret comes from its 1Password bind, or
-from the shell or the Keychain when it has none. At a terminal, `run` asks
-for a required secret that nothing supplies, with hidden input, and offers
-to save it to the Keychain. The program's exit code becomes `starmap`'s.
+shell, then the `.env` file beside the spec, then a setting's path bind,
+then the default, and `.env` and `--set` never give a secret. A secret
+comes from its 1Password bind, or from the shell or the Keychain when it
+has none. At a terminal, `run` asks for a required secret that nothing
+supplies, with hidden input, and offers to save it to the Keychain. The program's exit code becomes `starmap`'s.
 [docs/commands.md](https://github.com/crumbkit/starmap/blob/main/crates/starmap-cli/docs/commands.md) is the
 reference of every command. The repository's
 [README](https://github.com/crumbkit/starmap) describes the project.

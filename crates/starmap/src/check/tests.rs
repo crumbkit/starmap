@@ -451,7 +451,7 @@ fn a_refusal_lists_every_finding_in_the_spec_order() {
     );
 }
 
-// The property of the build plan
+// The property that binding a missing variable removes only its finding
 
 /// How a generated variable is bound.
 #[derive(Debug, Clone, Copy)]

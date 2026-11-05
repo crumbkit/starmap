@@ -8,7 +8,7 @@ use crumbkit::{Call, Recovery};
 use super::{list_again, row, value_text};
 use crate::spec;
 
-/// Returns the build plan's illustrative spec.
+/// Returns the example spec in `crates/starmap/tests/example/starmap.toml`.
 fn example() -> Spec {
     spec::load(Path::new("../starmap/tests/example/starmap.toml")).unwrap()
 }

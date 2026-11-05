@@ -156,7 +156,8 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, Fai
 }
 
 /// Returns the guesses for the variable `name`, which src reads at
-/// `places`. The name decides each guess, as the build plan's rules say.
+/// `places`. The name decides each guess, by the rules that
+/// `INHERITED`, `SECRET_WORDS` and `FORM_ENDINGS` state.
 fn guess(name: Name, places: Vec<String>) -> Guess {
     let text = name.as_str();
     let inherited = INHERITED.contains(&text) || text.starts_with("XDG_");

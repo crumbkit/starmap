@@ -791,7 +791,9 @@ impl Parser {
             return None;
         };
         // A number beyond u16 is above SecretBytes::MAX too, so u16::MAX
-        // stands in for it and SecretBytes::new refuses it.
+        // stands in for it and SecretBytes::new refuses it. The clamp only
+        // serves that refusal: it never admits a bad value, and the report
+        // still names the BadBytes problem with the number as written.
         let bytes = SecretBytes::new(u16::try_from(number).unwrap_or(u16::MAX));
         let text = number.to_string();
         self.checked(field.span(), &field.path, &text, Kind::BadBytes, bytes)
