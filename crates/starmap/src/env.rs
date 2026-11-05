@@ -25,7 +25,7 @@ pub(crate) enum Held {
     /// The value of a shown variable.
     Shown(Value),
     /// The value of a withheld variable.
-    Withheld(Secret<String>),
+    Withheld(Secret),
 }
 
 impl Environment {
@@ -55,7 +55,7 @@ impl Environment {
     /// Returns the value of the withheld variable `name`. It returns `None`
     /// when the variable stays unset, is not declared, or is shown.
     #[must_use]
-    pub fn secret(&self, name: &Name) -> Option<&Secret<String>> {
+    pub fn secret(&self, name: &Name) -> Option<&Secret> {
         match self.held(name)? {
             Held::Withheld(secret) => Some(secret),
             Held::Shown(_) => None,

@@ -45,3 +45,9 @@ error: an enumeration value is not empty and holds no whitespace
    |
 40 |     #[starmap("local dev")]
    |               ^^^^^^^^^^^
+
+error: each variant takes at most one #[starmap("value")]
+  --> tests/compile_fail/misuse.rs:47:5
+   |
+47 |     #[starmap("development")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^

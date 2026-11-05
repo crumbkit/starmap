@@ -35,7 +35,7 @@ pub struct AgentClient {
 #[derive(Debug)]
 pub struct Hits {
     generation: Generation,
-    values: Vec<Option<Secret<String>>>,
+    values: Vec<Option<Secret>>,
 }
 
 impl Hits {
@@ -48,7 +48,7 @@ impl Hits {
     /// Returns the value of each reference of the Get, in order, or `None`
     /// for one that is read from `op`.
     #[must_use]
-    pub fn into_values(self) -> Vec<Option<Secret<String>>> {
+    pub fn into_values(self) -> Vec<Option<Secret>> {
         self.values
     }
 }
@@ -101,7 +101,7 @@ impl AgentClient {
         &self,
         scope: &CacheScope,
         reference: &OnePasswordRef,
-        value: &Secret<String>,
+        value: &Secret,
         generation: Generation,
         deadline: Instant,
     ) -> Result<(), AgentError> {

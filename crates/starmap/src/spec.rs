@@ -324,8 +324,8 @@ impl fmt::Display for SpecProblem {
     }
 }
 
-/// The kind of a [`SpecProblem`]. Each kind has a code, which the CLI
-/// reports as `starmap::spec::<code>`.
+/// The kind of a [`SpecProblem`]. Each kind has a code of the form
+/// `starmap::spec::<name>`, which [`SpecProblemKind::code`] returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum SpecProblemKind {
@@ -372,28 +372,27 @@ pub enum SpecProblemKind {
 }
 
 impl SpecProblemKind {
-    /// Returns the kind's code, such as `bad_default`, which the CLI
-    /// reports as `starmap::spec::bad_default`.
+    /// Returns the kind's code, such as `starmap::spec::bad_default`.
     #[must_use]
     pub fn code(self) -> &'static str {
         match self {
-            Self::TooLarge => "too_large",
-            Self::Syntax => "syntax",
-            Self::UnknownField => "unknown_field",
-            Self::MissingField => "missing_field",
-            Self::BadValue => "bad_value",
-            Self::BadName => "bad_name",
-            Self::Guess => "guess",
-            Self::BadDefault => "bad_default",
-            Self::BadRange => "bad_range",
-            Self::EmptyEnumeration => "empty_enumeration",
-            Self::ShownSecret => "shown_secret",
-            Self::SecretForm => "secret_form",
-            Self::BindMismatch => "bind_mismatch",
-            Self::BadBytes => "bad_bytes",
-            Self::UnknownPlaceholder => "unknown_placeholder",
-            Self::ModeUndeclared => "mode_undeclared",
-            Self::ModeSource => "mode_source",
+            Self::TooLarge => "starmap::spec::too_large",
+            Self::Syntax => "starmap::spec::syntax",
+            Self::UnknownField => "starmap::spec::unknown_field",
+            Self::MissingField => "starmap::spec::missing_field",
+            Self::BadValue => "starmap::spec::bad_value",
+            Self::BadName => "starmap::spec::bad_name",
+            Self::Guess => "starmap::spec::guess",
+            Self::BadDefault => "starmap::spec::bad_default",
+            Self::BadRange => "starmap::spec::bad_range",
+            Self::EmptyEnumeration => "starmap::spec::empty_enumeration",
+            Self::ShownSecret => "starmap::spec::shown_secret",
+            Self::SecretForm => "starmap::spec::secret_form",
+            Self::BindMismatch => "starmap::spec::bind_mismatch",
+            Self::BadBytes => "starmap::spec::bad_bytes",
+            Self::UnknownPlaceholder => "starmap::spec::unknown_placeholder",
+            Self::ModeUndeclared => "starmap::spec::mode_undeclared",
+            Self::ModeSource => "starmap::spec::mode_source",
         }
     }
 }

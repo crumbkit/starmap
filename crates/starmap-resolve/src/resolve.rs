@@ -5,7 +5,7 @@ use std::fmt;
 use std::time::Instant;
 
 use starmap::{
-    Bindings, Bound, Mode, Name, Placeholder, ProviderKind, Secret, Source, Spec, Unset, Variable,
+    Bindings, Bound, Mode, Name, NoPlace, Placeholder, ProviderKind, Source, Spec, Unset, Variable,
 };
 
 use crate::{Lookup, Places, Provider, ProviderError, Resolver, SecretError, expand};
@@ -76,20 +76,19 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Asks each resolver for `lookup` until one handles it.
+    /// Asks each resolver for `lookup` until one handles it. When none is
+    /// registered or every one returns [`SecretError::Unsupported`], the
+    /// problem is [`ResolveProblem::NoResolver`].
     fn ask(&self, lookup: Lookup<'_>) -> Result<Option<Bound>, ResolveProblem> {
-        let mut problem = ResolveProblem::NoResolver;
         for resolver in &self.resolvers {
             self.in_time()?;
             match resolver.resolve(lookup, self.deadline) {
                 Ok(secret) => return Ok(Some(Bound::Secret(secret))),
-                Err(SecretError::Unsupported) => {
-                    problem = ResolveProblem::Secret(SecretError::Unsupported);
-                }
+                Err(SecretError::Unsupported) => {}
                 Err(error) => return Err(ResolveProblem::Secret(error)),
             }
         }
-        Err(problem)
+        Err(ResolveProblem::NoResolver)
     }
 }
 
@@ -153,14 +152,16 @@ pub enum ResolveProblem {
     NoProvider(ProviderKind),
     /// The provider of the variable's kind returned an error.
     Provider(ProviderError),
-    /// The variable is required, and no resolver is registered.
+    /// The variable is required, and no registered resolver handles its
+    /// lookup: none is registered, or each one returned
+    /// [`SecretError::Unsupported`].
     NoResolver,
     /// The resolvers could not return the secret.
     Secret(SecretError),
     /// The variable is required, and its path template or generated value
     /// needs a place that the host did not give. A generated value needs
     /// the workspace.
-    Placeholder(Placeholder),
+    NoPlace(NoPlace),
     /// The deadline passed before the variable's provider or resolver was
     /// asked.
     Deadline,
@@ -180,11 +181,7 @@ impl ResolveProblem {
     fn lacks_input(&self) -> bool {
         matches!(
             self,
-            Self::NoProvider(_)
-                | Self::NoResolver
-                | Self::Secret(SecretError::Unsupported)
-                | Self::Placeholder(_)
-                | Self::Unbound
+            Self::NoProvider(_) | Self::NoResolver | Self::NoPlace(_) | Self::Unbound
         )
     }
 }
@@ -297,7 +294,7 @@ fn find(
             bind: Some(template),
         } if caller.is_none() => expand(template, &context.places)
             .map(|path| Some(variable.capture(path.into_os_string())))
-            .map_err(ResolveProblem::Placeholder),
+            .map_err(ResolveProblem::NoPlace),
         Source::Setting { .. } | Source::Inherited => {
             Ok(caller.and_then(|bound| copy(variable, bound)))
         }
@@ -325,11 +322,9 @@ fn find(
                 .places
                 .workspace
                 .as_ref()
-                .ok_or(ResolveProblem::Placeholder(Placeholder::Workspace))?;
+                .ok_or(ResolveProblem::NoPlace(NoPlace(Placeholder::Workspace)))?;
             context.ask(Lookup::Generated {
-                workspace: &workspace.name,
-                app: &workspace.app,
-                name,
+                slot: workspace.slot(name),
                 bytes: *bytes,
             })
         }
@@ -348,13 +343,10 @@ fn saved(name: &Name, context: &Context<'_>) -> Result<Option<Bound>, ResolvePro
         return Err(ResolveProblem::Unbound);
     };
     let lookup = Lookup::Saved {
-        workspace: &workspace.name,
-        app: &workspace.app,
-        name,
+        slot: workspace.slot(name),
     };
     context.ask(lookup).map_err(|problem| match problem {
-        ResolveProblem::NoResolver
-        | ResolveProblem::Secret(SecretError::Unsupported | SecretError::NotFound) => {
+        ResolveProblem::NoResolver | ResolveProblem::Secret(SecretError::NotFound) => {
             ResolveProblem::Unbound
         }
         problem => problem,
@@ -363,14 +355,10 @@ fn saved(name: &Name, context: &Context<'_>) -> Result<Option<Bound>, ResolvePro
 
 /// Returns a copy of the caller's value `bound` for `variable`. A plain
 /// value is bound again by the variable's show.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "BASE-24: a caller's withheld value is copied straight into a new Secret"
-)]
 fn copy(variable: &Variable, bound: &Bound) -> Option<Bound> {
     match bound {
         Bound::Plain(raw) => Some(variable.capture(raw.clone())),
-        Bound::Secret(secret) => Some(Bound::Secret(Secret::new(secret.expose().clone()))),
+        Bound::Secret(secret) => Some(Bound::Secret(secret.duplicate())),
         Bound::NotUnicode => Some(Bound::NotUnicode),
         // A kind of bound value that a later version of starmap adds is
         // not copied until this crate learns it.

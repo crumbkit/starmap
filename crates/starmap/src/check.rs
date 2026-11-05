@@ -14,7 +14,7 @@ mod tests;
 
 /// Binds each variable of `vars` that `spec` declares, and ignores every
 /// other variable. A withheld variable's value is held as a
-/// [`Secret<String>`], or as [`Bound::NotUnicode`] when it is not Unicode.
+/// [`Secret`], or as [`Bound::NotUnicode`] when it is not Unicode.
 /// A shown variable's value is bound as it is.
 ///
 /// The caller passes the environment in, such as `std::env::vars_os()`,
@@ -36,7 +36,7 @@ pub fn capture(spec: &Spec, vars: impl IntoIterator<Item = (OsString, OsString)>
 
 impl Variable {
     /// Binds the raw value `raw` by the variable's show, as [`capture`]
-    /// binds each value it keeps: a withheld value as a [`Secret<String>`],
+    /// binds each value it keeps: a withheld value as a [`Secret`],
     /// or as [`Bound::NotUnicode`] when it is not Unicode, and a shown value
     /// as it is.
     #[must_use]
@@ -180,7 +180,7 @@ fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
             .map(|value| value.map(Held::Shown))
             .map_err(Problem::Invalid),
         // A withheld variable has the form string, which the spec parser
-        // checks, and a string takes any text that a Secret<String> holds.
+        // checks, and a string takes any text that a Secret holds.
         (Show::Withheld, Bound::Secret(secret)) => Ok(Some(Held::Withheld(secret.duplicate()))),
         (Show::Withheld, Bound::NotUnicode) => Err(Problem::Invalid(FormError::NotUnicode)),
         (show, _) => Err(Problem::ShowMismatch { show }),

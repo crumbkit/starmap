@@ -17,21 +17,24 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   treats a relative value as unset.
 - `starmap::Port`, `IntegerRange`, `Choice` and `Choices` check the values
   of their forms, each through one constructor.
-- `starmap::ModeRule` decides between local and production `Mode` from the
-  mode variable's value.
+- `starmap::ModeRule`, which only `Spec::parse` builds, decides between
+  local and production `Mode` from the mode variable's value.
 - `starmap::Spec::parse` reads a `starmap.toml` of at most 256 KiB into a
   `Spec` of `Variable`s and an optional `ModeRule`. A file that breaks a
   rule returns a `SpecError` that lists every `SpecProblem`, each with its
-  `SpecProblemKind` and the `Span` of text it is about.
+  `SpecProblemKind` and the byte range of text it is about.
+  `SpecProblemKind::code` returns the kind's full failure code, such as
+  `starmap::spec::bad_default`.
 - `starmap::Source` merges a variable's source with the bind that source
   allows: a `PathTemplate` for a setting, a `SecretRef` for a secret,
   `SecretBytes` for a generated value and a `ProvidedRef` for a provided
   one.
 - `Spec::to_toml` writes a spec's canonical form, and `Spec::digest` returns
   its SHA-256 `Digest`, which prints as `sha256:<hex>`.
-- `starmap::Secret<T>` holds a withheld value in a `secrecy` box. Its
-  `Debug` prints `Secret(••••••••)`, and it has no `Display`, `Serialize`
-  or `Clone`.
+- `starmap::Secret` holds a withheld `String` in a `secrecy` box that
+  zeroes its memory on drop. Its `Debug` prints `Secret(••••••••)`, and it
+  has no `Display`, `Serialize` or `Clone`. `Secret::expose` returns the
+  text, and `Secret::duplicate` is the one way to copy a secret.
 - `starmap::capture` binds the variables a spec declares from an
   environment that the caller passes in, as `Bindings` of `Bound` values,
   and `starmap::mode` decides the mode from them.
@@ -52,22 +55,22 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `#[derive(starmap::Enumeration)]` reads an enumeration variable into an
   enum of unit variants, each named in kebab case or renamed with
   `#[starmap("...")]`. A run of capitals is one word, so `HTTPServer`
-  reads as `http-server`, and two variants with the same value fail to
-  compile.
+  reads as `http-server`. Two variants with the same value fail to
+  compile, and so does a variant with two `#[starmap("...")]` attributes.
 - A field's type is `PathBuf`, `Port`, `url::Url`, `SocketAddr`, `bool`, an
-  integer type of at most 64 bits, `String`, `OsString`, `Secret<String>`
-  or an `Enumeration`, each inside an `Option` or not. Any other type
-  fails to compile with a message that lists them. `starmap::Field`
-  describes each field with its `Shape`, `Presence` and `Show`, and a
-  `FieldError` says which field cannot hold its value and why, as a
-  `FieldProblem`.
-- `starmap_test::check` and `check_allowing` compare a derived struct with
-  its `starmap.toml` and panic with every disagreement at once: names the
-  struct reads that the spec does not declare and the reverse, field types
-  that cannot hold the variable's type or range, fields whose `Option`
-  does not match the unset rule in either mode, fields whose show differs,
-  and `Allow` entries that excuse nothing. Both panic when the spec text
-  differs from the text the struct embeds.
+  integer type of at most 64 bits, `String`, `OsString`, `Secret` or an
+  `Enumeration`, each inside an `Option` or not. Any other type fails to
+  compile with a message that lists them. `starmap::Field`, which the
+  derive builds, describes each field with its `Shape`, `Presence` and
+  `Show`, and a `FieldError` says which field cannot hold its value and
+  why, as a `FieldProblem`.
+- `starmap_test::check::<E>()` and `check_allowing::<E>(allow)` compare a
+  derived struct with the `starmap.toml` it embeds and panic with every
+  disagreement at once: names the struct reads that the spec does not
+  declare and the reverse, field types that cannot hold the variable's
+  type or range, fields whose `Option` does not match the unset rule in
+  either mode, fields whose show differs, and `Allow` entries that excuse
+  nothing. `Allow::new(name, reason)` builds an entry.
 - A variable with `type = "socket-address"` takes an IP socket address,
   such as `0.0.0.0:8080` or `[::1]:8080`, and a field of type
   `std::net::SocketAddr` reads it. Port 0 and a numeric IPv6 zone id, such
@@ -100,11 +103,16 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   A caller value for a secret with a bind or a generated variable is
   ignored and listed in `Resolution::ignored`. Every provider and resolver
   is asked under one deadline, and the `Resolution` lists a
-  `ResolveFailure` for each variable it could not resolve.
+  `ResolveFailure` for each variable it could not resolve. A lookup that no
+  registered resolver handles, because none is registered or each one
+  returns `SecretError::Unsupported`, is `ResolveProblem::NoResolver`, and
+  a template that needs a place the host did not give is
+  `ResolveProblem::NoPlace`.
   `Resolution::new` and `ResolveFailure::new` build them for a host's own
   tests.
 - `starmap_resolve::expand` fills a path template's placeholders from
-  `Places`, and names the first placeholder that has no place.
+  `Places`, and returns `starmap::NoPlace`, an error that names the first
+  placeholder that has no place.
 - starmap-resolve's `one-password` feature adds `OnePassword`, a `Resolver`
   that reads each `op://` reference with `op read` under the resolution's
   deadline. A signed-out account returns `SecretError::Locked`, a
@@ -171,9 +179,12 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   end of the frame, bytes after the last field, a Hits whose count differs
   from its Get, an unknown outcome byte, text or a value that is not
   UTF-8, and an unknown version.
+- `starmap::url` re-exports the `url` crate, which is part of starmap's
+  public API, so a host names the same version.
 - `Variable::capture` binds one raw value by the variable's show, as
   `starmap::capture` binds each value. `PathTemplate::fill` returns the path
-  a template names when a function gives each placeholder's directory.
+  a template names when a function gives each placeholder's directory, or
+  `NoPlace` for the first placeholder without one.
 - starmap-resolve's `keychain` feature adds `Keychain`, a `Resolver` that
   keeps each generated value as a generic password in the macOS login
   keychain, under the service `starmap.<workspace>` and the account
@@ -181,17 +192,25 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   random bytes, written as base64url, and later lookups return it
   unchanged. `Keychain::forget` deletes every value of one workspace and
   returns how many it deleted. On a platform other than macOS, every call
-  returns `SecretError::Unsupported`.
+  returns `SecretError::Unsupported`. A `Lookup::Generated` or
+  `Lookup::Saved` names its value with a `Slot`, the variable of an
+  `AppName` in a `WorkspaceName`, which compares and hashes by its three
+  names. `AppName::of_dir` gives the default app name of a directory, and
+  `WorkspaceName::from(&app)` names a lone app's workspace after it.
 - The `starmap` command, built on crumbkit. `starmap check` reads
   `starmap.toml`, or the file that `--spec` names, and prints the number of
   variables it declares, its digest and the mode that the shell's values
   decide. A file that cannot be read or parsed fails with a
   `starmap::spec::<kind>` code for its first problem and an excerpt of the
-  file at every problem. `starmap explain` prints each declared variable,
-  or each named one, with its type, unset rule, source and value in this
-  shell. A withheld value prints as eight dots whatever its length, and its
-  JSON holds only its state. `commands list` and `self usage` come from
-  crumbkit, and every run appends a line to the command's usage log.
+  file at every problem. Its JSON `problems` field lists the full code of
+  every problem, such as `starmap::spec::guess`. A kind that the command
+  does not know keeps its own code in `problems`, and the failure's
+  top-level code is then `starmap::spec::syntax`. `starmap explain` prints
+  each declared variable, or each named one, with its type, unset rule,
+  source and value in this shell. A withheld value prints as eight dots
+  whatever its length, and its JSON holds only its state. `commands list`
+  and `self usage` come from crumbkit, and every run appends a line to the
+  command's usage log.
 - `starmap init` scans the `.rs` files under `src` for each variable that
   the code reads by a literal name, through `std::env::var`,
   `std::env::var_os` or the `#[starmap("NAME")]` field attribute, and
@@ -223,9 +242,11 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or in `--set`. A secret comes from its bind, or from the shell or the
   Keychain when it has none. At a terminal, and without `--no-input`, run
   asks for a required secret that nothing supplies, only when everything
-  else passes the check, and offers to save it to the Keychain. `--json`
-  is refused before any secret store is asked. run passes on the
-  program's exit code.
+  else passes the check, and offers to save it to the Keychain. A
+  generated variable in a session without a login keychain fails with
+  `starmap::secret::unreadable`, and its hint says that run keeps
+  generated values only in the macOS login keychain. `--json` is refused before any secret store is asked. run
+  passes on the program's exit code.
 - `starmap`'s root help groups its commands under four goal headings.
 - `starmap explain` and `starmap diff` name a `socket-address` variable's
   type as `ip socket address`, where they printed `another type`, and

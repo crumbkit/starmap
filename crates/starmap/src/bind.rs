@@ -199,6 +199,21 @@ impl fmt::Display for Placeholder {
     }
 }
 
+/// A place that has no directory: the placeholder this holds. A path
+/// template that uses the placeholder cannot be filled, and
+/// [`PathTemplate::fill`] returns it. A host also returns it for a
+/// generated value, which needs the `{workspace}` place to name the value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoPlace(pub Placeholder);
+
+impl fmt::Display for NoPlace {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{} has no directory", self.0)
+    }
+}
+
+impl Error for NoPlace {}
+
 /// The path template of a setting's path bind, such as
 /// `{workspace}/books.db`.
 ///
@@ -236,15 +251,16 @@ impl PathTemplate {
     ///
     /// # Errors
     ///
-    /// Returns the first placeholder for which `place` gives no directory.
+    /// Returns [`NoPlace`] with the first placeholder for which `place`
+    /// gives no directory.
     pub fn fill<'p>(
         &self,
         mut place: impl FnMut(Placeholder) -> Option<&'p Path>,
-    ) -> Result<PathBuf, Placeholder> {
+    ) -> Result<PathBuf, NoPlace> {
         self.pieces()
             .try_fold(OsString::new(), |mut path, (placeholder, text)| {
                 if let Some(placeholder) = placeholder {
-                    path.push(place(placeholder).ok_or(placeholder)?);
+                    path.push(place(placeholder).ok_or(NoPlace(placeholder))?);
                 }
                 path.push(text);
                 Ok(path)
@@ -564,8 +580,11 @@ pub enum Bound {
     /// A value that may be shown, as the environment holds it.
     Plain(OsString),
     /// A withheld value.
-    Secret(Secret<String>),
-    /// A withheld value that is not Unicode, which a [`Secret<String>`]
-    /// cannot hold. [`check`](crate::check) refuses it.
+    Secret(Secret),
+    /// A withheld value that is not Unicode, which a [`Secret`]
+    /// cannot hold. [`check`](crate::check) refuses it. The variant exists
+    /// so that the refusal says the variable is set with a value it cannot
+    /// take, where leaving the variable unbound would report it as
+    /// missing.
     NotUnicode,
 }

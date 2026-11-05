@@ -41,4 +41,11 @@ enum Whitespace {
     Dev,
 }
 
+#[derive(starmap::Enumeration)]
+enum TwoValues {
+    #[starmap("dev")]
+    #[starmap("development")]
+    Dev,
+}
+
 fn main() {}

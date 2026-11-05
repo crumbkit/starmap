@@ -84,7 +84,7 @@ impl Prepared {
 /// What a prepared lookup returns.
 enum Entry {
     /// The value that `op inject` printed.
-    Value(Secret<String>),
+    Value(Secret),
     /// The reference is read with its own `op read`, unless the
     /// preparation has stopped.
     Read,
@@ -93,7 +93,10 @@ enum Entry {
     Failed(String),
 }
 
-/// A failure that ends the reads of a preparation.
+/// A failure that ends the reads of a preparation. It names the three
+/// variants of [`SecretError`] that end a preparation, and exists because
+/// `SecretError` is neither `Copy` nor `Clone`, since `Program` holds an
+/// `io::Error`, while each read still to come returns the same failure.
 #[derive(Debug, Clone, Copy)]
 enum Stop {
     Locked,
@@ -177,7 +180,7 @@ impl OnePassword {
     }
 
     /// Reads `reference` with its own `op read` by `deadline`.
-    fn read(&self, reference: &str, deadline: Instant) -> Result<Secret<String>, SecretError> {
+    fn read(&self, reference: &str, deadline: Instant) -> Result<Secret, SecretError> {
         match process::op_read(&self.program, reference, deadline).map_err(SecretError::Program)? {
             OpRun::Printed(bytes) => text(bytes, "op read"),
             OpRun::Failed { status, message } => Err(failure("op read", status, &message)),
@@ -249,11 +252,7 @@ impl Resolver for OnePassword {
     /// prepared reference is locked, denied or past the deadline, every
     /// other prepared reference returns the same error without running
     /// `op` again.
-    fn resolve(
-        &self,
-        lookup: Lookup<'_>,
-        deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    fn resolve(&self, lookup: Lookup<'_>, deadline: Instant) -> Result<Secret, SecretError> {
         let Lookup::Reference {
             reference: SecretRef::OnePassword(reference),
             ..
@@ -359,7 +358,7 @@ fn outcome(
 
 /// Returns the secret that `bytes`, which `command` printed, hold as text.
 /// Bytes that are not UTF-8 are zeroed before they are dropped.
-fn text(mut bytes: Zeroizing<Vec<u8>>, command: &str) -> Result<Secret<String>, SecretError> {
+fn text(mut bytes: Zeroizing<Vec<u8>>, command: &str) -> Result<Secret, SecretError> {
     match String::from_utf8(mem::take(&mut *bytes)) {
         Ok(text) => Ok(Secret::new(text)),
         Err(error) => {

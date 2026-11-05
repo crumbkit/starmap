@@ -7,11 +7,12 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use starmap::{
-    Bindings, Bound, Mode, Name, Placeholder, ProvidedRef, ProviderKind, Secret, Spec, Verdict,
+    Bindings, Bound, Mode, Name, NoPlace, Placeholder, ProvidedRef, ProviderKind, Secret, Spec,
+    Verdict,
 };
 
 use super::{Context, Resolution, ResolveFailure, ResolveProblem, resolve};
-use crate::{Lookup, Places, Provider, ProviderError, Resolver, SecretError};
+use crate::{Lookup, Places, Provider, ProviderError, Resolver, SecretError, Slot};
 
 /// A spec with every source kind: a mode setting, a required and an
 /// optional provided variable, a setting with a path bind, a secret with a
@@ -284,35 +285,22 @@ impl FakeResolver {
 }
 
 impl Resolver for FakeResolver {
-    fn resolve(
-        &self,
-        lookup: Lookup<'_>,
-        deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    fn resolve(&self, lookup: Lookup<'_>, deadline: Instant) -> Result<Secret, SecretError> {
         let asked = match lookup {
             Lookup::Reference {
                 reference: starmap::SecretRef::OnePassword(reference),
                 ..
             } => Asked::Reference(reference.as_str().to_owned()),
-            Lookup::Generated {
-                workspace,
-                app,
-                name,
-                bytes,
-            } => Asked::Generated {
-                workspace: workspace.as_str().to_owned(),
-                app: app.as_str().to_owned(),
-                name: name.as_str().to_owned(),
+            Lookup::Generated { slot, bytes } => Asked::Generated {
+                workspace: slot.workspace.as_str().to_owned(),
+                app: slot.app.as_str().to_owned(),
+                name: slot.name.as_str().to_owned(),
                 bytes: bytes.get(),
             },
-            Lookup::Saved {
-                workspace,
-                app,
-                name,
-            } => Asked::Saved {
-                workspace: workspace.as_str().to_owned(),
-                app: app.as_str().to_owned(),
-                name: name.as_str().to_owned(),
+            Lookup::Saved { slot } => Asked::Saved {
+                workspace: slot.workspace.as_str().to_owned(),
+                app: slot.app.as_str().to_owned(),
+                name: slot.name.as_str().to_owned(),
             },
             _ => Asked::Reference("another reference".to_owned()),
         };
@@ -501,7 +489,7 @@ fn resolvers_are_asked_in_order_until_one_supports_the_lookup() {
 }
 
 #[test]
-fn a_lookup_that_no_resolver_supports_fails_a_required_variable_as_unsupported() {
+fn a_lookup_that_every_resolver_declines_fails_a_required_variable_as_no_resolver() {
     let caller = Bindings::new();
     let unsupported = FakeResolver::failing(|| SecretError::Unsupported);
     let context = Context::new(places(), &caller, later()).resolver(&unsupported);
@@ -511,7 +499,7 @@ fn a_lookup_that_no_resolver_supports_fails_a_required_variable_as_unsupported()
         assert!(
             matches!(
                 problem(&resolution, variable),
-                Some(ResolveProblem::Secret(SecretError::Unsupported))
+                Some(ResolveProblem::NoResolver)
             ),
             "{variable}"
         );
@@ -561,7 +549,7 @@ fn a_generated_value_without_a_workspace_fails_on_the_workspace_placeholder() {
 
     assert!(matches!(
         problem(&resolution, "SHELF_SESSION_KEY"),
-        Some(ResolveProblem::Placeholder(Placeholder::Workspace))
+        Some(ResolveProblem::NoPlace(NoPlace(Placeholder::Workspace)))
     ));
 }
 
@@ -656,7 +644,7 @@ fn one_call_reports_every_failure_against_its_own_variable() {
     ));
     assert!(matches!(
         problem(&resolution, "SHELF_SESSION_KEY"),
-        Some(ResolveProblem::Placeholder(Placeholder::Workspace))
+        Some(ResolveProblem::NoPlace(NoPlace(Placeholder::Workspace)))
     ));
     assert_eq!(
         bound(&resolution, "SHELF_CATALOGUE_URL").as_deref(),
@@ -893,10 +881,9 @@ fn a_resolver_that_only_reads_refuses_to_save_a_value() {
     let resolver = FakeResolver::answering();
     let workspace = "shelf-dev".parse().unwrap();
     let app = "shelf".parse().unwrap();
+    let token = name("SHELF_UPSTREAM_TOKEN");
     let lookup = Lookup::Saved {
-        workspace: &workspace,
-        app: &app,
-        name: &name("SHELF_UPSTREAM_TOKEN"),
+        slot: Slot::new(&workspace, &app, &token),
     };
     let saved = resolver.save(lookup, &Secret::new("typed".to_owned()), later());
     assert!(matches!(saved, Err(SecretError::Unsupported)));
@@ -930,11 +917,7 @@ impl Resolver for Recorder {
         self.calls.borrow_mut().push("finish".to_owned());
     }
 
-    fn resolve(
-        &self,
-        lookup: Lookup<'_>,
-        _deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    fn resolve(&self, lookup: Lookup<'_>, _deadline: Instant) -> Result<Secret, SecretError> {
         let asked = match lookup {
             Lookup::Reference { .. } => "resolve reference",
             Lookup::Generated { .. } => "resolve generated",
@@ -1004,11 +987,7 @@ impl Resolver for Marks {
             .extend(lookups.iter().map(marked));
     }
 
-    fn resolve(
-        &self,
-        lookup: Lookup<'_>,
-        _deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    fn resolve(&self, lookup: Lookup<'_>, _deadline: Instant) -> Result<Secret, SecretError> {
         self.resolved.borrow_mut().push(marked(&lookup));
         Ok(Secret::new("value".to_owned()))
     }

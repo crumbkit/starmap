@@ -26,9 +26,9 @@ struct ShelfEnv {
     #[starmap("SHELF_PAGE_SIZE")]
     page_size: u8,
     #[starmap("SHELF_MIRROR_TOKEN")]
-    mirror_token: Option<starmap::Secret<String>>,
+    mirror_token: Option<starmap::Secret>,
     #[starmap("SHELF_SESSION_KEY")]
-    session_key: starmap::Secret<String>,
+    session_key: starmap::Secret,
     #[starmap("XDG_STATE_HOME")]
     state_home: Option<PathBuf>,
 }
@@ -122,14 +122,14 @@ fn each_field_type_sets_the_shape_presence_and_show_of_its_field() {
             ),
             (
                 "SHELF_MIRROR_TOKEN",
-                "starmap::Secret<String>",
+                "starmap::Secret",
                 Shape::String,
                 Presence::Maybe,
                 Show::Withheld
             ),
             (
                 "SHELF_SESSION_KEY",
-                "starmap::Secret<String>",
+                "starmap::Secret",
                 Shape::String,
                 Presence::Always,
                 Show::Withheld
@@ -172,10 +172,7 @@ fn the_example_struct_loads_from_a_fixed_set_of_variables() {
     assert!(env.debug);
     assert_eq!(env.page_size, 20);
     assert_eq!(
-        env.mirror_token
-            .as_ref()
-            .map(Secret::expose)
-            .map(String::as_str),
+        env.mirror_token.as_ref().map(Secret::expose),
         Some("mirror-token")
     );
     assert_eq!(env.session_key.expose(), "session-key");

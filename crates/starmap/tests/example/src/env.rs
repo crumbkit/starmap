@@ -15,9 +15,9 @@ pub(crate) struct Env {
     #[starmap("SHELF_PAGE_SIZE")]
     page_size: u8,
     #[starmap("SHELF_MIRROR_TOKEN")]
-    mirror_token: Option<starmap::Secret<String>>,
+    mirror_token: Option<starmap::Secret>,
     #[starmap("SHELF_SESSION_KEY")]
-    session_key: starmap::Secret<String>,
+    session_key: starmap::Secret,
 }
 
 #[derive(Debug, starmap::Enumeration)]

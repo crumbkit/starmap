@@ -736,7 +736,7 @@ fn each_problem_fixture_matches_its_golden_and_shows_its_kind_first() {
                 .problems()
                 .first()
                 .map(|problem| problem.kind().code()),
-            Some(stem),
+            Some(format!("starmap::spec::{stem}").as_str()),
             "the first problem of {stem}.toml"
         );
         golden(render(&text, &error), &fixture.with_extension("txt"));
@@ -758,14 +758,29 @@ fn the_too_large_problem_matches_its_golden() {
 fn the_fixtures_and_the_too_large_test_cover_every_problem_kind() {
     let mut shown: Vec<String> = fixtures()
         .iter()
-        .map(|fixture| fixture.file_stem().unwrap().to_str().unwrap().to_owned())
+        .map(|fixture| {
+            let stem = fixture.file_stem().unwrap().to_str().unwrap();
+            format!("starmap::spec::{stem}")
+        })
         .collect();
-    shown.push("too_large".to_owned());
+    shown.push("starmap::spec::too_large".to_owned());
     shown.sort();
     let mut codes: Vec<String> = KINDS.iter().map(|kind| kind.code().to_owned()).collect();
     codes.sort();
 
     assert_eq!(shown, codes);
+}
+
+#[test]
+fn every_problem_kind_code_is_a_full_starmap_spec_code() {
+    for kind in KINDS {
+        let code = kind.code();
+        let reason = code.strip_prefix("starmap::spec::").unwrap_or_default();
+        assert!(
+            !reason.is_empty() && reason.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+            "{code}"
+        );
+    }
 }
 
 // Properties

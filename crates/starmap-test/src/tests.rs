@@ -33,9 +33,9 @@ struct Shelf {
     #[starmap("SHELF_PAGE_SIZE")]
     _page_size: u8,
     #[starmap("SHELF_MIRROR_TOKEN")]
-    _mirror_token: Option<starmap::Secret<String>>,
+    _mirror_token: Option<starmap::Secret>,
     #[starmap("SHELF_SESSION_KEY")]
-    _session_key: starmap::Secret<String>,
+    _session_key: starmap::Secret,
     #[starmap("XDG_STATE_HOME")]
     _state_home: Option<PathBuf>,
 }
@@ -66,7 +66,7 @@ struct Stale {
     #[starmap("SHELF_MIRROR_TOKEN")]
     _mirror_token: Option<String>,
     #[starmap("SHELF_SESSION_KEY")]
-    _session_key: starmap::Secret<String>,
+    _session_key: starmap::Secret,
     #[starmap("XDG_STATE_HOME")]
     _state_home: Option<PathBuf>,
     #[starmap("SHELF_THEME")]
@@ -87,9 +87,9 @@ struct EveryKind {
     #[starmap("SHELF_TOKEN")]
     _token: String,
     #[starmap("SHELF_COLOUR")]
-    _colour: starmap::Secret<String>,
+    _colour: starmap::Secret,
     #[starmap("SHELF_MIRROR_TOKEN")]
-    _mirror_token: starmap::Secret<String>,
+    _mirror_token: starmap::Secret,
     #[starmap("SHELF_DEBUG")]
     _debug: Option<bool>,
     #[starmap("SHELF_THEME")]
@@ -99,18 +99,9 @@ struct EveryKind {
 /// The Allow entries of [`EveryKind`]: one that excuses SHELF_HELPER, and
 /// two that excuse nothing.
 const EVERY_KIND_ALLOW: &[Allow] = &[
-    Allow {
-        name: "SHELF_HELPER",
-        reason: "only a dependency reads it",
-    },
-    Allow {
-        name: "SHELF_PORT",
-        reason: "the server reads it",
-    },
-    Allow {
-        name: "SHELF_GONE",
-        reason: "a dependency once read it",
-    },
+    Allow::new("SHELF_HELPER", "only a dependency reads it"),
+    Allow::new("SHELF_PORT", "the server reads it"),
+    Allow::new("SHELF_GONE", "a dependency once read it"),
 ];
 
 /// Returns the report of `E` against `spec`, which must disagree.
@@ -131,13 +122,13 @@ fn golden(actual: String, name: &str) {
 
 #[test]
 fn the_example_struct_agrees_with_its_spec() {
-    check::<Shelf>(EXAMPLE);
+    check::<Shelf>();
 }
 
 #[test]
-fn the_report_of_the_plan_example_names_each_disagreement() {
+fn the_report_of_a_stale_copy_of_the_example_names_each_disagreement() {
     let spec = EXAMPLE.replace("max = 100 }", "max = 1000 }");
-    golden(report::<Stale>(&spec, &[]), "plan_example.txt");
+    golden(report::<Stale>(&spec, &[]), "stale_example.txt");
 }
 
 #[test]
@@ -161,25 +152,14 @@ show = "shown"
 source = "inherited"
 "#
     );
-    let allow = [Allow {
-        name: "XDG_CONFIG_HOME",
-        reason: "only a dependency reads it",
-    }];
+    let allow = [Allow::new("XDG_CONFIG_HOME", "only a dependency reads it")];
     assert_eq!(compare("Shelf", Shelf::FIELDS, &spec, &allow), Ok(()));
 }
 
 #[test]
 #[should_panic(expected = "disagree in 13 places:\n  SHELF_COLOUR        starmap.toml shows it")]
 fn check_panics_with_the_report() {
-    check_allowing::<EveryKind>(EVERY_KIND, EVERY_KIND_ALLOW);
-}
-
-#[test]
-#[should_panic(
-    expected = "the spec text the test passes differs from the starmap.toml that starmap_test::tests::Shelf embeds"
-)]
-fn check_panics_when_the_test_passes_another_spec_than_the_struct_embeds() {
-    check::<Shelf>(EVERY_KIND);
+    check_allowing::<EveryKind>(EVERY_KIND_ALLOW);
 }
 
 #[test]
@@ -233,7 +213,7 @@ struct ListenPort {
 
 #[test]
 fn a_socket_address_field_agrees_with_a_socket_address_variable() {
-    check::<Listen>(LISTEN);
+    check::<Listen>();
 }
 
 #[test]
