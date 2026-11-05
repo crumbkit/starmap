@@ -6,6 +6,8 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-05
+
 ### Added
 
 - `starmap::Name` checks the name of an environment variable: upper case
@@ -245,8 +247,8 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   else passes the check, and offers to save it to the Keychain. A
   generated variable in a session without a login keychain fails with
   `starmap::secret::unreadable`, and its hint says that run keeps
-  generated values only in the macOS login keychain. `--json` is refused before any secret store is asked. run
-  passes on the program's exit code.
+  generated values only in the macOS login keychain. `--json` is refused
+  before any secret store is asked. run passes on the program's exit code.
 - `starmap`'s root help groups its commands under four goal headings.
 - `starmap explain` and `starmap diff` name a `socket-address` variable's
   type as `ip socket address`, where they printed `another type`, and
@@ -258,3 +260,5 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `OnePassword` no longer implements `Clone`, because it holds the values
   that `prepare` readied, which cannot be copied. A host that needs two
   resolvers calls `OnePassword::new` twice.
+
+[0.1.0]: https://github.com/crumbkit/starmap/releases/tag/v0.1.0
