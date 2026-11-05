@@ -7,8 +7,8 @@ schema = "rust-standards/adoption/v1"
 standards = { version = "draft", commit = "7c9a7577fed4fe5ba0682960c0380af0a75dace4" }
 
 # starmap publishes library crates, builds the `starmap` command, and starts
-# other programs: `op read`, `op inject`, `git rev-parse`, `git ls-tree` and
-# `git cat-file`, and the child of `starmap run`.
+# other programs: `op read`, `op inject`, `getconf`, `git rev-parse`,
+# `git ls-tree` and `git cat-file`, and the child of `starmap run`.
 profiles = ["base", "library", "cli", "child-process"]
 
 [[binding]]
@@ -27,7 +27,7 @@ note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the onl
 rule = "PROC-1"
 owners = ["crates/starmap-resolve/src/process.rs", "crates/starmap-cli/src/git.rs", "crates/starmap-cli/src/run/child.rs"]
 checks = ["clippy disallowed_methods and disallowed_types (clippy.toml), which refuse `Command::new`, its runs and `Child` outside an `#[expect]` that gives its reason"]
-note = "starmap reads PROC-1 as one module that starts processes in each crate. starmap-resolve's process.rs runs `op read` and `op inject`, and starmap-cli's git.rs runs `git rev-parse`, `git ls-tree` and `git cat-file` for `starmap diff`. starmap-cli's run/child.rs builds the command of the program that `starmap run` starts, and crumbkit-child starts and waits for it."
+note = "starmap reads PROC-1 as one module that starts processes in each crate. starmap-resolve's process.rs runs `op read` and `op inject`, and `/usr/bin/getconf DARWIN_USER_TEMP_DIR` for the `agent` feature on macOS, and starmap-cli's git.rs runs `git rev-parse`, `git ls-tree` and `git cat-file` for `starmap diff`. starmap-cli's run/child.rs builds the command of the program that `starmap run` starts, and crumbkit-child starts and waits for it."
 
 [[decision]]
 id = "lanes"
