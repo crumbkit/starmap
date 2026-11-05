@@ -2,13 +2,12 @@
 //! it checks that the process behind the socket runs as the current user.
 
 use std::io::{self, Read as _, Write as _};
-use std::os::fd::{AsFd as _, AsRawFd as _};
+use std::os::fd::{AsFd as _, AsRawFd as _, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use nix::errno::Errno;
-use nix::fcntl::{FcntlArg, FdFlag, fcntl};
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use nix::sys::socket::{self, AddressFamily, SockFlag, SockType, UnixAddr, sockopt};
 use starmap::{OnePasswordRef, Secret};
@@ -151,14 +150,7 @@ fn wait(deadline: Instant) -> Option<Duration> {
 fn connect(path: &Path, deadline: Instant) -> Result<UnixStream, AgentError> {
     let not_running = |_| AgentError::NotRunning;
     let address = UnixAddr::new(path).map_err(not_running)?;
-    let fd = socket::socket(
-        AddressFamily::Unix,
-        SockType::Stream,
-        SockFlag::empty(),
-        None,
-    )
-    .map_err(not_running)?;
-    fcntl(&fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).map_err(not_running)?;
+    let fd = close_on_exec_socket().map_err(not_running)?;
     let stream = UnixStream::from(fd);
     stream
         .set_nonblocking(true)
@@ -184,22 +176,46 @@ fn connect(path: &Path, deadline: Instant) -> Result<UnixStream, AgentError> {
     Ok(stream)
 }
 
-/// Writes `request` and reads one frame's body, each wait cut to the time
-/// left before `deadline`. The body's buffer is allocated at its full size,
-/// and a length over 1 MiB is refused before anything is allocated.
+/// Returns a new Unix stream socket that closes on exec. Linux sets the
+/// flag as it creates the socket, so no fork in between can inherit it.
+#[cfg(target_os = "linux")]
+fn close_on_exec_socket() -> nix::Result<OwnedFd> {
+    socket::socket(
+        AddressFamily::Unix,
+        SockType::Stream,
+        SockFlag::SOCK_CLOEXEC,
+        None,
+    )
+}
+
+/// Returns a new Unix stream socket that closes on exec. macOS has no
+/// `SOCK_CLOEXEC`, so the flag is set right after the socket is created.
+#[cfg(target_os = "macos")]
+fn close_on_exec_socket() -> nix::Result<OwnedFd> {
+    use nix::fcntl::{FcntlArg, FdFlag, fcntl};
+
+    let fd = socket::socket(
+        AddressFamily::Unix,
+        SockType::Stream,
+        SockFlag::empty(),
+        None,
+    )?;
+    fcntl(&fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC))?;
+    Ok(fd)
+}
+
+/// Writes `request` and reads one frame's body by `deadline`. The body's
+/// buffer is allocated at its full size, and a length over 1 MiB is refused
+/// before anything is allocated.
 fn send(
     stream: &mut UnixStream,
     request: &[u8],
     deadline: Instant,
 ) -> io::Result<Zeroizing<Vec<u8>>> {
-    let left = || {
-        wait(deadline).ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "the deadline passed"))
-    };
-    stream.set_write_timeout(Some(left()?))?;
-    stream.set_read_timeout(Some(left()?))?;
+    stream.set_write_timeout(Some(left(deadline)?))?;
     stream.write_all(request)?;
     let mut length = [0_u8; 4];
-    stream.read_exact(&mut length)?;
+    read_by(stream, &mut length, deadline)?;
     let length = usize::try_from(u32::from_be_bytes(length)).unwrap_or(usize::MAX);
     if length > FRAME_LIMIT {
         return Err(io::Error::new(
@@ -208,12 +224,40 @@ fn send(
         ));
     }
     let mut body = Zeroizing::new(vec![0_u8; length]);
-    // macOS refuses a new timeout once the agent has closed its end, with
-    // EINVAL, and then the whole body is already buffered, so the earlier
-    // timeout stands.
-    let _ = stream.set_read_timeout(Some(left()?));
-    stream.read_exact(&mut body)?;
+    read_by(stream, &mut body, deadline)?;
     Ok(body)
+}
+
+/// Fills `buffer` from `stream`, and fails once `deadline` passes. Each
+/// read waits only for the time left, because a socket's read timeout
+/// limits one read, and an agent that sends one byte at a time would
+/// otherwise hold the client for a timeout per byte.
+fn read_by(stream: &mut UnixStream, buffer: &mut [u8], deadline: Instant) -> io::Result<()> {
+    let mut filled = 0;
+    while let Some(rest) = buffer.get_mut(filled..).filter(|rest| !rest.is_empty()) {
+        match stream.set_read_timeout(Some(left(deadline)?)) {
+            // macOS refuses a new timeout with EINVAL once the agent has
+            // closed its end. A read then returns at once, with what is
+            // buffered or with the end of the stream, so no wait is left
+            // to limit.
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::InvalidInput => {}
+            Err(error) => return Err(error),
+        }
+        match stream.read(rest) {
+            Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
+            Ok(count) => filled += count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+/// Returns the time left before `deadline` for one wait, at most
+/// [`FRAME_TIMEOUT`], or a timed-out error once it has passed.
+fn left(deadline: Instant) -> io::Result<Duration> {
+    wait(deadline).ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "the deadline passed"))
 }
 
 /// Returns the uid of the process that created the socket's other end.

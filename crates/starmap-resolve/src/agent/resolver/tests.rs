@@ -303,6 +303,33 @@ fn an_agent_that_never_answers_holds_the_client_only_until_the_deadline() {
 }
 
 #[test]
+fn an_agent_that_sends_one_byte_at_a_time_holds_the_client_only_until_the_deadline() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    // A Hits of one miss is 17 bytes with its length, so 50 ms a byte takes
+    // about 850 ms, while each read waits only 50 ms.
+    fake.trickle(Duration::from_millis(50));
+    let client = AgentClient::new(fake.socket.clone());
+    let reference = REFERENCE.parse().unwrap();
+    let started = Instant::now();
+    let late = client
+        .get(
+            &op.scope(),
+            &[&reference],
+            started + Duration::from_millis(200),
+        )
+        .unwrap_err();
+    assert_eq!(late.code(), "starmap::agent::protocol");
+    assert!(
+        started.elapsed() < Duration::from_millis(600),
+        "{:?}",
+        started.elapsed()
+    );
+    // With time for every byte, the same answer arrives whole.
+    let hits = client.get(&op.scope(), &[&reference], later()).unwrap();
+    assert_eq!(hits.into_values().len(), 1);
+}
+
+#[test]
 fn a_get_whose_deadline_has_passed_sends_nothing_and_one_before_it_is_sent() {
     let (fake, op) = (FakeAgent::start(), Op::new());
     let client = AgentClient::new(fake.socket.clone());

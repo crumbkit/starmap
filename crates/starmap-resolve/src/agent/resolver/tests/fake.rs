@@ -14,6 +14,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use crate::agent::AgentSocket;
 
@@ -39,6 +40,9 @@ struct State {
     /// connection open.
     silent: bool,
     held: Vec<UnixStream>,
+    /// The pause before each byte of an answer, for an agent that sends
+    /// one byte at a time.
+    trickle: Option<Duration>,
 }
 
 /// Returns 64 random bits, a new generation.
@@ -103,6 +107,11 @@ impl FakeAgent {
         self.state.lock().unwrap().silent = true;
     }
 
+    /// Sends every answer from now on one byte at a time, `pause` apart.
+    pub(crate) fn trickle(&self, pause: Duration) {
+        self.state.lock().unwrap().trickle = Some(pause);
+    }
+
     /// Holds `value` for `reference` of the account `my` and the `op` at
     /// `op`.
     pub(crate) fn hold(&self, op: &Path, reference: &str, value: &str) {
@@ -158,8 +167,27 @@ fn serve(mut stream: UnixStream, state: &Mutex<State>) {
     let answer = state.reply.clone().unwrap_or(answer);
     let mut frame = u32::try_from(answer.len()).unwrap().to_be_bytes().to_vec();
     frame.extend_from_slice(&answer);
-    // A client that gave up has closed its end.
-    let _ = stream.write_all(&frame);
+    let trickle = state.trickle;
+    drop(state);
+    // A client that gave up has closed its end, so a failed write ends the
+    // answer.
+    match trickle {
+        None => {
+            let _ = stream.write_all(&frame);
+        }
+        Some(pause) => {
+            for byte in frame {
+                #[expect(
+                    clippy::disallowed_methods,
+                    reason = "the fake paces its bytes to play an agent that sends them slowly"
+                )]
+                thread::sleep(pause);
+                if stream.write_all(&[byte]).is_err() {
+                    return;
+                }
+            }
+        }
+    }
 }
 
 /// Returns the body of the answer to the request `body`.
