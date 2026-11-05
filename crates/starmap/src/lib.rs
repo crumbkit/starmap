@@ -43,9 +43,9 @@ mod secret;
 mod spec;
 
 pub use bind::{
-    Bindings, Bound, BytesError, OnePasswordRef, OnePasswordRefError, PathTemplate,
+    Bindings, Bound, BytesError, Cache, OnePasswordRef, OnePasswordRefError, PathTemplate,
     PathTemplateError, Placeholder, ProvidedRef, ProviderKind, ProviderKindError, QualifierError,
-    SecretBytes, SecretRef,
+    SecretBind, SecretBytes, SecretRef,
 };
 pub use check::{Finding, Problem, Refusals, Verdict, capture, check, mode};
 pub use env::Environment;

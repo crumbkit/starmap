@@ -8,7 +8,9 @@ use std::error::Error;
 use std::fmt;
 use std::ops::Range;
 
-use crate::{Form, Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBytes, SecretRef, Value};
+use crate::{
+    Form, Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind, SecretBytes, Value,
+};
 
 #[cfg(test)]
 mod tests;
@@ -155,11 +157,12 @@ pub enum Source {
         /// The template a host expands into the value.
         bind: Option<PathTemplate>,
     },
-    /// A secret value, with an optional reference that a resolver reads it
-    /// from.
+    /// A secret value, with an optional bind that names the reference a
+    /// resolver reads it from.
     Secret {
-        /// The reference a resolver reads the value from.
-        bind: Option<SecretRef>,
+        /// The reference a resolver reads the value from, and whether a
+        /// cache may keep the value.
+        bind: Option<SecretBind>,
     },
     /// A random value that the host creates on first use and keeps.
     Generated {

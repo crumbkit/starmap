@@ -290,9 +290,10 @@ impl Resolver for FakeResolver {
         deadline: Instant,
     ) -> Result<Secret<String>, SecretError> {
         let asked = match lookup {
-            Lookup::Reference(starmap::SecretRef::OnePassword(reference)) => {
-                Asked::Reference(reference.as_str().to_owned())
-            }
+            Lookup::Reference {
+                reference: starmap::SecretRef::OnePassword(reference),
+                ..
+            } => Asked::Reference(reference.as_str().to_owned()),
             Lookup::Generated {
                 workspace,
                 app,
@@ -913,7 +914,10 @@ impl Resolver for Recorder {
         let references: Vec<&str> = lookups
             .iter()
             .map(|lookup| match lookup {
-                Lookup::Reference(starmap::SecretRef::OnePassword(reference)) => reference.as_str(),
+                Lookup::Reference {
+                    reference: starmap::SecretRef::OnePassword(reference),
+                    ..
+                } => reference.as_str(),
                 _ => "another lookup",
             })
             .collect();
@@ -932,7 +936,7 @@ impl Resolver for Recorder {
         _deadline: Instant,
     ) -> Result<Secret<String>, SecretError> {
         let asked = match lookup {
-            Lookup::Reference(_) => "resolve reference",
+            Lookup::Reference { .. } => "resolve reference",
             Lookup::Generated { .. } => "resolve generated",
             _ => "resolve another lookup",
         };
@@ -972,4 +976,90 @@ fn a_passed_deadline_prepares_nothing_and_still_finishes() {
     let context = Context::new(places(), &caller, Instant::now()).resolver(&recorder);
     let _resolution = resolve(&spec(), Mode::Local, &context);
     assert_eq!(*recorder.calls.borrow(), ["finish"]);
+}
+
+/// A resolver that records whether each reference lookup it receives, in
+/// `prepare` and in `resolve`, carries the [`crate::Cacheable`] mark.
+#[derive(Default)]
+struct Marks {
+    prepared: RefCell<Vec<bool>>,
+    resolved: RefCell<Vec<bool>>,
+}
+
+/// Returns whether `lookup` is a reference lookup marked cacheable.
+fn marked(lookup: &Lookup<'_>) -> bool {
+    matches!(
+        lookup,
+        Lookup::Reference {
+            cacheable: Some(_),
+            ..
+        }
+    )
+}
+
+impl Resolver for Marks {
+    fn prepare(&self, lookups: &[Lookup<'_>], _deadline: Instant) {
+        self.prepared
+            .borrow_mut()
+            .extend(lookups.iter().map(marked));
+    }
+
+    fn resolve(
+        &self,
+        lookup: Lookup<'_>,
+        _deadline: Instant,
+    ) -> Result<Secret<String>, SecretError> {
+        self.resolved.borrow_mut().push(marked(&lookup));
+        Ok(Secret::new("value".to_owned()))
+    }
+}
+
+/// Resolves a spec of one required secret whose bind is `bind`, in `mode`,
+/// and returns whether `prepare` and `resolve` saw its lookup marked
+/// cacheable.
+fn marks(bind: &str, mode: Mode) -> (Vec<bool>, Vec<bool>) {
+    let spec = Spec::parse(&format!(
+        r#"
+[variables.SHELF_MIRROR_TOKEN]
+purpose = "The token shelf sends to the catalogue mirror."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+bind = {bind}
+"#
+    ))
+    .unwrap();
+    let caller = Bindings::new();
+    let resolver = Marks::default();
+    let context = Context::new(places(), &caller, later()).resolver(&resolver);
+    let resolution = resolve(&spec, mode, &context);
+    assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
+    (resolver.prepared.take(), resolver.resolved.take())
+}
+
+#[test]
+fn a_local_resolution_marks_a_bind_that_allows_a_cache_as_cacheable() {
+    let bind = r#"{ one-password = "op://Personal/shelf mirror/token" }"#;
+    assert_eq!(marks(bind, Mode::Local), (vec![true], vec![true]));
+}
+
+#[test]
+fn a_production_resolution_never_marks_a_lookup_cacheable() {
+    let bind = r#"{ one-password = "op://Personal/shelf mirror/token" }"#;
+    assert_eq!(marks(bind, Mode::Production), (vec![false], vec![false]));
+}
+
+#[test]
+fn a_bind_with_cache_false_is_never_marked_cacheable() {
+    let bind = r#"{ one-password = "op://Personal/shelf mirror/token", cache = false }"#;
+    assert_eq!(marks(bind, Mode::Local), (vec![false], vec![false]));
+    assert_eq!(marks(bind, Mode::Production), (vec![false], vec![false]));
+}
+
+#[test]
+fn a_lookup_that_a_host_builds_is_never_marked_cacheable() {
+    let reference =
+        starmap::SecretRef::OnePassword("op://Personal/shelf mirror/token".parse().unwrap());
+    assert!(!marked(&Lookup::reference(&reference)));
 }

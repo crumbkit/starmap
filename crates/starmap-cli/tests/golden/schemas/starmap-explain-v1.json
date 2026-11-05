@@ -411,6 +411,13 @@
             "null"
           ]
         },
+        "cache": {
+          "description": "`never` when the bind keeps the value out of any cache of resolved values; empty, and left out of `--json`, when a cache may keep it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "description": "The variable's name.",
           "type": "string"

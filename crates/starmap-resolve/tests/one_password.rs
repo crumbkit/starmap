@@ -52,7 +52,7 @@ fn fake_op(test: &str, script: &str) -> PathBuf {
 #[expect(clippy::unwrap_used, reason = "the reference is a valid constant")]
 fn read(program: PathBuf, deadline: Instant) -> Result<Secret<String>, SecretError> {
     let reference = SecretRef::OnePassword(REFERENCE.parse().unwrap());
-    OnePassword::new(program).resolve(Lookup::Reference(&reference), deadline)
+    OnePassword::new(program).resolve(Lookup::reference(&reference), deadline)
 }
 
 /// Returns the text a secret holds.

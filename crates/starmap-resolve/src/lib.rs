@@ -31,4 +31,4 @@ pub use one_password::OnePassword;
 
 pub use places::{AppName, LabelError, Places, WorkspaceName, expand, names_of};
 pub use resolve::{Context, Resolution, ResolveFailure, ResolveProblem, resolve};
-pub use traits::{Lookup, Provider, ProviderError, Resolver, SecretError};
+pub use traits::{Cacheable, Lookup, Provider, ProviderError, Resolver, SecretError};

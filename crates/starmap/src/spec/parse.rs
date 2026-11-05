@@ -15,8 +15,9 @@ use super::{
 };
 use crate::bind::BIND_KINDS;
 use crate::{
-    Choice, Choices, ChoicesError, Form, IntegerRange, ModeRule, Name, OnePasswordRef,
-    PathTemplate, PathTemplateError, ProvidedRef, ProviderKind, SecretBytes, SecretRef, Value,
+    Cache, Choice, Choices, ChoicesError, Form, IntegerRange, ModeRule, Name, OnePasswordRef,
+    PathTemplate, PathTemplateError, ProvidedRef, ProviderKind, SecretBind, SecretBytes, SecretRef,
+    Value,
 };
 
 /// The keys of the file's top-level table.
@@ -62,7 +63,7 @@ impl SourceKind {
 enum Bind {
     Provided(ProvidedRef),
     Path(PathTemplate),
-    OnePassword(OnePasswordRef),
+    OnePassword(OnePasswordRef, Cache),
 }
 
 impl Bind {
@@ -71,7 +72,7 @@ impl Bind {
         match self {
             Self::Provided(_) => "provided",
             Self::Path(_) => "path",
-            Self::OnePassword(_) => "one-password",
+            Self::OnePassword(..) => "one-password",
         }
     }
 }
@@ -606,7 +607,12 @@ impl Parser {
         let bind = match named.as_slice() {
             ["provided"] => self.provided(field, table).map(Bind::Provided),
             [kind @ ("path" | "one-password")] => {
-                self.known(table, &field.path, &[kind]);
+                let known: &[&str] = if *kind == "path" {
+                    &["path"]
+                } else {
+                    &["one-password", "cache"]
+                };
+                self.known(table, &field.path, known);
                 let value = field.child(table, kind)?;
                 let text = self.confirmed(&value)?;
                 let (at, path) = (value.span(), value.path.as_str());
@@ -619,9 +625,10 @@ impl Parser {
                     self.checked(at, path, text, problem, template)
                         .map(Bind::Path)
                 } else {
+                    let cache = self.cache(field, table);
                     let reference = text.parse::<OnePasswordRef>();
-                    self.checked(at, path, text, Kind::BadValue, reference)
-                        .map(Bind::OnePassword)
+                    let reference = self.checked(at, path, text, Kind::BadValue, reference);
+                    Some(Bind::OnePassword(reference?, cache?))
                 }
             }
             _ => {
@@ -642,6 +649,19 @@ impl Parser {
         Some((bind?, field.span()))
     }
 
+    /// Parses the optional `cache` of a one-password bind: `false` for
+    /// [`Cache::Never`], and `true` or no `cache` for [`Cache::Allowed`].
+    fn cache(&mut self, field: &Field<'_>, table: &dyn TableLike) -> Option<Cache> {
+        let Some(cache) = field.child(table, "cache") else {
+            return Some(Cache::Allowed);
+        };
+        let value = cache.item.as_bool();
+        if value.is_none() {
+            self.wrong_type(&cache, "true or false");
+        }
+        Some(if value? { Cache::Allowed } else { Cache::Never })
+    }
+
     /// Parses `{ provided = "<host>/<kind>", .. }`, whose other keys are
     /// qualifiers.
     fn provided(&mut self, field: &Field<'_>, table: &dyn TableLike) -> Option<ProvidedRef> {
@@ -659,6 +679,17 @@ impl Parser {
         let mut qualifiers = BTreeMap::new();
         let mut whole = true;
         for (key, _) in entries(table).filter(|(key, _)| key.get() != "provided") {
+            if key.get() == "cache" {
+                // `cache` is reserved, so a later release can give provided
+                // binds a cache policy without reading an old qualifier.
+                let message = format!(
+                    "`{}` has the field `cache`, which only a `one-password` bind takes",
+                    field.path
+                );
+                self.report(span(key.span()), Kind::UnknownField, message);
+                whole = false;
+                continue;
+            }
             let Some(qualifier) = field.child(table, key.get()) else {
                 continue;
             };
@@ -700,9 +731,11 @@ impl Parser {
                 bind: Some(template),
             },
             (SourceKind::Secret, None) => Source::Secret { bind: None },
-            (SourceKind::Secret, Some((Bind::OnePassword(reference), _))) => Source::Secret {
-                bind: Some(SecretRef::OnePassword(reference)),
-            },
+            (SourceKind::Secret, Some((Bind::OnePassword(reference, cache), _))) => {
+                Source::Secret {
+                    bind: Some(SecretBind::new(SecretRef::OnePassword(reference), cache)),
+                }
+            }
             (SourceKind::Generated, None) => Source::Generated {
                 bytes: bytes?.unwrap_or_default(),
             },

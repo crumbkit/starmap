@@ -200,7 +200,11 @@ impl Resolver for OnePassword {
         let mut prepared = Prepared::default();
         let mut batch = Vec::new();
         for lookup in lookups {
-            if let Lookup::Reference(SecretRef::OnePassword(reference)) = lookup {
+            if let Lookup::Reference {
+                reference: SecretRef::OnePassword(reference),
+                ..
+            } = lookup
+            {
                 let reference = reference.as_str();
                 if batchable(reference) {
                     batch.push(reference);
@@ -250,7 +254,11 @@ impl Resolver for OnePassword {
         lookup: Lookup<'_>,
         deadline: Instant,
     ) -> Result<Secret<String>, SecretError> {
-        let Lookup::Reference(SecretRef::OnePassword(reference)) = lookup else {
+        let Lookup::Reference {
+            reference: SecretRef::OnePassword(reference),
+            ..
+        } = lookup
+        else {
             return Err(SecretError::Unsupported);
         };
         if Instant::now() >= deadline {
