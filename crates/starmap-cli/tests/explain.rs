@@ -1,6 +1,6 @@
 //! End-to-end tests of how `starmap explain` shows a withheld value. Each
-//! test runs the built binary on the build plan's illustrative
-//! `starmap.toml` with a cleared environment.
+//! test runs the built binary on the example spec in `crates/starmap/tests/example/starmap.toml`
+//! with a cleared environment.
 
 #![cfg(test)]
 
@@ -9,7 +9,7 @@ use std::path::Path;
 use serde_json::{Value, json};
 use snapbox::cmd::{Command, OutputAssert};
 
-/// The directory that holds the build plan's illustrative `starmap.toml`,
+/// The directory that holds the example `starmap.toml`,
 /// relative to this package.
 const EXAMPLE: &str = "../starmap/tests/example";
 

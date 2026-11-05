@@ -5,7 +5,7 @@
 //! They live in an integration test so that the example check can run the
 //! built binary, whose path cargo sets only for integration tests. Each
 //! example runs in a fresh copy of `crates/starmap/tests/example`, which
-//! holds the build plan's illustrative `starmap.toml` and the source of an
+//! holds the example `starmap.toml` and the source of an
 //! application that reads its variables. Each spec failure runs in
 //! `crates/starmap/tests/spec`, which holds one file for each kind of spec
 //! problem, and each source failure runs in `tests/fixtures`. `SNAPSHOTS=overwrite cargo test` writes, rewrites and deletes the
@@ -21,7 +21,7 @@ use crumbkit_test::{
 };
 use starmap_cli::{Cli, GUIDE, codes};
 
-/// The directory that holds the build plan's illustrative `starmap.toml`,
+/// The directory that holds the example `starmap.toml`,
 /// relative to this package.
 const EXAMPLE: &str = "../starmap/tests/example";
 

@@ -1,5 +1,5 @@
 //! The behaviour of `#[derive(Env)]` and `#[derive(Enumeration)]` through
-//! starmap's `derive` feature, on the example struct of the build plan.
+//! starmap's `derive` feature, on the example struct `ShelfEnv`.
 #![cfg(feature = "derive")]
 
 use std::ffi::OsString;
@@ -8,7 +8,8 @@ use std::path::PathBuf;
 
 use starmap::{Enumeration, Env, Port, Presence, ReadError, Secret, Shape, Show};
 
-/// The example struct of the build plan, over its illustrative spec.
+/// The example struct `ShelfEnv`, over the example spec in
+/// `tests/example/starmap.toml`.
 #[derive(Debug, starmap::Env)]
 #[starmap(spec = "tests/example/starmap.toml")]
 struct ShelfEnv {

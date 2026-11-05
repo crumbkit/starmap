@@ -51,7 +51,7 @@ realizations = [
 [[decision]]
 id = "release-profile"
 requirement = "`[profile.release]` sets `overflow-checks = true` and leaves `lto`, `codegen-units` and `strip` at Cargo's defaults."
-reason = "starmap ships no binary yet, so no measurement shows what a size or speed setting would gain. The release pull request (row 14 of the build plan) decides how the binary ships and records its settings here."
+reason = "Overflow checks turn an arithmetic overflow in a release build into a panic, where it would otherwise wrap silently. The binaries that binaries.yml builds use this profile, and no measurement has shown that a size or speed setting gains enough to change the defaults, so the defaults stand until one does."
 realizations = ["Cargo.toml"]
 
 [[decision]]

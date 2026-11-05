@@ -223,8 +223,8 @@ impl Provider for FakeProvider {
 /// Returns once `deadline` has passed.
 #[expect(
     clippy::disallowed_methods,
-    reason = "BASE-11: the deadline passing is the event this fake waits for, and the plan's \
-              Instant deadline has no clock owner to sleep in"
+    reason = "BASE-11: the deadline passing is the event this fake waits for, and the \
+              resolution's Instant deadline has no clock owner to sleep in"
 )]
 fn wait_out(deadline: Instant) {
     while Instant::now() < deadline {

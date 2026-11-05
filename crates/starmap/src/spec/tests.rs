@@ -14,7 +14,7 @@ use crate::{
     Cache, Choice, Form, IntegerRange, Mode, Name, Placeholder, SecretBytes, SecretRef, Value,
 };
 
-/// The illustrative `starmap.toml` of the build plan.
+/// The example spec in `crates/starmap/tests/example/starmap.toml`.
 const EXAMPLE: &str = include_str!("../../tests/example/starmap.toml");
 
 /// The directory of the spec-problem fixtures and their goldens.
