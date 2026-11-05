@@ -129,6 +129,7 @@ starmap explain SHELF_MIRROR_TOKEN --json
 
 - `show`: Whether the value may be shown or is withheld.
 - `bind`: The variable's bind, such as a 1Password reference, when it has one.
+- `cache`: `never` when the bind keeps the value out of any cache of resolved values; empty, and left out of `--json`, when a cache may keep it.
 - `purpose`: The sentence that says what the variable is for.
 
 Effects: read-only, closed-world.

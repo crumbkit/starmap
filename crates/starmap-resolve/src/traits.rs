@@ -130,7 +130,19 @@ pub trait Resolver {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum Lookup<'a> {
-    /// The value a secret variable's bind refers to.
+    /// The value a secret variable's bind refers to. The variant is
+    /// non-exhaustive, so code outside starmap-resolve builds it only with
+    /// [`Lookup::reference`], which has no [`Cacheable`] mark, and cannot
+    /// copy a mark from one lookup onto another reference.
+    ///
+    /// ```compile_fail
+    /// use starmap::SecretRef;
+    /// use starmap_resolve::Lookup;
+    ///
+    /// let reference = SecretRef::OnePassword("op://Personal/shelf/token".parse().unwrap());
+    /// let lookup = Lookup::Reference { reference: &reference, cacheable: None };
+    /// ```
+    #[non_exhaustive]
     Reference {
         /// The reference the bind names.
         reference: &'a SecretRef,

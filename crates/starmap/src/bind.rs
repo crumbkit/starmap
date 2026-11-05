@@ -395,10 +395,9 @@ impl SecretBind {
 /// keeps 1Password values in memory, may keep a secret's value. A
 /// `starmap.toml` writes `cache = false` on a one-password bind for
 /// [`Cache::Never`], and a bind without `cache` is [`Cache::Allowed`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Cache {
     /// A cache may keep the value.
-    #[default]
     Allowed,
     /// No cache may keep the value, so each resolution reads it from its
     /// store.

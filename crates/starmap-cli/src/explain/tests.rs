@@ -201,35 +201,61 @@ fn a_socket_address_is_named_as_its_type_and_shows_its_value() {
     assert_eq!(default.value.to_string(), "0.0.0.0:8080 (default)");
 }
 
-/// Returns the bind text of the one secret whose bind is `bind`.
-fn secret_bind(bind: &str) -> Option<String> {
+/// Returns the `bind` and `cache` fields that `starmap explain --json`
+/// prints for the one secret whose bind is `bind`.
+fn secret_bind(bind: &str) -> (serde_json::Value, serde_json::Value) {
     let spec = Spec::parse(&format!(
         "[variables.SHELF_TOKEN]\npurpose = \"The token.\"\ntype = \"string\"\n\
          unset = \"required\"\nshow = \"withheld\"\nsource = \"secret\"\nbind = {bind}\n"
     ))
     .unwrap();
-    let variable = spec.variable(&"SHELF_TOKEN".parse().unwrap()).unwrap();
-    super::bind_text(variable.source())
+    let bindings = starmap::capture(&spec, Vec::<(OsString, OsString)>::new());
+    let row = row(
+        &spec,
+        "starmap.toml",
+        &bindings,
+        "SHELF_TOKEN".parse().unwrap(),
+    )
+    .unwrap();
+    let json = serde_json::to_value(row).unwrap();
+    (json["bind"].clone(), json["cache"].clone())
 }
 
 #[test]
-fn a_bind_that_no_cache_may_keep_says_never_cached() {
+fn a_bind_that_no_cache_may_keep_reports_cache_never_beside_its_plain_reference() {
     assert_eq!(
-        secret_bind(r#"{ one-password = "op://Personal/shelf/token", cache = false }"#).as_deref(),
-        Some("op://Personal/shelf/token, never cached")
+        secret_bind(r#"{ one-password = "op://Personal/shelf/token", cache = false }"#),
+        (
+            serde_json::json!("op://Personal/shelf/token"),
+            serde_json::json!("never")
+        )
     );
 }
 
 #[test]
-fn a_bind_that_a_cache_may_keep_shows_only_its_reference() {
+fn a_bind_that_a_cache_may_keep_shows_its_reference_and_no_cache_field() {
     for bind in [
         r#"{ one-password = "op://Personal/shelf/token" }"#,
         r#"{ one-password = "op://Personal/shelf/token", cache = true }"#,
     ] {
         assert_eq!(
-            secret_bind(bind).as_deref(),
-            Some("op://Personal/shelf/token"),
+            secret_bind(bind),
+            (
+                serde_json::json!("op://Personal/shelf/token"),
+                serde_json::Value::Null
+            ),
             "{bind}"
         );
     }
+}
+
+#[test]
+fn a_field_named_like_the_cache_policy_is_shown_as_it_is_written() {
+    assert_eq!(
+        secret_bind(r#"{ one-password = "op://Personal/shelf/token, never cached" }"#),
+        (
+            serde_json::json!("op://Personal/shelf/token, never cached"),
+            serde_json::Value::Null
+        )
+    );
 }

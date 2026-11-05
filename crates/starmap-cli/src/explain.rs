@@ -52,13 +52,16 @@ pub(crate) struct Explained {
     show: String,
     /// The variable's bind, such as a 1Password reference, when it has one.
     bind: Option<String>,
+    /// `never` when the bind keeps the value out of any cache of resolved values; empty, and left out of `--json`, when a cache may keep it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache: Option<String>,
     /// The sentence that says what the variable is for.
     purpose: String,
 }
 
 impl Row for Explained {
     const COLUMNS: &'static [&'static str] = &["name", "type", "unset", "source", "value"];
-    const LONG_COLUMNS: &'static [&'static str] = &["show", "bind", "purpose"];
+    const LONG_COLUMNS: &'static [&'static str] = &["show", "bind", "cache", "purpose"];
     const UNCUT_COLUMNS: &'static [&'static str] = &["name"];
 }
 
@@ -206,6 +209,7 @@ fn row(
         value: cell(variable, bindings.get(&name)),
         show: variable.show().to_string(),
         bind: bind_text(variable.source()),
+        cache: cache_text(variable.source()).map(str::to_owned),
         purpose: variable.purpose().to_owned(),
         name: name.as_str().to_owned(),
     })
@@ -307,24 +311,27 @@ pub(crate) fn source_text(source: &Source) -> String {
     }
 }
 
+/// Returns `never` for a secret whose bind keeps the value out of any
+/// cache of resolved values, and `None` for every other variable.
+pub(crate) fn cache_text(source: &Source) -> Option<&'static str> {
+    match source {
+        Source::Secret { bind: Some(bind) } if bind.cache() == Cache::Never => Some("never"),
+        _ => None,
+    }
+}
+
 /// Returns a variable's bind, such as `op://Personal/shelf mirror/token`,
-/// or `None` for a variable without one. A secret's bind that no cache may
-/// keep ends in `, never cached`.
+/// or `None` for a variable without one.
 pub(crate) fn bind_text(source: &Source) -> Option<String> {
     match source {
         Source::Setting {
             bind: Some(template),
         } => Some(template.as_str().to_owned()),
-        Source::Secret { bind: Some(bind) } => {
-            let SecretRef::OnePassword(reference) = bind.reference() else {
-                // A reference that a later release of starmap adds.
-                return None;
-            };
-            Some(match bind.cache() {
-                Cache::Never => format!("{reference}, never cached"),
-                Cache::Allowed => reference.to_string(),
-            })
-        }
+        Source::Secret { bind: Some(bind) } => match bind.reference() {
+            SecretRef::OnePassword(reference) => Some(reference.to_string()),
+            // A reference that a later release of starmap adds.
+            _ => None,
+        },
         Source::Generated { bytes } => Some(format!("{} random bytes", bytes.get())),
         Source::Provided(reference) => {
             let mut text = reference.kind().to_string();

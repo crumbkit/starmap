@@ -1064,6 +1064,29 @@ fn cache_on_a_path_bind_is_an_unknown_field() {
 }
 
 #[test]
+fn cache_on_a_provided_bind_is_reserved_and_refused() {
+    let provided = |bind: &str| {
+        one(&format!(
+            "purpose = \"A port.\"\ntype = \"port\"\nunset = \"required\"\nshow = \"shown\"\n\
+             source = \"provided\"\nbind = {bind}"
+        ))
+    };
+
+    assert_eq!(
+        kinds(&provided(
+            "{ provided = \"multiverse/port\", cache = \"no\" }"
+        )),
+        [SpecProblemKind::UnknownField]
+    );
+    assert!(
+        Spec::parse(&provided(
+            "{ provided = \"multiverse/port\", app = \"no\" }"
+        ))
+        .is_ok()
+    );
+}
+
+#[test]
 fn cache_that_is_not_true_or_false_is_refused() {
     let text = secret("{ one-password = \"op://Personal/shelf mirror/token\", cache = \"no\" }");
     assert_eq!(kinds(&text), [SpecProblemKind::BadValue]);

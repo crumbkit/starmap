@@ -120,13 +120,19 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ends every read still to come, so the person sees no further prompt.
   What `prepare` readies belongs to the calling thread.
 - A one-password bind takes `cache = false`, which keeps the value out of
-  any cache of resolved values. `cache = true` is the same as no `cache`,
-  and `cache` on any other bind is an unknown field. A secret's bind is a
-  `starmap::SecretBind`, which holds its `SecretRef` and a `starmap::Cache`
-  of `Allowed` or `Never`. The canonical form writes `cache = false`, so it
-  changes the digest, and `starmap explain` and `starmap diff` show such a
-  bind as `<reference>, never cached`.
-- `Lookup::Reference` holds the `reference` and a `cacheable` mark.
+  any cache of resolved values. `cache = true` is the same as no `cache`.
+  `cache` on a path bind is an unknown field, and `cache` on a provided
+  bind is reserved and refused, so it is never read as a qualifier. A
+  secret's bind is a `starmap::SecretBind`, which holds its `SecretRef` and
+  a `starmap::Cache` of `Allowed` or `Never`. The canonical form writes
+  `cache = false`, so it changes the digest. `starmap explain` keeps the
+  bind as the plain reference and shows the policy in a `cache` column,
+  which `--json` writes as `"cache": "never"` and omits when a cache may
+  keep the value. `starmap diff` reports a change of policy as its own
+  `cache` change, from `allowed` to `never` or back.
+- `Lookup::Reference` holds the `reference` and a `cacheable` mark. The
+  variant is non-exhaustive, so code outside starmap-resolve builds a
+  lookup with `Lookup::reference` and matches it with `..`.
   `starmap_resolve::resolve` sets the mark only in local mode and only when
   the bind allows a cache, so no lookup is cacheable in production mode.
   Only `resolve` can build a `Cacheable`. `Lookup::reference` builds a

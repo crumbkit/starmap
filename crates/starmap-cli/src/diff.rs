@@ -16,7 +16,7 @@ use starmap::{Form, Name, Source, Spec, Variable};
 use crate::Failed;
 use crate::cli::DiffArgs;
 use crate::codes;
-use crate::explain::{bind_text, form_text, source_text, unset_text};
+use crate::explain::{bind_text, cache_text, form_text, source_text, unset_text};
 use crate::git::{self, Entry, GitError};
 use crate::spec::{self, SpecFailure};
 
@@ -262,11 +262,13 @@ fn changes(was: Option<&Spec>, now: &Spec) -> Vec<Change> {
 type FieldChange = (&'static str, Option<String>, Option<String>);
 
 /// Returns each field that differs between `old` and `new`, in the order
-/// type, unset, show, source, bind and purpose, with the text that explain
-/// prints for it. The fields are compared by value and shown as text, so a
-/// withheld default that changed is listed and prints as dots on both
-/// sides, and diff shows no secret value. A changed source lists `source`
-/// when the kind of source differs and `bind` when the bind differs.
+/// type, unset, show, source, bind, cache and purpose, with the text that
+/// explain prints for it. The fields are compared by value and shown as
+/// text, so a withheld default that changed is listed and prints as dots
+/// on both sides, and diff shows no secret value. A changed source lists
+/// `source` when the kind of source differs, `bind` when the bind's
+/// reference differs, and `cache` when whether a cache may keep the value
+/// differs, which reads `allowed` or `never`.
 fn changed_fields(old: &Variable, new: &Variable) -> Vec<FieldChange> {
     let mut changed = Vec::new();
     if old.form() != new.form() {
@@ -289,12 +291,18 @@ fn changed_fields(old: &Variable, new: &Variable) -> Vec<FieldChange> {
     if old.source() != new.source() {
         let (was, now) = (source_text(old.source()), source_text(new.source()));
         let (was_bind, now_bind) = (bind_text(old.source()), bind_text(new.source()));
+        let (was_cache, now_cache) = (cache_text(old.source()), cache_text(new.source()));
         let bind_differs = was_bind != now_bind;
-        if was != now || !bind_differs {
+        let cache_differs = was_cache != now_cache;
+        if was != now || !(bind_differs || cache_differs) {
             changed.push(("source", Some(was), Some(now)));
         }
         if bind_differs {
             changed.push(("bind", was_bind, now_bind));
+        }
+        if cache_differs {
+            let word = |cache: Option<&str>| Some(cache.unwrap_or("allowed").to_owned());
+            changed.push(("cache", word(was_cache), word(now_cache)));
         }
     }
     if old.purpose() != new.purpose() {

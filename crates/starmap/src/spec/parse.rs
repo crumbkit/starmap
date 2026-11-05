@@ -679,6 +679,17 @@ impl Parser {
         let mut qualifiers = BTreeMap::new();
         let mut whole = true;
         for (key, _) in entries(table).filter(|(key, _)| key.get() != "provided") {
+            if key.get() == "cache" {
+                // `cache` is reserved, so a later release can give provided
+                // binds a cache policy without reading an old qualifier.
+                let message = format!(
+                    "`{}` has the field `cache`, which only a `one-password` bind takes",
+                    field.path
+                );
+                self.report(span(key.span()), Kind::UnknownField, message);
+                whole = false;
+                continue;
+            }
             let Some(qualifier) = field.child(table, key.get()) else {
                 continue;
             };

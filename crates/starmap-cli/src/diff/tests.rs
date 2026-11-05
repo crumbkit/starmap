@@ -101,7 +101,7 @@ fn a_socket_address_is_named_when_it_is_added_and_when_a_type_changes_to_it() {
 }
 
 #[test]
-fn turning_a_cache_off_is_a_change_of_the_bind() {
+fn turning_a_cache_off_is_a_change_of_the_cache_and_not_of_the_bind() {
     let now = TOKEN.replace(
         r#"bind = { one-password = "op://Personal/shelf/token" }"#,
         r#"bind = { one-password = "op://Personal/shelf/token", cache = false }"#,
@@ -112,11 +112,24 @@ fn turning_a_cache_off_is_a_change_of_the_bind() {
         vec![Change {
             change: Kind::Changed,
             name: "SHELF_TOKEN".to_owned(),
-            field: Some("bind".to_owned()),
-            was: Some("op://Personal/shelf/token".to_owned()),
-            now: Some("op://Personal/shelf/token, never cached".to_owned()),
+            field: Some("cache".to_owned()),
+            was: Some("allowed".to_owned()),
+            now: Some("never".to_owned()),
         }]
     );
+}
+
+#[test]
+fn a_new_reference_with_cache_off_is_a_change_of_the_bind_and_the_cache() {
+    let now = TOKEN.replace(
+        r#"bind = { one-password = "op://Personal/shelf/token" }"#,
+        r#"bind = { one-password = "op://Personal/shelf/key", cache = false }"#,
+    );
+    let fields: Vec<_> = changes(Some(&spec(TOKEN)), &spec(&now))
+        .into_iter()
+        .map(|change| change.field)
+        .collect();
+    assert_eq!(fields, [Some("bind".to_owned()), Some("cache".to_owned())]);
 }
 
 #[test]
