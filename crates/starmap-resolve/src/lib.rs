@@ -12,8 +12,9 @@
 //! The `one-password` feature adds `OnePassword`, which reads secrets
 //! through the 1Password CLI, and the `keychain` feature adds `Keychain`,
 //! which keeps generated secrets in the macOS Keychain. Neither feature is
-//! on by default. The `agent` feature, on macOS and Linux, adds the `agent` module,
-//! which finds the per-user agent's socket.
+//! on by default. The `agent` feature, on macOS and Linux, adds the
+//! `agent` module, which reads 1Password values from a per-user agent when
+//! one is running.
 
 #[cfg(all(feature = "agent", any(target_os = "macos", target_os = "linux")))]
 pub mod agent;

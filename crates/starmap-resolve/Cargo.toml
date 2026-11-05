@@ -29,9 +29,12 @@ zeroize = { workspace = true, optional = true }
 getrandom = { version = "0.4.3", default-features = false, optional = true }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
-# nix reads the current user's uid without unsafe code, for the `agent`
-# feature, which checks that the socket's directories are the user's own.
-nix = { version = "0.31.3", default-features = false, features = ["user"], optional = true }
+# nix reads the current user's uid and the uid of the process behind the
+# agent's socket (getpeereid on macOS, SO_PEERCRED on Linux), and connects
+# to the socket without blocking past a deadline, all without unsafe code,
+# for the `agent` feature. `user` gives the uid calls, `socket` the socket
+# calls, `poll` the wait for a connection and `fs` the close-on-exec flag.
+nix = { version = "0.31.3", default-features = false, features = ["user", "socket", "poll", "fs"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # landlock asks the running kernel whether its Landlock can deny a

@@ -150,6 +150,27 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`starmap::agent::off`) when the parent is shared, sticky or writable by
   others, and on Linux when the kernel's Landlock cannot deny a sandboxed
   app the socket. `agent::AgentError` carries each code.
+- `agent::Agent` is a resolver that reads 1Password values from the
+  per-user agent when one is running. It asks the agent with one Get for
+  each lookup marked `Cacheable`, reads every other lookup and every miss
+  with one batched `op` call of its own, and puts each miss it read back
+  with the generation of the Get, an opaque token the agent draws again on
+  every clear and restart, so a value read before either is refused. Every
+  failure of the agent, including no agent at the socket
+  (`starmap::agent::not_running`), leaves resolution to `op`, and
+  `Agent::warnings` returns the latest resolution's failures.
+- `agent::CacheScope` names the 1Password account and the absolute `op`
+  path that each cache entry belongs to. The agent is off unless
+  `OP_ACCOUNT` names an account, and when `OP_SERVICE_ACCOUNT_TOKEN` or any
+  `OP_SESSION_` variable is set.
+- `agent::AgentClient` sends one Get or Put per connection in the agent's
+  wire protocol, version 1, by the resolution's deadline: it connects
+  without blocking and cuts every wait to the time left. It checks that
+  the process behind the socket runs as the current user, and its parser
+  refuses a count over 256 before it allocates for it, a length past the
+  end of the frame, bytes after the last field, a Hits whose count differs
+  from its Get, an unknown outcome byte, text or a value that is not
+  UTF-8, and an unknown version.
 - `Variable::capture` binds one raw value by the variable's show, as
   `starmap::capture` binds each value. `PathTemplate::fill` returns the path
   a template names when a function gives each placeholder's directory.
