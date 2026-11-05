@@ -1,4 +1,5 @@
-# The example starmap.toml, for a version of shelf with a server process. It uses every source kind and every bind kind.
+# The example starmap.toml, for a version of shelf with a server process.
+# It uses every source kind and every bind kind.
 [mode]
 variable = "SHELF_ENV"
 production = ["prod"]

@@ -4,8 +4,8 @@
 //! The values of the caller come from `.env` beside the spec, the shell
 //! and `--set`, and `.env` and `--set` never give a secret. The doc of
 //! `Verb::Run` in cli.rs, which `starmap run --help` prints, states the
-//! order in which a value is taken from them, the path bind and the
-//! default. starmap-resolve then resolves every variable under
+//! order in which a value is taken from them, a setting's path bind and
+//! the default. starmap-resolve then resolves every variable under
 //! one deadline, with the 1Password CLI and the Keychain as resolvers and
 //! no provider. A required secret without a bind that nothing supplies is
 //! asked for at a terminal, held for this run, and saved to the Keychain

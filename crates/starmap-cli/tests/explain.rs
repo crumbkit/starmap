@@ -1,6 +1,6 @@
 //! End-to-end tests of how `starmap explain` shows a withheld value. Each
-//! test runs the built binary on the example spec in `crates/starmap/tests/example/starmap.toml`
-//! with a cleared environment.
+//! test runs the built binary on the example spec in
+//! `crates/starmap/tests/example/starmap.toml` with a cleared environment.
 
 #![cfg(test)]
 

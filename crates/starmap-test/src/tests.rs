@@ -15,8 +15,8 @@ const EXAMPLE: &str = include_str!("../../starmap/tests/example/starmap.toml");
 /// A spec that disagrees with [`EveryKind`] in each way the check reports.
 const EVERY_KIND: &str = include_str!("../tests/golden/every_kind.toml");
 
-/// A copy of the example struct `ShelfEnv` of `crates/starmap/tests/derive.rs`,
-/// which agrees with its spec.
+/// A copy of the example struct `ShelfEnv` of
+/// `crates/starmap/tests/derive.rs`, which agrees with its spec.
 #[derive(starmap::Env)]
 #[starmap(spec = "../starmap/tests/example/starmap.toml")]
 struct Shelf {
@@ -46,7 +46,8 @@ enum Stage {
     Prod,
 }
 
-/// A stale copy of the example struct: its mirror token is not a secret, and it reads SHELF_THEME, which the spec does not declare.
+/// A stale copy of the example struct: its mirror token is not a secret,
+/// and it reads SHELF_THEME, which the spec does not declare.
 #[derive(starmap::Env)]
 #[starmap(spec = "../starmap/tests/example/starmap.toml")]
 struct Stale {
