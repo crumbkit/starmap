@@ -10,6 +10,8 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _};
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
+use std::sync::OnceLock;
+#[cfg(target_os = "macos")]
 use std::time::{Duration, Instant};
 
 use super::AgentError;
@@ -47,7 +49,11 @@ impl AgentSocket {
     /// in the directory that `getconf DARWIN_USER_TEMP_DIR` prints on macOS,
     /// and in `/run/user/<uid>` on Linux. `TMPDIR` and `XDG_RUNTIME_DIR`
     /// play no part. It creates `starmap-agent/` with mode 0700 when it is
-    /// missing.
+    /// missing. On macOS `getconf` runs once per process, and later calls
+    /// reuse its answer.
+    ///
+    /// The macOS path starts with `/var`, which is a symbolic link, so a
+    /// sandbox has to deny the resolved `/private/var/…` path.
     ///
     /// # Errors
     ///
@@ -97,7 +103,19 @@ impl AgentSocket {
 /// Returns the directory of `uid`'s own files that holds `starmap-agent/`.
 #[cfg(target_os = "macos")]
 fn user_parent(_uid: u32) -> Result<PathBuf, AgentError> {
-    let off = |reason: String| AgentError::Off(format!("getconf DARWIN_USER_TEMP_DIR {reason}"));
+    // The directory does not change while the process runs, so getconf runs
+    // once, and a failure is kept too, so the agent stays off.
+    static ANSWER: OnceLock<Result<PathBuf, String>> = OnceLock::new();
+    ANSWER
+        .get_or_init(user_temp_dir)
+        .clone()
+        .map_err(|reason| AgentError::Off(format!("getconf DARWIN_USER_TEMP_DIR {reason}")))
+}
+
+/// Returns the directory that `getconf DARWIN_USER_TEMP_DIR` prints, or the
+/// reason it gave none.
+#[cfg(target_os = "macos")]
+fn user_temp_dir() -> Result<PathBuf, String> {
     let deadline = Instant::now() + GETCONF_DEADLINE;
     match process::getconf_user_temp_dir(deadline) {
         Ok(OpRun::Printed(output)) => {
@@ -105,13 +123,13 @@ fn user_parent(_uid: u32) -> Result<PathBuf, AgentError> {
             if text.first() == Some(&b'/') {
                 Ok(PathBuf::from(OsStr::from_bytes(text)))
             } else {
-                Err(off("printed no absolute path".to_owned()))
+                Err("printed no absolute path".to_owned())
             }
         }
-        Ok(OpRun::NotStarted(error)) | Err(error) => Err(off(format!("failed: {error}"))),
-        Ok(OpRun::Failed { status, .. }) => Err(off(format!("exited with {status}"))),
-        Ok(OpRun::TooLong) => Err(off("printed more than 4 KiB".to_owned())),
-        Ok(OpRun::Deadline) => Err(off("did not answer in time".to_owned())),
+        Ok(OpRun::NotStarted(error)) | Err(error) => Err(format!("failed: {error}")),
+        Ok(OpRun::Failed { status, .. }) => Err(format!("exited with {status}")),
+        Ok(OpRun::TooLong) => Err("printed more than 4 KiB".to_owned()),
+        Ok(OpRun::Deadline) => Err("did not answer in time".to_owned()),
     }
 }
 
