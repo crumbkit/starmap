@@ -73,6 +73,11 @@ pub trait Resolver {
     /// it until `resolve` asks for it or [`Resolver::finish`] drops it. A
     /// failure is reported by the `resolve` of each lookup it concerns, so
     /// `prepare` returns nothing.
+    ///
+    /// The `prepare`, every `resolve` and the `finish` of one resolution
+    /// run on the same thread, as [`crate::resolve`] runs them. A resolver
+    /// may keep what it readied for the calling thread alone, as
+    /// `OnePassword` does.
     fn prepare(&self, lookups: &[Lookup<'_>], deadline: Instant) {
         let _ = (lookups, deadline);
     }

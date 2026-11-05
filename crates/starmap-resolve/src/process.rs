@@ -24,6 +24,9 @@ const ERROR_LIMIT: usize = 16 * 1024;
 
 /// How a run of `op` ended.
 pub(crate) enum OpRun {
+    /// `op` could not be started, such as a program that does not exist,
+    /// so nothing was asked of 1Password.
+    NotStarted(io::Error),
     /// `op` exited with success and printed these bytes.
     Printed(Zeroizing<Vec<u8>>),
     /// `op` exited with `status` and printed `message` on standard error.
@@ -80,9 +83,10 @@ enum Stream {
 ///
 /// # Errors
 ///
-/// Returns the error of starting `op`, such as [`io::ErrorKind::NotFound`]
-/// for a program that does not exist, of starting a reader thread, or of
-/// waiting for it. A reader thread that cannot start stops `op` first.
+/// Returns the error of starting a reader thread, or of waiting for `op`.
+/// A reader thread that cannot start stops `op` first. A program that
+/// cannot be started, such as one that does not exist, is
+/// [`OpRun::NotStarted`].
 pub(crate) fn op_read(program: &Path, reference: &str, deadline: Instant) -> io::Result<OpRun> {
     run(
         read_command(program, reference),
@@ -145,7 +149,10 @@ fn run(
         clippy::disallowed_methods,
         reason = "PROC-1: run starts op for op_read and op_inject"
     )]
-    let mut child = command.spawn()?;
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => return Ok(OpRun::NotStarted(error)),
+    };
     let (sender, receiver) = mpsc::channel();
     let (stdin, stdout, stderr) = (child.stdin.take(), child.stdout.take(), child.stderr.take());
     let started = stdout

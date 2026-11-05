@@ -19,6 +19,8 @@ use crate::process::{self, OUTPUT_LIMIT, OpRun};
 use crate::{Lookup, Resolver, SecretError};
 
 mod batch;
+#[cfg(test)]
+mod tests;
 
 use batch::{Template, batchable};
 
@@ -160,11 +162,10 @@ impl OnePassword {
     /// another prompt. So are output over the limit and output that does
     /// not split into one value for each reference.
     fn inject(&self, batch: &[&str], deadline: Instant) -> (Vec<Entry>, Option<Stop>) {
-        let each = |entry: &dyn Fn() -> Entry| batch.iter().map(|_| entry()).collect();
         let Ok(template) = Template::new(batch) else {
             // Without random markers there is no template, and nothing
             // was asked of 1Password yet.
-            return (each(&|| Entry::Read), None);
+            return (batch.iter().map(|_| Entry::Read).collect(), None);
         };
         let run = process::op_inject(
             &self.program,
@@ -172,52 +173,7 @@ impl OnePassword {
             batch.len(),
             deadline,
         );
-        match run {
-            // op did not start, so each op read reports the same error
-            // against its own variable.
-            Err(_) => (each(&|| Entry::Read), None),
-            Ok(OpRun::Printed(output)) => match template.split(&output) {
-                Some(values) => {
-                    let entries = values
-                        .into_iter()
-                        .map(
-                            |value| match text(Zeroizing::new(value.to_vec()), "op inject") {
-                                Ok(secret) => Entry::Value(secret),
-                                Err(_) => Entry::Failed(
-                                    "op inject printed text that is not UTF-8".to_owned(),
-                                ),
-                            },
-                        )
-                        .collect();
-                    (entries, None)
-                }
-                None => (
-                    each(&|| {
-                        Entry::Failed(
-                            "op inject printed output that does not hold each of its markers \
-                             once and in order"
-                                .to_owned(),
-                        )
-                    }),
-                    None,
-                ),
-            },
-            Ok(OpRun::Failed { status, message }) => match failure("op inject", status, &message) {
-                SecretError::NotFound => (each(&|| Entry::Read), None),
-                SecretError::Program(error) => (each(&|| Entry::Failed(error.to_string())), None),
-                error => (each(&|| Entry::Read), Stop::of(&error)),
-            },
-            Ok(OpRun::TooLong) => (
-                each(&|| {
-                    Entry::Failed(format!(
-                        "op inject printed more than {} KiB for each reference",
-                        OUTPUT_LIMIT / 1024
-                    ))
-                }),
-                None,
-            ),
-            Ok(OpRun::Deadline) => (each(&|| Entry::Read), Some(Stop::Deadline)),
-        }
+        outcome(&template, batch.len(), run)
     }
 
     /// Reads `reference` with its own `op read` by `deadline`.
@@ -230,6 +186,7 @@ impl OnePassword {
                 OUTPUT_LIMIT / 1024
             ))),
             OpRun::Deadline => Err(SecretError::Deadline),
+            OpRun::NotStarted(error) => Err(SecretError::Program(error)),
         }
     }
 }
@@ -325,6 +282,70 @@ impl Resolver for OnePassword {
             }
             None => self.read(reference, deadline),
         }
+    }
+}
+
+/// Returns an entry for each of `count` references, in order, and the stop
+/// that the run brought, from `run`, the run of `op inject` with
+/// `template`, as [`OnePassword::inject`] describes. Only a run that could
+/// not start `op` leaves each reference to its own `op read`, because no
+/// prompt was shown. Any other error of the run, such as a failed wait, is
+/// final for every reference.
+fn outcome(
+    template: &Template,
+    count: usize,
+    run: io::Result<OpRun>,
+) -> (Vec<Entry>, Option<Stop>) {
+    let each = |entry: &dyn Fn() -> Entry| (0..count).map(|_| entry()).collect();
+    match run {
+        // op did not start, so each op read reports the same error
+        // against its own variable.
+        Ok(OpRun::NotStarted(_)) => (each(&|| Entry::Read), None),
+        Err(error) => (
+            each(&|| Entry::Failed(format!("op inject failed after it started: {error}"))),
+            None,
+        ),
+        Ok(OpRun::Printed(output)) => match template.split(&output) {
+            Some(values) => {
+                let entries = values
+                    .into_iter()
+                    .map(
+                        |value| match text(Zeroizing::new(value.to_vec()), "op inject") {
+                            Ok(secret) => Entry::Value(secret),
+                            Err(_) => {
+                                Entry::Failed("op inject printed text that is not UTF-8".to_owned())
+                            }
+                        },
+                    )
+                    .collect();
+                (entries, None)
+            }
+            None => (
+                each(&|| {
+                    Entry::Failed(
+                        "op inject printed output that does not hold each of its markers \
+                         once and in order"
+                            .to_owned(),
+                    )
+                }),
+                None,
+            ),
+        },
+        Ok(OpRun::Failed { status, message }) => match failure("op inject", status, &message) {
+            SecretError::NotFound => (each(&|| Entry::Read), None),
+            SecretError::Program(error) => (each(&|| Entry::Failed(error.to_string())), None),
+            error => (each(&|| Entry::Read), Stop::of(&error)),
+        },
+        Ok(OpRun::TooLong) => (
+            each(&|| {
+                Entry::Failed(format!(
+                    "op inject printed more than {} KiB for each reference",
+                    OUTPUT_LIMIT / 1024
+                ))
+            }),
+            None,
+        ),
+        Ok(OpRun::Deadline) => (each(&|| Entry::Read), Some(Stop::Deadline)),
     }
 }
 
