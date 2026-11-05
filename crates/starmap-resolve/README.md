@@ -18,7 +18,12 @@ change, such as one holding `$`, with its own `op read`. The `keychain` feature 
 unchanged afterwards, keeps a secret without a bind that a host saves with
 `Resolver::save`, and `Keychain::forget` deletes a workspace's values.
 On a platform other than macOS, every call of `Keychain` returns
-`SecretError::Unsupported`. The repository's
+`SecretError::Unsupported`. The `agent` feature, on macOS and Linux, adds
+`agent::Agent`, a resolver that reads 1Password values from a per-user
+agent when one is running and reads the rest with `op`. Apps that a
+sandbox such as phase's starts never receive the agent's socket, but a
+process started outside a sandbox, including a child of `starmap run`, can
+reach it. The repository's
 [README](https://github.com/crumbkit/starmap) describes the project.
 
 Licensed under either of Apache License, Version 2.0 or MIT license at your

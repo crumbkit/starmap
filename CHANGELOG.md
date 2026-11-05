@@ -136,8 +136,36 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `starmap_resolve::resolve` sets the mark only in local mode and only when
   the bind allows a cache, so no lookup is cacheable in production mode.
   Only `resolve` can build a `Cacheable`. `Lookup::reference` builds a
-  lookup without the mark, as a host builds one by hand. No resolver reads
-  the mark yet.
+  lookup without the mark, as a host builds one by hand.
+- starmap-resolve's `agent` feature, on macOS and Linux, reads 1Password
+  values from a per-user agent when one is running. `agent::Agent` is a
+  resolver that asks the agent with one Get for each lookup marked
+  `Cacheable`, reads every other lookup and every miss with one batched
+  `op` call of its own, and puts each miss it read back with the
+  generation of the Get, so a value read before a clear is refused. When
+  no agent answers it runs `starmap agent start` through
+  `agent::AgentStarter`, in an environment cleared of all but `HOME`,
+  `USER`, `LOGNAME`, `LANG`, `XDG_STATE_HOME` and `STARMAP_AGENT_LAPSE`,
+  and asks once more. Every failure of the agent leaves resolution to
+  `op`, and `Agent::warnings` returns it as an `agent::AgentError` with a
+  code such as `starmap::agent::protocol`.
+- `agent::AgentSocket::for_user` returns the socket's path:
+  `starmap-agent/agent.sock` in the directory of
+  `confstr(_CS_DARWIN_USER_TEMP_DIR)` on macOS and in `/run/user/<uid>` on
+  Linux. `TMPDIR` and `XDG_RUNTIME_DIR` play no part. It refuses a parent
+  that is shared, sticky or writable by others, and a `starmap-agent/`
+  directory that is not the user's own with mode 0700. On Linux the agent
+  is off unless the kernel's Landlock can deny a sandboxed app the socket.
+- `agent::CacheScope` names the 1Password account and the absolute `op`
+  path that each cache entry belongs to, and turns the agent off when
+  `OP_SERVICE_ACCOUNT_TOKEN` or any `OP_SESSION_` variable is set.
+- `agent::AgentClient` sends one Get, Put, Clear or Status per connection
+  in the agent's wire protocol, version 1, after it checks that the
+  process behind the socket runs as the current user. Its parser refuses a
+  count over 256 before it allocates for it, a length past the end of the
+  frame, bytes after the last field, a Hits whose count differs from its
+  Get, an unknown outcome byte, text or a value that is not UTF-8, and an
+  unknown version.
 - `Variable::capture` binds one raw value by the variable's show, as
   `starmap::capture` binds each value. `PathTemplate::fill` returns the path
   a template names when a function gives each placeholder's directory.

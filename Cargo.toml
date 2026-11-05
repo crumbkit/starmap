@@ -133,7 +133,7 @@ ignored-paths = ["crates/starmap/tests/example/src/**/*.rs", "crates/starmap-cli
 # fails on any warning, and every package inherits the table through
 # `[lints] workspace = true`.
 [workspace.lints.rust]
-unsafe_code = "forbid"                 # BASE-3
+unsafe_code = "deny"                   # BASE-3, with the map's unsafe decision
 unreachable_pub = "warn"               # BASE-8
 missing_debug_implementations = "warn"
 missing_docs = "deny"                  # LIB-2

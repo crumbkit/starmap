@@ -1,7 +1,10 @@
 //! The one module of starmap-resolve that starts a process (PROC-1). Its
 //! operations are [`op_read`], which reads one secret with the 1Password
-//! CLI, and [`op_inject`], which reads several with one run of it.
+//! CLI, [`op_inject`], which reads several with one run of it, and, for the
+//! `agent` feature, `agent_start`, which starts starmap's agent.
 
+#[cfg(feature = "agent")]
+use std::ffi::OsString;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::process::{self, Command, ExitStatus, Stdio};
@@ -134,6 +137,54 @@ pub(crate) fn op_inject(
         limit,
         deadline,
     )
+}
+
+/// The most bytes of standard output that `starmap agent start` may print:
+/// its socket, pid and lapse.
+#[cfg(feature = "agent")]
+const START_OUTPUT_LIMIT: usize = 4 * 1024;
+
+/// Runs `program agent start` and returns how it ended. It states the items
+/// of PROC-2 where they differ from [`op_read`].
+///
+/// - Program: `program`, the path of the `starmap` command that the host
+///   passed to `AgentStarter::new`. The host trusts whoever installed it.
+/// - Arguments: `agent` and `start`, each a separate value.
+/// - Environment: cleared, and then only `environment`, which the starter
+///   limits to named variables that hold no value starmap reads, such as
+///   `HOME` and `STARMAP_AGENT_LAPSE`. No `OP_*` variable and no `PATH`
+///   reach the agent, which never runs `op`.
+/// - Streams and deadline: standard input is empty. Standard output is
+///   kept up to 4 KiB and then dropped, and standard error as for
+///   `op read`. `deadline` is the starter's, at most a few seconds.
+/// - End: as for `op read`. `starmap agent start` returns once the agent
+///   it detached with `setsid` is listening, and the agent closes the pipes
+///   it inherited, so the agent outlives this operation by design. A run
+///   stopped at the deadline can leave an agent that started late, which
+///   the next resolution then finds.
+///
+/// # Errors
+///
+/// Returns the errors of [`op_read`].
+#[cfg(feature = "agent")]
+pub(crate) fn agent_start(
+    program: &Path,
+    environment: &[(OsString, OsString)],
+    deadline: Instant,
+) -> io::Result<OpRun> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "PROC-1: agent_start is an operation that starts starmap agent start"
+    )]
+    let mut command = Command::new(program);
+    command
+        .args(["agent", "start"])
+        .env_clear()
+        .envs(environment.iter().map(|(name, value)| (name, value)))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    run(command, None, START_OUTPUT_LIMIT, deadline)
 }
 
 /// Starts `command`, writes `input` to its standard input when there is

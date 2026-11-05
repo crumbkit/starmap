@@ -1,0 +1,221 @@
+//! The `agent` feature: the client side of starmap's agent, a process run
+//! as the person that keeps the 1Password values starmap has read in
+//! memory and hands them back over a Unix socket.
+//!
+//! The agent is a cache and never runs `op`. [`Agent`] is a [`crate::Resolver`]
+//! that asks the agent for each lookup that [`crate::resolve`] marked
+//! [`crate::Cacheable`], reads every other lookup and every miss with one
+//! batched `op` call of its own, so the 1Password prompt names the program
+//! that wants the value, and then puts what it read back into the agent.
+//!
+//! [`AgentSocket::for_user`] returns the socket's path for the current user,
+//! [`CacheScope`] names the account and `op` program that a cache entry
+//! belongs to, [`AgentClient`] sends one request per connection, and
+//! [`AgentStarter`] starts `starmap agent start` when no agent answers.
+//!
+//! The feature builds on macOS and Linux only.
+
+use std::error::Error;
+use std::ffi::OsStr;
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+mod client;
+#[cfg(target_os = "macos")]
+mod darwin;
+mod protocol;
+mod resolver;
+mod socket;
+mod starter;
+
+pub use client::{AgentClient, AgentStatus, Cleared, Hits};
+pub use resolver::Agent;
+pub use socket::AgentSocket;
+pub use starter::AgentStarter;
+
+/// The variable that names the 1Password account `op` uses.
+const ACCOUNT: &str = "OP_ACCOUNT";
+
+/// The variable of a 1Password service account's token. A service account
+/// never prompts, so the agent would add exposure and save nothing.
+const SERVICE_ACCOUNT: &str = "OP_SERVICE_ACCOUNT_TOKEN";
+
+/// The prefix of the variables that hold a session `op signin` printed. A
+/// session does not prompt either.
+const SESSION_PREFIX: &str = "OP_SESSION_";
+
+/// The count of the agent's clears that a Get returns and a Put carries, so
+/// the agent refuses a value read before its latest clear.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Generation(u64);
+
+/// The account and `op` program a cache entry belongs to, so two accounts,
+/// or two `op` programs, never share an entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheScope {
+    account: String,
+    op: PathBuf,
+}
+
+impl CacheScope {
+    /// Returns the scope of `op`, the absolute path of the 1Password CLI,
+    /// run with `environment`, the variables it inherits. The account is
+    /// the value of `OP_ACCOUNT`, or empty for `op`'s default account.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AgentError::Off`] when `op` is not an absolute path, when
+    /// `OP_ACCOUNT` is not UTF-8, or when `OP_SERVICE_ACCOUNT_TOKEN` or any
+    /// `OP_SESSION_` variable is set, because those sessions never prompt.
+    /// The host then reads from `op` directly.
+    pub fn new<K, V>(
+        op: PathBuf,
+        environment: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<Self, AgentError>
+    where
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        if !op.is_absolute() {
+            return Err(AgentError::Off(format!(
+                "the op program {} is not an absolute path",
+                op.display()
+            )));
+        }
+        let mut account = String::new();
+        for (name, value) in environment {
+            let name = name.as_ref().to_string_lossy();
+            if name == SERVICE_ACCOUNT || name.starts_with(SESSION_PREFIX) {
+                return Err(AgentError::Off(format!(
+                    "{name} is set, so op does not prompt"
+                )));
+            }
+            if name == ACCOUNT {
+                let Some(text) = value.as_ref().to_str() else {
+                    return Err(AgentError::Off(format!("{ACCOUNT} is not UTF-8")));
+                };
+                text.clone_into(&mut account);
+            }
+        }
+        Ok(Self { account, op })
+    }
+
+    /// Returns the 1Password account, empty for `op`'s default account.
+    #[must_use]
+    pub fn account(&self) -> &str {
+        &self.account
+    }
+
+    /// Returns the absolute path of the `op` program.
+    #[must_use]
+    pub fn op(&self) -> &Path {
+        &self.op
+    }
+}
+
+/// The reason the agent was not used or refused a request. Each variant has
+/// a code that [`AgentError::code`] returns, and its message names no
+/// value. A host reports it as a warning, and resolution goes on through
+/// `op`.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum AgentError {
+    /// The agent is not used, for the reason given.
+    Off(String),
+    /// The socket's directory is not the person's own, not a directory, or
+    /// not mode 0700.
+    UnsafeDirectory(PathBuf),
+    /// The socket's path is longer than the platform allows.
+    PathTooLong(PathBuf),
+    /// No agent answered at the socket.
+    NotRunning,
+    /// The starter could not run `starmap agent start`, for the reason
+    /// given.
+    StartFailed(String),
+    /// The agent refused a client of another uid.
+    PeerRefused,
+    /// The process behind the socket runs as another uid.
+    ServerUntrusted,
+    /// The agent's answer was malformed or could not be read, as given.
+    Protocol(String),
+    /// A Put named a key the agent already holds.
+    Exists,
+    /// A Put carried a generation from before the agent's latest clear.
+    StaleGeneration,
+    /// The agent already serves as many connections as it allows.
+    Busy,
+    /// A Get named more references than one request may hold.
+    TooManyReferences,
+}
+
+impl AgentError {
+    /// Returns the error's code, such as `starmap::agent::not_running`.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Off(_) => "starmap::agent::off",
+            Self::UnsafeDirectory(_) => "starmap::agent::unsafe_directory",
+            Self::PathTooLong(_) => "starmap::agent::path_too_long",
+            Self::NotRunning => "starmap::agent::not_running",
+            Self::StartFailed(_) => "starmap::agent::start_failed",
+            Self::PeerRefused => "starmap::agent::peer_refused",
+            Self::ServerUntrusted => "starmap::agent::server_untrusted",
+            Self::Protocol(_) => "starmap::agent::protocol",
+            Self::Exists => "starmap::agent::exists",
+            Self::StaleGeneration => "starmap::agent::stale_generation",
+            Self::Busy => "starmap::agent::busy",
+            Self::TooManyReferences => "starmap::agent::too_many_references",
+        }
+    }
+
+    /// Returns the error that the agent's refusal `code` names. A code this
+    /// client does not know is a protocol error, and its text is not kept,
+    /// because the agent wrote it.
+    fn refused(code: &str) -> Self {
+        match code {
+            "starmap::agent::peer_refused" => Self::PeerRefused,
+            "starmap::agent::exists" => Self::Exists,
+            "starmap::agent::stale_generation" => Self::StaleGeneration,
+            "starmap::agent::busy" => Self::Busy,
+            "starmap::agent::too_many_references" => Self::TooManyReferences,
+            _ => {
+                Self::Protocol("the agent refused with a code this client does not know".to_owned())
+            }
+        }
+    }
+}
+
+impl fmt::Display for AgentError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Off(reason) => write!(formatter, "the agent is off: {reason}"),
+            Self::UnsafeDirectory(path) => write!(
+                formatter,
+                "{} is not a directory of this user with mode 0700",
+                path.display()
+            ),
+            Self::PathTooLong(path) => write!(
+                formatter,
+                "the socket path {} is longer than this platform allows",
+                path.display()
+            ),
+            Self::NotRunning => formatter.write_str("no agent answered at the socket"),
+            Self::StartFailed(reason) => write!(formatter, "the agent did not start: {reason}"),
+            Self::PeerRefused => formatter.write_str("the agent refused a client of another user"),
+            Self::ServerUntrusted => {
+                formatter.write_str("the process behind the agent's socket runs as another user")
+            }
+            Self::Protocol(reason) => write!(formatter, "the agent's answer is unusable: {reason}"),
+            Self::Exists => formatter.write_str("the agent already holds this reference"),
+            Self::StaleGeneration => {
+                formatter.write_str("the value was read before the agent's latest clear")
+            }
+            Self::Busy => formatter.write_str("the agent is serving too many connections"),
+            Self::TooManyReferences => {
+                formatter.write_str("one request may name at most 256 references")
+            }
+        }
+    }
+}
+
+impl Error for AgentError {}

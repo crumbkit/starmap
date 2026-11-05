@@ -19,15 +19,15 @@ note = "The check counts the lines of each production `.rs` file that git lists,
 
 [[binding]]
 rule = "BASE-24"
-owners = ["crates/starmap/src/secret.rs", "crates/starmap/src/env.rs", "crates/starmap-resolve/src/resolve.rs", "crates/starmap-resolve/src/keychain.rs"]
+owners = ["crates/starmap/src/secret.rs", "crates/starmap/src/env.rs", "crates/starmap-resolve/src/resolve.rs", "crates/starmap-resolve/src/keychain.rs", "crates/starmap-resolve/src/agent/protocol.rs"]
 checks = ["clippy disallowed_methods (clippy.toml), which refuses `expose_secret` and `starmap::Secret::expose` outside an `#[expect]` that gives its reason"]
-note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the only caller of `expose_secret`, which `Secret::expose` and the crate-private `Secret::duplicate` call. env.rs calls `Secret::expose` where `Environment::apply` sets a withheld value in a child's environment. starmap-resolve's resolve.rs calls it where it copies a caller's withheld value straight into a new `Secret`, and keychain.rs where `Keychain::save` writes a typed secret into the Keychain."
+note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the only caller of `expose_secret`, which `Secret::expose` and the crate-private `Secret::duplicate` call. env.rs calls `Secret::expose` where `Environment::apply` sets a withheld value in a child's environment. starmap-resolve's resolve.rs calls it where it copies a caller's withheld value straight into a new `Secret`, keychain.rs where `Keychain::save` writes a typed secret into the Keychain, and agent/protocol.rs where a Put writes a value into the frame that the agent's socket carries."
 
 [[binding]]
 rule = "PROC-1"
 owners = ["crates/starmap-resolve/src/process.rs", "crates/starmap-cli/src/git.rs", "crates/starmap-cli/src/run/child.rs"]
 checks = ["clippy disallowed_methods and disallowed_types (clippy.toml), which refuse `Command::new`, its runs and `Child` outside an `#[expect]` that gives its reason"]
-note = "starmap reads PROC-1 as one module that starts processes in each crate. starmap-resolve's process.rs runs `op read` and `op inject`, and starmap-cli's git.rs runs `git rev-parse`, `git ls-tree` and `git cat-file` for `starmap diff`. starmap-cli's run/child.rs builds the command of the program that `starmap run` starts, and crumbkit-child starts and waits for it."
+note = "starmap reads PROC-1 as one module that starts processes in each crate. starmap-resolve's process.rs runs `op read` and `op inject`, and `starmap agent start` for the `agent` feature's starter, and starmap-cli's git.rs runs `git rev-parse`, `git ls-tree` and `git cat-file` for `starmap diff`. starmap-cli's run/child.rs builds the command of the program that `starmap run` starts, and crumbkit-child starts and waits for it."
 
 [[decision]]
 id = "lanes"
@@ -46,6 +46,12 @@ realizations = [
   ".github/workflows/macos.yml",
   ".cargo/config.toml",
 ]
+
+[[decision]]
+id = "unsafe"
+requirement = "One module has `unsafe` code: crates/starmap-resolve/src/agent/darwin.rs, built only on macOS with the `agent` feature, which calls `confstr(_CS_DARWIN_USER_TEMP_DIR)` to find the person's own temporary directory. Its invariant: each call passes either a null buffer of size 0 or a buffer the module owns of exactly the size it passes, so `confstr` never writes outside memory the module allocated, and the text is read only up to its first NUL inside that buffer. The workspace sets `unsafe_code = \"deny\"`, and that module alone carries `#![expect(unsafe_code)]`."
+reason = "The agent's socket path must not follow `TMPDIR`, so that a sandbox denies exactly the path the agent listens on. `std::env::temp_dir` reads `TMPDIR` first, and no maintained crate exposes `confstr` without `unsafe`."
+realizations = ["crates/starmap-resolve/src/agent/darwin.rs", "Cargo.toml"]
 
 [[decision]]
 id = "release-profile"
