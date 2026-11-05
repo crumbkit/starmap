@@ -7,8 +7,8 @@ schema = "rust-standards/adoption/v1"
 standards = { version = "draft", commit = "7c9a7577fed4fe5ba0682960c0380af0a75dace4" }
 
 # starmap publishes library crates, builds the `starmap` command, and starts
-# other programs: `op read`, `op inject`, `git rev-parse`, `git ls-tree` and
-# `git cat-file`, and the child of `starmap run`.
+# other programs: `op read`, `op inject`, `getconf`, `git rev-parse`,
+# `git ls-tree` and `git cat-file`, and the child of `starmap run`.
 profiles = ["base", "library", "cli", "child-process"]
 
 [[binding]]
@@ -19,15 +19,15 @@ note = "The check counts the lines of each production `.rs` file that git lists,
 
 [[binding]]
 rule = "BASE-24"
-owners = ["crates/starmap/src/secret.rs", "crates/starmap/src/env.rs", "crates/starmap-resolve/src/resolve.rs", "crates/starmap-resolve/src/keychain.rs"]
+owners = ["crates/starmap/src/secret.rs", "crates/starmap/src/env.rs", "crates/starmap-resolve/src/resolve.rs", "crates/starmap-resolve/src/keychain.rs", "crates/starmap-resolve/src/agent/protocol.rs"]
 checks = ["clippy disallowed_methods (clippy.toml), which refuses `expose_secret` and `starmap::Secret::expose` outside an `#[expect]` that gives its reason"]
-note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the only caller of `expose_secret`, which `Secret::expose` and the crate-private `Secret::duplicate` call. env.rs calls `Secret::expose` where `Environment::apply` sets a withheld value in a child's environment. starmap-resolve's resolve.rs calls it where it copies a caller's withheld value straight into a new `Secret`, and keychain.rs where `Keychain::save` writes a typed secret into the Keychain."
+note = "`starmap::Secret` in secret.rs is the one wrapper of secrecy and the only caller of `expose_secret`, which `Secret::expose` and the crate-private `Secret::duplicate` call. env.rs calls `Secret::expose` where `Environment::apply` sets a withheld value in a child's environment. starmap-resolve's resolve.rs calls it where it copies a caller's withheld value straight into a new `Secret`, keychain.rs where `Keychain::save` writes a typed secret into the Keychain, and agent/protocol.rs where a Put writes a value into the frame that the agent's socket carries."
 
 [[binding]]
 rule = "PROC-1"
 owners = ["crates/starmap-resolve/src/process.rs", "crates/starmap-cli/src/git.rs", "crates/starmap-cli/src/run/child.rs"]
 checks = ["clippy disallowed_methods and disallowed_types (clippy.toml), which refuse `Command::new`, its runs and `Child` outside an `#[expect]` that gives its reason"]
-note = "starmap reads PROC-1 as one module that starts processes in each crate. starmap-resolve's process.rs runs `op read` and `op inject`, and starmap-cli's git.rs runs `git rev-parse`, `git ls-tree` and `git cat-file` for `starmap diff`. starmap-cli's run/child.rs builds the command of the program that `starmap run` starts, and crumbkit-child starts and waits for it."
+note = "starmap reads PROC-1 as one module that starts processes in each crate. starmap-resolve's process.rs runs `op read` and `op inject`, and `/usr/bin/getconf DARWIN_USER_TEMP_DIR` for the `agent` feature on macOS, and starmap-cli's git.rs runs `git rev-parse`, `git ls-tree` and `git cat-file` for `starmap diff`. starmap-cli's run/child.rs builds the command of the program that `starmap run` starts, and crumbkit-child starts and waits for it."
 
 [[decision]]
 id = "lanes"

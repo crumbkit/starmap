@@ -28,10 +28,27 @@ zeroize = { workspace = true, optional = true }
 # generator of its own.
 getrandom = { version = "0.4.3", default-features = false, optional = true }
 
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+# nix reads the current user's uid and the uid of the process behind the
+# agent's socket (getpeereid on macOS, SO_PEERCRED on Linux), and connects
+# to the socket without blocking past a deadline, all without unsafe code,
+# for the `agent` feature. `user` gives the uid calls, `socket` the socket
+# calls, `poll` the wait for a connection and `fs` the close-on-exec flag.
+nix = { version = "0.31.3", default-features = false, features = ["user", "socket", "poll", "fs"], optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# landlock asks the running kernel whether its Landlock can deny a
+# sandboxed app the agent's socket. Without that right the `agent` feature
+# leaves the agent off.
+landlock = { version = "0.4.7", optional = true }
+
 [dev-dependencies]
 # `std` gives the strategies that generate strings from a regular
 # expression, which the expand property uses.
 proptest = { workspace = true, features = ["std"] }
+# tempfile gives each agent test a private directory short enough for a
+# socket path.
+tempfile.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # security-framework is the maintained binding of Apple's Security
@@ -53,6 +70,9 @@ base64 = { version = "0.23.1", default-features = false, features = ["alloc"], o
 # one-password reads secrets through the 1Password CLI's `op inject` and
 # `op read`.
 one-password = ["dep:zeroize", "dep:getrandom"]
+# agent finds the per-user agent's socket, on macOS and Linux. It builds
+# on `one-password`, whose resolver reads what the agent does not hold.
+agent = ["one-password", "dep:nix", "dep:landlock"]
 # keychain creates, reads and forgets generated secrets in the macOS Keychain.
 keychain = ["dep:security-framework", "dep:core-foundation", "dep:base64", "dep:zeroize"]
 

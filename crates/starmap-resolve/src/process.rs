@@ -1,6 +1,8 @@
 //! The one module of starmap-resolve that starts a process (PROC-1). Its
 //! operations are [`op_read`], which reads one secret with the 1Password
-//! CLI, and [`op_inject`], which reads several with one run of it.
+//! CLI, [`op_inject`], which reads several with one run of it, and, for the
+//! `agent` feature on macOS, `getconf_user_temp_dir`, which asks macOS for
+//! the person's own temporary directory.
 
 use std::io::{self, Read, Write};
 use std::path::Path;
@@ -134,6 +136,50 @@ pub(crate) fn op_inject(
         limit,
         deadline,
     )
+}
+
+/// The program that prints a configuration value of macOS. Its path is
+/// absolute, so no `PATH` chooses another program.
+#[cfg(all(feature = "agent", target_os = "macos"))]
+const GETCONF: &str = "/usr/bin/getconf";
+
+/// The most bytes of standard output that `getconf` may print: one path.
+#[cfg(all(feature = "agent", target_os = "macos"))]
+const GETCONF_OUTPUT_LIMIT: usize = 4 * 1024;
+
+/// Runs `getconf DARWIN_USER_TEMP_DIR`, which prints the person's own
+/// temporary directory, such as `/var/folders/…/T/`, as
+/// `confstr(_CS_DARWIN_USER_TEMP_DIR)` returns it. It states the items of
+/// PROC-2 where they differ from [`op_read`].
+///
+/// - Program: `/usr/bin/getconf`, an absolute path to the program that
+///   macOS installs on its sealed system volume.
+/// - Arguments: `DARWIN_USER_TEMP_DIR` alone.
+/// - Environment: cleared. `getconf` reads no variable for this value, and
+///   so `TMPDIR` cannot change the answer.
+/// - Streams and deadline: standard input is empty. Standard output is
+///   kept up to 4 KiB, and standard error as for `op read`. `deadline` is
+///   the caller's, a few seconds.
+/// - End: as for `op read`. `getconf` writes no file, so a stopped run
+///   leaves nothing behind.
+///
+/// # Errors
+///
+/// Returns the errors of [`op_read`].
+#[cfg(all(feature = "agent", target_os = "macos"))]
+pub(crate) fn getconf_user_temp_dir(deadline: Instant) -> io::Result<OpRun> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "PROC-1: getconf_user_temp_dir is an operation that starts getconf"
+    )]
+    let mut command = Command::new(GETCONF);
+    command
+        .arg("DARWIN_USER_TEMP_DIR")
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    run(command, None, GETCONF_OUTPUT_LIMIT, deadline)
 }
 
 /// Starts `command`, writes `input` to its standard input when there is
