@@ -1,12 +1,13 @@
 # The release lane, which the map's `lanes` decision records. On each push to
 # main, release-plz opens or updates the release pull request, and publishes
 # to crates.io every version that crates.io does not have yet, after the
-# advisories check passes (BASE-29). release-plz.toml says which crates it
-# releases. Every job runs only in this repository, so a push to a fork's
-# main does nothing, and only while the repository variable RELEASE_ENABLED
-# is `true`, which the owner sets after publishing 0.1.0 by hand. No job uses
-# rust-cache, because a poisoned cache would reach the published crates, and
-# zizmor fails a release workflow that restores a cache.
+# advisories check passes (BASE-29). binaries.yml then attaches the
+# `starmap` binaries to the release's GitHub release. release-plz.toml says
+# which crates it releases. Every job runs only in this repository, so a push
+# to a fork's main does nothing, and only while the repository variable
+# RELEASE_ENABLED is `true`, which the owner sets after publishing 0.1.0 by
+# hand. No job uses rust-cache, because a poisoned cache would reach the
+# published crates, and zizmor fails a release workflow that restores a cache.
 name: Release
 
 on:
@@ -43,6 +44,8 @@ jobs:
     if: github.repository == 'crumbkit/starmap' && vars.RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     # crates.io trusted publishing accepts a token request only from this
     # repository, this workflow file and this environment.
     environment: crates-io
@@ -59,13 +62,34 @@ jobs:
       # rustup installs the toolchain that rust-toolchain.toml pins, and
       # cargo publish builds each crate with it.
       - run: rustup toolchain install
-      - uses: release-plz/action@7ef5e4d4b0420630cfcaeb182c01e13651d4c577 # v0.5.145
+      - id: release-plz
+        uses: release-plz/action@7ef5e4d4b0420630cfcaeb182c01e13651d4c577 # v0.5.145
         with:
           command: release
           # The release-plz version is pinned (BASE-26).
           version: 0.4.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      # The tag that release-plz pushed for the starmap crate, or nothing
+      # when this push released nothing.
+      - id: tag
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          tag=$(jq -r '.[]? | select(.package_name == "starmap") | .tag' <<< "${RELEASES:-[]}")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  # This job builds the binaries of the release that publish created and
+  # attaches them to it. GitHub starts no workflow for the tag that publish
+  # pushed with the job's own token, so this job calls binaries.yml.
+  binaries:
+    needs: publish
+    if: needs.publish.outputs.tag != ''
+    permissions:
+      contents: write # binaries.yml uploads the archives to the release.
+    uses: $/.github/workflows/binaries.yml
+    with:
+      tag: ${{ needs.publish.outputs.tag }}
 
   # This job opens or updates the release pull request, which sets the next
   # version, moves the changelog's entries under its heading and reports
