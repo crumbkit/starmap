@@ -39,7 +39,7 @@ pub struct Agent {
 #[derive(Default)]
 struct Prepared {
     /// The agent's values of each reference, one for each lookup it hit.
-    hits: HashMap<String, Vec<Secret<String>>>,
+    hits: HashMap<String, Vec<Secret>>,
     /// The generation of the Get, when the agent answered it.
     generation: Option<Generation>,
     /// The references the agent missed, which are put once read.
@@ -145,11 +145,7 @@ impl Resolver for Agent {
     ///
     /// Returns the errors of [`OnePassword`]'s `resolve`. A failure of the
     /// agent is never one, and [`Agent::warnings`] returns it.
-    fn resolve(
-        &self,
-        lookup: Lookup<'_>,
-        deadline: Instant,
-    ) -> Result<Secret<String>, SecretError> {
+    fn resolve(&self, lookup: Lookup<'_>, deadline: Instant) -> Result<Secret, SecretError> {
         let Some(reference) = marked(&lookup) else {
             return self.one_password.resolve(lookup, deadline);
         };

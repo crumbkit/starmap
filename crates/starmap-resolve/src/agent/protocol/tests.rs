@@ -39,7 +39,7 @@ fn texts(response: Response) -> (Generation, Vec<Option<String>>) {
     };
     let values = values
         .iter()
-        .map(|value| value.as_ref().map(|value| value.expose().clone()))
+        .map(|value| value.as_ref().map(|value| value.expose().to_owned()))
         .collect();
     (generation, values)
 }

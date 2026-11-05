@@ -40,10 +40,9 @@ pub struct ModeRule {
 
 impl ModeRule {
     /// Builds the rule that selects production when `variable` holds one of
-    /// the `production` values. The spec parser checks that the variable is
-    /// declared and that it is a setting or inherited variable.
+    /// the `production` values.
     #[must_use]
-    pub fn new(variable: Name, production: Choices) -> Self {
+    pub(crate) fn new(variable: Name, production: Choices) -> Self {
         Self {
             variable,
             production,

@@ -5,9 +5,9 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 
 use proptest::prelude::*;
-use starmap::{PathTemplate, Placeholder};
+use starmap::{NoPlace, PathTemplate, Placeholder};
 
-use super::{AppName, Places, WorkspaceName, expand, names_of};
+use super::{AppName, Places, WorkspaceName, expand};
 
 /// Returns the template `text`.
 fn template(text: &str) -> PathTemplate {
@@ -48,7 +48,7 @@ fn expand_returns_a_template_without_placeholders_unchanged() {
 fn expand_names_the_first_placeholder_that_has_no_place() {
     let places = Places::new(PathBuf::from("/checkout"));
     let path = expand(&template("{checkout}/{home}/{workspace}"), &places);
-    assert_eq!(path, Err(Placeholder::Home));
+    assert_eq!(path, Err(NoPlace(Placeholder::Home)));
 }
 
 #[test]
@@ -129,16 +129,16 @@ proptest! {
             .map(|piece| match piece {
                 Piece::Text(text) => Ok(text.as_str()),
                 Piece::Place(placeholder) if has(*placeholder) => Ok(dir(*placeholder)),
-                Piece::Place(placeholder) => Err(*placeholder),
+                Piece::Place(placeholder) => Err(NoPlace(*placeholder)),
             })
-            .collect::<Result<String, Placeholder>>()
+            .collect::<Result<String, NoPlace>>()
             .map(PathBuf::from);
         prop_assert_eq!(expand(&template(&text), &places), expected);
     }
 }
 
 #[test]
-fn names_of_a_directory_fit_the_name_rule() {
+fn the_app_name_of_a_directory_fits_the_name_rule() {
     let cases = [
         ("/src/shelf", "shelf"),
         ("/src/My_App", "my-app"),
@@ -146,9 +146,9 @@ fn names_of_a_directory_fit_the_name_rule() {
         ("/", "app"),
     ];
     for (dir, expected) in cases {
-        let (workspace, app) = names_of(std::path::Path::new(dir));
-        assert_eq!(workspace.as_str(), expected, "{dir}");
+        let app = AppName::of_dir(std::path::Path::new(dir));
         assert_eq!(app.as_str(), expected, "{dir}");
+        assert_eq!(WorkspaceName::from(&app).as_str(), expected, "{dir}");
         assert!(expected.parse::<WorkspaceName>().is_ok(), "{dir}");
     }
 }

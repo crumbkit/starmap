@@ -3,12 +3,11 @@
 use std::fmt;
 
 use secrecy::{ExposeSecret as _, SecretBox};
-use zeroize::Zeroize;
 
 #[cfg(test)]
 mod tests;
 
-/// A value that is never shown, such as a token. Its `Debug` prints
+/// A text value that is never shown, such as a token. Its `Debug` prints
 /// `Secret(••••••••)` whatever the value, and its memory is zeroed when it
 /// is dropped.
 ///
@@ -33,12 +32,14 @@ mod tests;
 /// let secret = starmap::Secret::new("hunter2".to_owned());
 /// let text = format!("{secret}");
 /// ```
-pub struct Secret<T: Zeroize>(SecretBox<T>);
+pub struct Secret(SecretBox<String>);
 
-impl<T: Zeroize> Secret<T> {
+impl Secret {
     /// Holds `value` as a secret.
     #[must_use]
-    pub fn new(value: T) -> Self {
+    pub fn new(value: String) -> Self {
+        // The String moves into the box as it is, so no shorter copy
+        // reallocates it and leaves its old bytes unzeroed.
         Self(SecretBox::new(Box::new(value)))
     }
 
@@ -49,25 +50,30 @@ impl<T: Zeroize> Secret<T> {
         clippy::disallowed_methods,
         reason = "BASE-24: Secret is the crate's one wrapper of secrecy"
     )]
-    pub fn expose(&self) -> &T {
-        self.0.expose_secret()
+    pub fn expose(&self) -> &str {
+        self.0.expose_secret().as_str()
     }
-}
 
-impl<T: Zeroize + Clone> Secret<T> {
     /// Returns a second secret that holds a copy of the value, without the
-    /// value passing through any other type.
+    /// value passing through any other type. It is the one way to copy a
+    /// secret: `Secret` has no `Clone`, so a copy is a deliberate call.
+    ///
+    /// ```
+    /// let secret = starmap::Secret::new(String::from("token"));
+    /// let copy = secret.duplicate();
+    /// assert_eq!(format!("{copy:?}"), "Secret(••••••••)");
+    /// ```
     #[must_use]
     #[expect(
         clippy::disallowed_methods,
         reason = "BASE-24: the copy goes straight into a new Secret"
     )]
-    pub(crate) fn duplicate(&self) -> Self {
+    pub fn duplicate(&self) -> Self {
         Self::new(self.0.expose_secret().clone())
     }
 }
 
-impl<T: Zeroize> fmt::Debug for Secret<T> {
+impl fmt::Debug for Secret {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Eight dots whatever the value, so the text does not reveal the
         // value's length.

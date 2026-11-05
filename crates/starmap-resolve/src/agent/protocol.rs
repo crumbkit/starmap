@@ -62,7 +62,7 @@ pub(super) enum Expect {
 pub(super) enum Response {
     /// The generation and, in request order, each hit's value or `None`
     /// for a miss or a hit over the budget.
-    Hits(Generation, Vec<Option<Secret<String>>>),
+    Hits(Generation, Vec<Option<Secret>>),
     Stored,
 }
 
@@ -105,7 +105,7 @@ pub(super) fn get(
 pub(super) fn put(
     scope: &CacheScope,
     reference: &str,
-    value: &Secret<String>,
+    value: &Secret,
     generation: Generation,
 ) -> Result<Zeroizing<Vec<u8>>, AgentError> {
     #[expect(
@@ -233,7 +233,7 @@ fn hits(reader: &mut Reader<'_>, asked: usize) -> Result<Response, AgentError> {
 
 /// Returns `bytes` as a secret, or zeroes the copy and refuses it when it
 /// is not UTF-8.
-fn value(bytes: &[u8]) -> Result<Secret<String>, AgentError> {
+fn value(bytes: &[u8]) -> Result<Secret, AgentError> {
     match String::from_utf8(bytes.to_vec()) {
         Ok(text) => Ok(Secret::new(text)),
         Err(error) => {

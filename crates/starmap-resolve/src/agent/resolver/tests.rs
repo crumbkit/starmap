@@ -144,7 +144,7 @@ fn resolve_text(agent: &Agent, spec: &Spec, mode: Mode) -> String {
     else {
         panic!("{:?}", resolution.bindings);
     };
-    secret.expose().clone()
+    secret.expose().to_owned()
 }
 
 fn agent_of(fake: &FakeAgent, op: &Op) -> Agent {

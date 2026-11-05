@@ -17,7 +17,7 @@ pub(crate) trait Ask {
     /// Asks for the value of the secret `name` with hidden input. It
     /// returns `None` when the person typed nothing or the answer cannot
     /// be read.
-    fn secret(&mut self, name: &Name) -> Option<Secret<String>>;
+    fn secret(&mut self, name: &Name) -> Option<Secret>;
 
     /// Asks `question`, and returns whether the person answered yes.
     fn save(&mut self, question: &str) -> bool;
@@ -51,7 +51,7 @@ impl Ask for Terminal<'_> {
 
     /// rpassword writes the prompt to the terminal and reads the answer
     /// from it with echo turned off, so the value never shows on screen.
-    fn secret(&mut self, name: &Name) -> Option<Secret<String>> {
+    fn secret(&mut self, name: &Name) -> Option<Secret> {
         let prompt = format!("{name} has no bind and no saved value. Type it (input is hidden): ");
         let mut typed = Zeroizing::new(rpassword::prompt_password(prompt).ok()?);
         if typed.is_empty() {

@@ -11,7 +11,7 @@ struct Unsupported {
     #[starmap("SHELF_DATABASE")]
     database: Option<Vec<u8>>,
     #[starmap("SHELF_SESSION_KEY")]
-    session_key: starmap::Secret<Vec<u8>>,
+    session_key: Vec<starmap::Secret>,
 }
 
 fn main() {}

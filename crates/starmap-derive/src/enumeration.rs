@@ -23,17 +23,23 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
                 "starmap::Enumeration derives only for an enum of unit variants",
             ));
         }
-        let mut value = LitStr::new(
-            &kebab_case(&variant.ident.to_string()),
-            variant.ident.span(),
-        );
-        for attribute in variant
+        let mut attributes = variant
             .attrs
             .iter()
-            .filter(|attribute| attribute.path().is_ident("starmap"))
-        {
-            value = attribute.parse_args::<LitStr>()?;
-        }
+            .filter(|attribute| attribute.path().is_ident("starmap"));
+        let value = match (attributes.next(), attributes.next()) {
+            (None, _) => LitStr::new(
+                &kebab_case(&variant.ident.to_string()),
+                variant.ident.span(),
+            ),
+            (Some(attribute), None) => attribute.parse_args::<LitStr>()?,
+            (Some(_), Some(second)) => {
+                return Err(syn::Error::new_spanned(
+                    second,
+                    "each variant takes at most one #[starmap(\"value\")]",
+                ));
+            }
+        };
         let text = value.value();
         if text.is_empty() || text.chars().any(char::is_whitespace) {
             return Err(syn::Error::new(

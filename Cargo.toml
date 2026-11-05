@@ -43,9 +43,9 @@ sha2 = { version = "0.11.1", default-features = false }
 # be serialized.
 secrecy = "0.10.3"
 
-# zeroize names the trait that bounds `starmap::Secret<T>`: a type whose
-# memory a drop can zero. Its default `alloc` feature implements it for
-# `String`, the type a withheld value is read as.
+# zeroize zeroes the bytes of a withheld value that is not Unicode before
+# they are dropped. Its default `alloc` feature implements it for `Vec<u8>`
+# and `String`.
 zeroize = "1.9.1"
 
 # proptest checks the checking constructors and the forms against generated
