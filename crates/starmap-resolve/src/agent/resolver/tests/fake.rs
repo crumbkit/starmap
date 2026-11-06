@@ -3,7 +3,8 @@
 //! the tests check the client against a second reading of the protocol, and
 //! it records every request it receives. Its generation is an opaque token
 //! of 64 random bits, drawn when it starts and again on every clear, as the
-//! agent draws it.
+//! agent draws it. Its status reports an unlock at [`UNLOCKED_AT`] and a
+//! lapse 12 hours later while it holds a value.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -22,11 +23,13 @@ use crate::agent::AgentSocket;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Request {
     Get(Vec<String>),
+    /// One Put of each reference and value, in order.
     Put {
-        reference: String,
-        value: Vec<u8>,
+        values: Vec<(String, Vec<u8>)>,
         generation: u64,
     },
+    Clear,
+    Status,
 }
 
 #[derive(Default)]
@@ -43,7 +46,13 @@ struct State {
     /// The pause before each byte of an answer, for an agent that sends
     /// one byte at a time.
     trickle: Option<Duration>,
+    /// A key and value that the agent stores right after it answers the
+    /// next Get, as a second client's Put would.
+    after_get: Option<(String, Vec<u8>)>,
 }
+
+/// The Unix second at which the fake agent reports its unlock began.
+pub(crate) const UNLOCKED_AT: i64 = 1_800_000_000;
 
 /// Returns 64 random bits, a new generation.
 fn random() -> u64 {
@@ -121,6 +130,13 @@ impl FakeAgent {
             .unwrap()
             .values
             .insert(key, value.as_bytes().to_vec());
+    }
+
+    /// Holds `value` for `reference`, as [`FakeAgent::hold`] does, right
+    /// after the agent answers the next Get.
+    pub(crate) fn hold_after_next_get(&self, op: &Path, reference: &str, value: &str) {
+        let key = key("my", op.to_str().unwrap(), reference);
+        self.state.lock().unwrap().after_get = Some((key, value.as_bytes().to_vec()));
     }
 
     /// Answers every request with `body` from now on.
@@ -213,29 +229,69 @@ fn answer(body: &mut Body<'_>, state: &mut State) -> Vec<u8> {
                 }
             }
             state.requests.push(Request::Get(references));
+            if let Some((key, value)) = state.after_get.take() {
+                state.values.insert(key, value);
+            }
             answer
         }
         0x02 => {
-            let (account, op, reference) = (body.text(), body.text(), body.text());
+            let (account, op) = (body.text(), body.text());
             let generation = u64::from_be_bytes(body.take(8).try_into().unwrap());
-            let length = u32::from_be_bytes(body.take(4).try_into().unwrap());
-            let value = body.take(usize::try_from(length).unwrap()).to_vec();
+            let count = usize::from(body.u16());
+            let values: Vec<(String, Vec<u8>)> = (0..count)
+                .map(|_| {
+                    let reference = body.text();
+                    let length = u32::from_be_bytes(body.take(4).try_into().unwrap());
+                    (
+                        reference,
+                        body.take(usize::try_from(length).unwrap()).to_vec(),
+                    )
+                })
+                .collect();
             state.requests.push(Request::Put {
-                reference: reference.clone(),
-                value: value.clone(),
+                values: values.clone(),
                 generation,
             });
-            let key = key(&account, &op, &reference);
             if generation != state.generation {
                 return refused("starmap::agent::stale_generation");
             }
-            match state.values.entry(key) {
-                Entry::Occupied(_) => refused("starmap::agent::exists"),
-                Entry::Vacant(entry) => {
-                    entry.insert(value);
-                    vec![1, 0x82]
+            let mut answer = vec![1, 0x82];
+            answer.extend_from_slice(&u16::try_from(count).unwrap().to_be_bytes());
+            for (reference, value) in values {
+                match state.values.entry(key(&account, &op, &reference)) {
+                    Entry::Occupied(_) => answer.push(1),
+                    Entry::Vacant(entry) => {
+                        entry.insert(value);
+                        answer.push(0);
+                    }
                 }
             }
+            answer
+        }
+        0x03 => {
+            state.requests.push(Request::Clear);
+            let dropped = u32::try_from(state.values.len()).unwrap();
+            state.values.clear();
+            state.generation = random();
+            let mut answer = vec![1, 0x83];
+            answer.extend_from_slice(&dropped.to_be_bytes());
+            answer
+        }
+        0x04 => {
+            state.requests.push(Request::Status);
+            let held = u32::try_from(state.values.len()).unwrap();
+            let (unlocked, lapses) = if held == 0 {
+                (0, 0)
+            } else {
+                (UNLOCKED_AT, UNLOCKED_AT + 12 * 3600)
+            };
+            let mut answer = vec![1, 0x84];
+            answer.extend_from_slice(&state.generation.to_be_bytes());
+            answer.extend_from_slice(&held.to_be_bytes());
+            answer.extend_from_slice(&std::process::id().to_be_bytes());
+            answer.extend_from_slice(&i64::to_be_bytes(unlocked));
+            answer.extend_from_slice(&i64::to_be_bytes(lapses));
+            answer
         }
         kind => panic!("the fake agent got a request of kind {kind}"),
     }
