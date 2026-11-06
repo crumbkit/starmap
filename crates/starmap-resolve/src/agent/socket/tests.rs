@@ -125,3 +125,72 @@ fn on_macos_the_socket_lies_in_the_users_own_temporary_directory() {
     assert!(path.starts_with("/var/folders/"), "{path}");
     assert!(path.ends_with("/T/starmap-agent/agent.sock"), "{path}");
 }
+
+#[test]
+fn a_socket_at_a_path_in_a_directory_of_mode_0700_is_accepted() {
+    let parent = parent();
+    let path = parent.path().join("agent.sock");
+    let socket = AgentSocket::at(path.clone()).unwrap();
+    assert_eq!(socket.path(), path);
+    assert!(socket.check_directory().is_ok());
+}
+
+#[test]
+fn a_socket_at_a_path_whose_directory_group_or_others_can_open_is_unsafe() {
+    let parent = parent();
+    for mode in [0o755, 0o770, 0o750, 0o701] {
+        chmod(parent.path(), mode);
+        assert_eq!(
+            code(AgentSocket::at(parent.path().join("agent.sock"))),
+            "starmap::agent::unsafe_directory",
+            "{mode:o}"
+        );
+    }
+}
+
+#[test]
+fn a_socket_at_a_path_whose_directory_is_a_symbolic_link_is_unsafe() {
+    let parent = parent();
+    let real = parent.path().join("real");
+    DirBuilder::new().mode(0o700).create(&real).unwrap();
+    let link = parent.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    assert_eq!(
+        code(AgentSocket::at(link.join("agent.sock"))),
+        "starmap::agent::unsafe_directory"
+    );
+    assert!(AgentSocket::at(real.join("agent.sock")).is_ok());
+}
+
+#[test]
+fn a_socket_at_a_path_with_no_directory_or_a_missing_one_is_unsafe() {
+    let parent = parent();
+    assert_eq!(
+        code(AgentSocket::at("agent.sock".into())),
+        "starmap::agent::unsafe_directory"
+    );
+    assert_eq!(
+        code(AgentSocket::at(parent.path().join("missing/agent.sock"))),
+        "starmap::agent::unsafe_directory"
+    );
+}
+
+#[test]
+fn a_socket_at_a_path_that_does_not_fit_in_sun_path_is_refused() {
+    let parent = parent();
+    assert_eq!(
+        code(AgentSocket::at(parent.path().join("x".repeat(110)))),
+        "starmap::agent::path_too_long"
+    );
+}
+
+#[test]
+fn the_directory_check_refuses_a_directory_opened_to_others_after_the_socket_was_found() {
+    let parent = parent();
+    let socket = AgentSocket::at(parent.path().join("agent.sock")).unwrap();
+    chmod(parent.path(), 0o755);
+    assert_eq!(
+        socket.check_directory().unwrap_err().code(),
+        "starmap::agent::unsafe_directory"
+    );
+}

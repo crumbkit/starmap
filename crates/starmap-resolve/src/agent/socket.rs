@@ -70,10 +70,41 @@ impl AgentSocket {
         Self::in_parent(&user_parent(uid)?, uid)
     }
 
+    /// Returns the socket at `path`, such as one that `--socket` names.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AgentError::PathTooLong`] when the path does not fit in
+    /// `sun_path`, and [`AgentError::UnsafeDirectory`] when its parent is
+    /// not a real directory that the current user owns with mode 0700, the
+    /// mode that keeps other users from connecting.
+    pub fn at(path: PathBuf) -> Result<Self, AgentError> {
+        let socket = Self::fitted(path)?;
+        socket.check_directory()?;
+        Ok(socket)
+    }
+
     /// Returns the socket's path.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Checks again that the socket's parent is a real directory that the
+    /// current user owns with mode 0700. The agent calls it right before it
+    /// binds, so a directory changed since the socket was found is refused.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AgentError::UnsafeDirectory`] when the parent fails the
+    /// check.
+    pub fn check_directory(&self) -> Result<(), AgentError> {
+        let parent = self
+            .path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .ok_or_else(|| AgentError::UnsafeDirectory(self.path.clone()))?;
+        check_directory(parent, nix::unistd::getuid().as_raw())
     }
 
     /// Returns the socket in `parent/starmap-agent/` for `uid`, after the

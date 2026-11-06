@@ -8,15 +8,15 @@ mod fake;
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use starmap::{Bound, Mode, Secret, Spec};
 
 use super::Agent;
-use crate::agent::{AgentClient, AgentError, CacheScope, Generation};
+use crate::agent::{AgentClient, AgentError, AgentStarter, CacheScope, Generation, PutOutcome};
 use crate::{Context, Places, resolve};
 
-use fake::{FakeAgent, Request, private_directory, program};
+use fake::{FakeAgent, Request, UNLOCKED_AT, private_directory, program};
 
 /// The reference that every test reads.
 const REFERENCE: &str = "op://Personal/shelf mirror/token";
@@ -207,8 +207,7 @@ fn a_miss_is_read_from_op_and_then_put_with_the_generation_of_the_get() {
         [
             Request::Get(vec![REFERENCE.to_owned()]),
             Request::Put {
-                reference: REFERENCE.to_owned(),
-                value: op.canary.as_bytes().to_vec(),
+                values: vec![(REFERENCE.to_owned(), op.canary.as_bytes().to_vec())],
                 generation: fake.generation(),
             },
         ]
@@ -217,6 +216,117 @@ fn a_miss_is_read_from_op_and_then_put_with_the_generation_of_the_get() {
     assert_eq!(resolve_text(&agent, &spec(""), Mode::Local), op.canary);
     assert_eq!(op.runs(), 1);
     assert!(agent.warnings().is_empty());
+}
+
+/// The references of [`spec_of_three`].
+const THREE: [&str; 3] = [
+    "op://Personal/shelf mirror/token",
+    "op://Personal/shelf mirror/password",
+    "op://Personal/catalogue key/credential",
+];
+
+/// Returns the spec of three secret variables, `A`, `B` and `C`, bound to
+/// the references of [`THREE`].
+fn spec_of_three() -> Spec {
+    let mut text = String::new();
+    for (name, reference) in ["A", "B", "C"].iter().zip(THREE) {
+        text.push_str(&format!(
+            r#"
+[variables.{name}]
+purpose = "A secret of the test."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+bind = {{ one-password = "{reference}" }}
+"#
+        ));
+    }
+    Spec::parse(&text).unwrap()
+}
+
+/// Resolves `spec` in local mode with `agent`, and checks that every
+/// variable is bound.
+fn resolve_all(agent: &Agent, spec: &Spec) {
+    let caller = starmap::Bindings::new();
+    let context = Context::new(
+        Places::new(PathBuf::from("/checkout")),
+        &caller,
+        Instant::now() + PATIENT,
+    )
+    .resolver(agent);
+    let resolution = resolve(spec, Mode::Local, &context);
+    assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
+}
+
+#[test]
+fn a_resolution_with_several_misses_puts_them_all_with_one_put() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    let agent = agent_of(&fake, &op);
+    resolve_all(&agent, &spec_of_three());
+    let requests = fake.requests();
+    assert_eq!(requests.len(), 2, "{requests:?}");
+    let Request::Put { values, generation } = &requests[1] else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(*generation, fake.generation());
+    let mut references: Vec<&str> = values.iter().map(|(r, _)| r.as_str()).collect();
+    references.sort_unstable();
+    let mut expected = THREE.to_vec();
+    expected.sort_unstable();
+    assert_eq!(references, expected);
+    assert!(
+        values
+            .iter()
+            .all(|(_, value)| value == op.canary.as_bytes())
+    );
+    assert!(agent.warnings().is_empty());
+    // The second resolution hits every reference, so it sends one Get and
+    // no Put, and op runs no more.
+    let runs = op.runs();
+    resolve_all(&agent, &spec_of_three());
+    assert_eq!(fake.requests().len(), 3);
+    assert!(matches!(fake.requests()[2], Request::Get(_)));
+    assert_eq!(op.runs(), runs);
+    assert!(agent.warnings().is_empty());
+}
+
+#[test]
+fn a_put_of_a_value_the_agent_already_holds_is_not_a_warning() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    // Another client stores the reference between this resolution's Get
+    // and its Put.
+    fake.hold_after_next_get(&op.program, REFERENCE, "first");
+    let agent = agent_of(&fake, &op);
+    assert_eq!(resolve_text(&agent, &spec(""), Mode::Local), op.canary);
+    assert!(matches!(fake.requests()[1], Request::Put { .. }));
+    assert!(agent.warnings().is_empty());
+    assert_eq!(resolve_text(&agent, &spec(""), Mode::Local), "first");
+}
+
+#[test]
+fn the_client_reports_each_value_of_a_put_as_stored_or_already_held() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    let client = AgentClient::new(fake.socket.clone());
+    let (one, two) = (REFERENCE.parse().unwrap(), THREE[1].parse().unwrap());
+    let generation = client
+        .get(&op.scope(), &[&one], later())
+        .unwrap()
+        .generation();
+    let value = Secret::new("first".to_owned());
+    let outcomes = client
+        .put(&op.scope(), &[(&one, &value)], generation, later())
+        .unwrap();
+    assert_eq!(outcomes, [PutOutcome::Stored]);
+    let outcomes = client
+        .put(
+            &op.scope(),
+            &[(&one, &value), (&two, &value)],
+            generation,
+            later(),
+        )
+        .unwrap();
+    assert_eq!(outcomes, [PutOutcome::AlreadyHeld, PutOutcome::Stored]);
 }
 
 /// Returns a deadline far enough away for a test.
@@ -234,21 +344,18 @@ fn a_put_from_before_a_clear_is_refused_and_one_after_it_is_stored() {
         .get(&op.scope(), &[&reference], later())
         .unwrap()
         .generation();
-    fake.clear();
+    assert_eq!(client.clear(later()).unwrap(), 0);
     let stale = client
-        .put(&op.scope(), &reference, &value, before, later())
+        .put(&op.scope(), &[(&reference, &value)], before, later())
         .unwrap_err();
     assert_eq!(stale.code(), "starmap::agent::stale_generation");
     let after = client.get(&op.scope(), &[&reference], later()).unwrap();
     assert_eq!(after.generation(), Generation(fake.generation()));
     let after = after.generation();
-    client
-        .put(&op.scope(), &reference, &value, after, later())
+    let stored = client
+        .put(&op.scope(), &[(&reference, &value)], after, later())
         .unwrap();
-    let exists = client
-        .put(&op.scope(), &reference, &value, after, later())
-        .unwrap_err();
-    assert_eq!(exists.code(), "starmap::agent::exists");
+    assert_eq!(stored, [PutOutcome::Stored]);
 }
 
 #[test]
@@ -265,7 +372,7 @@ fn a_put_across_a_restart_of_the_agent_is_refused() {
     // A new instance at the same socket draws a generation of its own.
     first.clear();
     let stale = client
-        .put(&op.scope(), &reference, &value, before, later())
+        .put(&op.scope(), &[(&reference, &value)], before, later())
         .unwrap_err();
     assert_eq!(stale.code(), "starmap::agent::stale_generation");
     // The Get after the restart returns the new instance's generation, and
@@ -275,9 +382,65 @@ fn a_put_across_a_restart_of_the_agent_is_refused() {
         .unwrap()
         .generation();
     assert_ne!(after, before);
-    client
-        .put(&op.scope(), &reference, &value, after, later())
+    let stored = client
+        .put(&op.scope(), &[(&reference, &value)], after, later())
         .unwrap();
+    assert_eq!(stored, [PutOutcome::Stored]);
+}
+
+#[test]
+fn a_put_of_no_values_sends_nothing() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    let client = AgentClient::new(fake.socket.clone());
+    let outcomes = client
+        .put(&op.scope(), &[], Generation(fake.generation()), later())
+        .unwrap();
+    assert!(outcomes.is_empty());
+    assert_eq!(fake.requests(), []);
+}
+
+#[test]
+fn a_clear_drops_every_value_and_returns_how_many() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    fake.hold(&op.program, REFERENCE, "held value");
+    fake.hold(&op.program, THREE[1], "held value");
+    let client = AgentClient::new(fake.socket.clone());
+    assert_eq!(client.clear(later()).unwrap(), 2);
+    assert_eq!(fake.requests(), [Request::Clear]);
+    let agent = agent_of(&fake, &op);
+    assert_eq!(resolve_text(&agent, &spec(""), Mode::Local), op.canary);
+}
+
+#[test]
+fn a_status_returns_the_agents_generation_values_pid_and_times() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    let client = AgentClient::new(fake.socket.clone());
+    let empty = client.status(later()).unwrap().unwrap();
+    assert_eq!(empty.generation(), Generation(fake.generation()));
+    assert_eq!(empty.values(), 0);
+    assert_eq!(empty.pid(), std::process::id());
+    assert_eq!((empty.unlocked_at(), empty.lapses_at()), (None, None));
+    fake.hold(&op.program, REFERENCE, "held value");
+    let full = client.status(later()).unwrap().unwrap();
+    let unlocked = UNIX_EPOCH + Duration::from_secs(UNLOCKED_AT.unsigned_abs());
+    assert_eq!(full.values(), 1);
+    assert_eq!(full.unlocked_at(), Some(unlocked));
+    assert_eq!(
+        full.lapses_at(),
+        Some(unlocked + Duration::from_secs(12 * 3600))
+    );
+    assert_eq!(fake.requests(), [Request::Status, Request::Status]);
+}
+
+#[test]
+fn a_status_with_no_agent_is_none_and_a_clear_is_not_running() {
+    let (socket, _directory) = FakeAgent::absent();
+    let client = AgentClient::new(socket);
+    assert!(client.status(later()).unwrap().is_none());
+    assert_eq!(
+        client.clear(later()).unwrap_err().code(),
+        "starmap::agent::not_running"
+    );
 }
 
 #[test]
@@ -425,10 +588,10 @@ fn the_canary_never_appears_in_argv_env_files_or_warnings() {
     let agent = agent_of(&fake, &op);
     resolve_text(&agent, &spec(""), Mode::Local);
     // The positive control: the canary did travel to the agent.
-    let Request::Put { value, .. } = &fake.requests()[1] else {
+    let Request::Put { values, .. } = &fake.requests()[1] else {
         panic!("{:?}", fake.requests());
     };
-    assert_eq!(value, op.canary.as_bytes());
+    assert_eq!(values[0].1, op.canary.as_bytes());
     op.assert_absent("op's arguments", &op.file("args"));
     op.assert_absent("op's environment", &op.file("env"));
     for entry in fs::read_dir(op.directory.path()).unwrap() {
@@ -450,4 +613,125 @@ fn the_canary_never_appears_in_argv_env_files_or_warnings() {
             warnings.iter().map(ToString::to_string).collect::<String>()
         ),
     );
+}
+
+/// A fake `starmap` in a directory of its own, a POSIX `sh` script that
+/// records its arguments in `args` and its environment in `env`, then
+/// creates `done`. It uses only the shell's own commands and programs by
+/// absolute path, because the starter gives it no `PATH`.
+struct Starmap {
+    program: PathBuf,
+    directory: tempfile::TempDir,
+}
+
+impl Starmap {
+    fn new() -> Self {
+        let directory = private_directory();
+        let program = program(
+            directory.path(),
+            "starmap",
+            r#"printf '%s\n' "$@" > '{dir}/args'
+/usr/bin/env > '{dir}/env'
+: > '{dir}/done'"#,
+        );
+        Self { program, directory }
+    }
+
+    fn file(&self, name: &str) -> String {
+        fs::read_to_string(self.directory.path().join(name)).unwrap_or_default()
+    }
+
+    /// Waits until the script has run to its end, for at most 10 seconds.
+    fn wait_until_done(&self) {
+        let done = self.directory.path().join("done");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !done.exists() {
+            assert!(Instant::now() < deadline, "the fake starmap never ran");
+            #[expect(
+                clippy::disallowed_methods,
+                reason = "the test waits for a process it cannot be signalled by"
+            )]
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+}
+
+#[test]
+fn with_no_agent_and_a_starter_resolution_reads_from_op_and_starts_the_agent_with_a_cleared_environment()
+ {
+    let op = Op::new();
+    let starmap = Starmap::new();
+    let (socket, _directory) = FakeAgent::absent();
+    let starter = AgentStarter::new(
+        starmap.program.clone(),
+        [
+            ("HOME", "/home/luke"),
+            ("USER", "luke"),
+            ("LOGNAME", "luke"),
+            ("LANG", "en_GB.UTF-8"),
+            ("XDG_STATE_HOME", "/home/luke/.local/state"),
+            ("STARMAP_AGENT_LAPSE", "8h"),
+            ("STARMAP_TEST_CANARY", "canary"),
+            ("OP_ACCOUNT", "my"),
+            ("PATH", "/usr/bin:/bin"),
+        ],
+    );
+    let agent = Agent::new(AgentClient::new(socket.clone()), op.scope()).starter(starter);
+    assert_eq!(resolve_text(&agent, &spec(""), Mode::Local), op.canary);
+    assert_eq!(codes(&agent.warnings()), ["starmap::agent::not_running"]);
+    starmap.wait_until_done();
+    let args: Vec<String> = starmap.file("args").lines().map(str::to_owned).collect();
+    assert_eq!(
+        args,
+        [
+            "agent",
+            "start",
+            "--socket",
+            socket.path().to_str().unwrap()
+        ]
+    );
+    let env = starmap.file("env");
+    for line in [
+        "HOME=/home/luke",
+        "USER=luke",
+        "LOGNAME=luke",
+        "LANG=en_GB.UTF-8",
+        "XDG_STATE_HOME=/home/luke/.local/state",
+        "STARMAP_AGENT_LAPSE=8h",
+    ] {
+        assert!(env.lines().any(|kept| kept == line), "{line} in {env}");
+    }
+    for name in ["STARMAP_TEST_CANARY=", "OP_ACCOUNT=", "PATH=/usr/bin:/bin"] {
+        assert!(
+            !env.lines().any(|line| line.starts_with(name)),
+            "{name} in {env}"
+        );
+    }
+}
+
+#[test]
+fn a_starter_whose_program_cannot_start_warns_start_failed() {
+    let op = Op::new();
+    let (socket, directory) = FakeAgent::absent();
+    let starter = AgentStarter::new(directory.path().join("missing"), [("HOME", "/home/luke")]);
+    let agent = Agent::new(AgentClient::new(socket), op.scope()).starter(starter);
+    assert_eq!(resolve_text(&agent, &spec(""), Mode::Local), op.canary);
+    assert_eq!(
+        codes(&agent.warnings()),
+        [
+            "starmap::agent::not_running",
+            "starmap::agent::start_failed"
+        ]
+    );
+}
+
+#[test]
+fn a_running_agent_is_never_started_again() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    let starmap = Starmap::new();
+    let starter = AgentStarter::new(starmap.program.clone(), [("HOME", "/home/luke")]);
+    let agent = agent_of(&fake, &op).starter(starter);
+    resolve_text(&agent, &spec(""), Mode::Local);
+    assert!(agent.warnings().is_empty());
+    assert!(!starmap.directory.path().join("args").exists());
 }
