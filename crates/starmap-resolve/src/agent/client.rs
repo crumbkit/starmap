@@ -212,10 +212,13 @@ fn connect(path: &Path, deadline: Instant) -> Result<UnixStream, AgentError> {
     Ok(stream)
 }
 
-/// Returns the error of a failed connect. Linux answers EAGAIN when the
-/// listening agent's backlog is full, so that agent is running and busy,
-/// and the resolver must not start a second one. Every other failure reads
-/// as [`AgentError::NotRunning`], because no agent could be reached.
+/// Returns the error of a failed connect. On Linux a connect fails with
+/// EAGAIN when the listening agent's backlog is full, so that agent is
+/// running and busy, and the resolver must not start a second one. macOS
+/// fails the same connect with ECONNREFUSED, which reads as not running,
+/// so on macOS the agent's own lock on `agent.lock` is what stops a second
+/// agent. Every other failure reads as [`AgentError::NotRunning`], because
+/// no agent could be reached.
 fn connect_error(errno: Errno) -> AgentError {
     match errno {
         Errno::EAGAIN => AgentError::Busy,

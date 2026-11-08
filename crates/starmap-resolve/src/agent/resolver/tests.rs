@@ -12,9 +12,9 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use starmap::{Bound, Mode, Secret, Spec};
 
-use super::Agent;
+use super::{Agent, lock};
 use crate::agent::{AgentClient, AgentError, AgentStarter, CacheScope, Generation, PutOutcome};
-use crate::{Context, Places, resolve};
+use crate::{Context, Lookup, Places, Resolver, SecretError, resolve};
 
 use fake::{FakeAgent, Request, UNLOCKED_AT, private_directory, program};
 
@@ -327,6 +327,152 @@ fn the_client_reports_each_value_of_a_put_as_stored_or_already_held() {
         )
         .unwrap();
     assert_eq!(outcomes, [PutOutcome::AlreadyHeld, PutOutcome::Stored]);
+}
+
+/// The awk program that plays `op inject` for [`SizedOp`]. It replaces each
+/// `{{ op://… }}` of the template with as many `x` as the reference's last
+/// part says.
+const SIZED_INJECT_AWK: &str = r#"{
+    rest = $0
+    while (match(rest, /[{][{] op:[^}]* [}][}]/)) {
+        reference = substr(rest, RSTART + 3, RLENGTH - 6)
+        n = split(reference, parts, "/")
+        value = sprintf("%" parts[n] "s", "")
+        gsub(/ /, "x", value)
+        printf "%s%s", substr(rest, 1, RSTART - 1), value
+        rest = substr(rest, RSTART + RLENGTH)
+    }
+    printf "%s", rest
+}"#;
+
+/// A fake `op` in a directory of its own that answers `op inject` with a
+/// value for each reference, as long as the reference's last part says.
+struct SizedOp {
+    program: PathBuf,
+    _directory: tempfile::TempDir,
+}
+
+impl SizedOp {
+    fn new() -> Self {
+        let directory = private_directory();
+        let program = program(directory.path(), "op", "LC_ALL=C awk -f '{dir}/inject.awk'");
+        fs::write(directory.path().join("inject.awk"), SIZED_INJECT_AWK).unwrap();
+        Self {
+            program,
+            _directory: directory,
+        }
+    }
+
+    fn scope(&self) -> CacheScope {
+        CacheScope::new(self.program.clone(), [("OP_ACCOUNT", "my")]).unwrap()
+    }
+}
+
+/// Returns the reference of variable `index` whose value is `size` bytes
+/// long under [`SizedOp`].
+fn sized_reference(index: usize, size: usize) -> String {
+    format!("op://Personal/item{index}/{size}")
+}
+
+/// Returns the spec of one secret variable for each of `sizes`, bound to
+/// its [`sized_reference`].
+fn spec_of_sizes(sizes: &[usize]) -> Spec {
+    let mut text = String::new();
+    for (index, size) in sizes.iter().enumerate() {
+        let reference = sized_reference(index, *size);
+        text.push_str(&format!(
+            r#"
+[variables.V{index}]
+purpose = "A secret of the test."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+bind = {{ one-password = "{reference}" }}
+"#
+        ));
+    }
+    Spec::parse(&text).unwrap()
+}
+
+#[test]
+fn a_value_over_64_kib_is_not_put_and_the_small_value_read_with_it_is_stored() {
+    let (fake, op) = (FakeAgent::start(), SizedOp::new());
+    let client = AgentClient::new(fake.socket.clone());
+    let agent = Agent::new(client.clone(), op.scope());
+    resolve_all(&agent, &spec_of_sizes(&[70 * 1024, 5]));
+    assert!(agent.warnings().is_empty());
+    let small = sized_reference(1, 5);
+    let requests = fake.requests();
+    assert_eq!(requests.len(), 2, "{} requests", requests.len());
+    let Request::Put { values, .. } = &requests[1] else {
+        panic!("the second request is not a Put");
+    };
+    assert_eq!(*values, [(small.clone(), b"xxxxx".to_vec())]);
+    let reference = small.parse().unwrap();
+    let held = client.get(&op.scope(), &[&reference], later()).unwrap();
+    assert!(held.into_values()[0].is_some());
+}
+
+#[test]
+fn values_too_large_for_one_frame_are_put_with_as_many_puts_as_they_need() {
+    let (fake, op) = (FakeAgent::start(), SizedOp::new());
+    let agent = Agent::new(AgentClient::new(fake.socket.clone()), op.scope());
+    let sizes = [60 * 1024; 20];
+    resolve_all(&agent, &spec_of_sizes(&sizes));
+    assert!(agent.warnings().is_empty());
+    let requests = fake.requests();
+    assert!(matches!(requests[0], Request::Get(_)));
+    let mut references: Vec<String> = Vec::new();
+    for request in &requests[1..] {
+        let Request::Put { values, generation } = request else {
+            panic!("a request after the Get is not a Put");
+        };
+        assert_eq!(*generation, fake.generation());
+        references.extend(values.iter().map(|(reference, _)| reference.clone()));
+    }
+    assert_eq!(requests.len(), 3, "{} requests", requests.len());
+    references.sort_unstable();
+    let mut expected: Vec<String> = (0..20).map(|i| sized_reference(i, 60 * 1024)).collect();
+    expected.sort_unstable();
+    assert_eq!(references, expected);
+}
+
+/// A resolver that runs an [`Agent`] and moves its deadline to now just
+/// before its `finish`, as a resolution that used up its time would.
+struct OutOfTime<'a>(&'a Agent);
+
+impl Resolver for OutOfTime<'_> {
+    fn prepare(&self, lookups: &[Lookup<'_>], deadline: Instant) {
+        self.0.prepare(lookups, deadline);
+    }
+
+    fn finish(&self) {
+        let thread = std::thread::current().id();
+        lock(&self.0.prepared).get_mut(&thread).unwrap().deadline = Instant::now();
+        self.0.finish();
+    }
+
+    fn resolve(&self, lookup: Lookup<'_>, deadline: Instant) -> Result<Secret, SecretError> {
+        self.0.resolve(lookup, deadline)
+    }
+}
+
+#[test]
+fn finish_sends_no_put_once_the_deadline_has_passed_and_sends_one_before_it() {
+    let (fake, op) = (FakeAgent::start(), Op::new());
+    let agent = agent_of(&fake, &op);
+    let caller = starmap::Bindings::new();
+    let late = OutOfTime(&agent);
+    let context =
+        Context::new(Places::new(PathBuf::from("/checkout")), &caller, later()).resolver(&late);
+    let resolution = resolve(&spec(""), Mode::Local, &context);
+    assert!(resolution.failures.is_empty(), "{:?}", resolution.failures);
+    assert_eq!(fake.requests(), [Request::Get(vec![REFERENCE.to_owned()])]);
+    assert!(agent.warnings().is_empty());
+    resolve_text(&agent, &spec(""), Mode::Local);
+    assert_eq!(fake.requests().len(), 3);
+    assert!(matches!(fake.requests()[2], Request::Put { .. }));
 }
 
 /// Returns a deadline far enough away for a test.

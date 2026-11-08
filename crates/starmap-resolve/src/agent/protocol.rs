@@ -1,8 +1,10 @@
 //! The agent's wire protocol, version 1, with both halves: the client's
 //! requests and its parser of the agent's answers, and the agent's parser
-//! of requests and its answers. starmap's agent parses requests with
-//! [`request`] and writes each answer with [`hits`], [`stored`],
-//! [`cleared`], [`status_answer`] or [`refused`].
+//! of requests and its answers. The agent's half is behind the
+//! `agent-server` feature and hidden from these docs, because its Hits
+//! writer reads every value it sends (BASE-24). starmap's agent crate
+//! parses requests with `request` and writes each answer with `hits`,
+//! `stored`, `cleared`, `status_answer` or `refused`.
 //!
 //! Each connection carries one request and one answer, then closes. Every
 //! frame is a 4-byte big-endian length, at most [`FRAME_LIMIT`] bytes, and
@@ -26,8 +28,8 @@
 //! The agent accepts Clear with any version byte, so a client of any
 //! version can clear an agent of any version. A Hits carries at most
 //! [`BUDGET`] bytes of values in all. Once the next hit would pass the
-//! budget, [`hits`] sends it and every later hit as over budget, and the
-//! client reads those from `op` as it reads a miss.
+//! budget, the agent's `hits` writer sends it and every later hit as over
+//! budget, and the client reads those from `op` as it reads a miss.
 //!
 //! Both parsers apply the same rules. A count over 256 is refused before
 //! anything is allocated for it. Every length is checked against the
@@ -51,10 +53,11 @@
 //! never compares or increases a generation; it only echoes it.
 
 use std::io::{self, Read as _, Write as _};
+use std::mem;
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use starmap::Secret;
+use starmap::{OnePasswordRef, Secret};
 use zeroize::Zeroizing;
 
 use super::{AgentError, AgentStatus, CacheScope, Generation, PutOutcome};
@@ -102,9 +105,10 @@ pub const BUDGET: usize = 512 * 1024;
 /// end. Each wait is also cut to the time left before the deadline.
 const WAIT_LIMIT: Duration = Duration::from_secs(2);
 
-/// A request that [`request`] parsed.
+/// A request that `request` parsed.
+#[cfg(feature = "agent-server")]
+#[doc(hidden)]
 #[derive(Debug)]
-#[non_exhaustive]
 pub enum Request {
     /// Asks for the value of each of `references` in the scope of
     /// `account` and the `op` program at `op`.
@@ -207,13 +211,13 @@ pub(super) fn put(
         return Err(AgentError::TooManyReferences);
     }
     let op = op_text(scope)?;
-    let mut size = text_size(scope.account()) + text_size(op) + 8 + 2;
+    let mut size = put_head_size(scope)?;
     for (reference, value) in values {
-        let value = exposed(value);
-        if value.len() > VALUE_LIMIT {
+        let bytes = exposed(value).len();
+        if bytes > VALUE_LIMIT {
             return Err(malformed("a value is over 64 KiB"));
         }
-        size += text_size(reference) + 4 + value.len();
+        size += put_entry_size(reference, bytes);
     }
     let mut frame = Frame::new(PUT, size)?;
     frame.text(scope.account())?;
@@ -225,6 +229,54 @@ pub(super) fn put(
         frame.value(exposed(value));
     }
     Ok(frame.0)
+}
+
+/// Returns `values` in groups in their order, each of which one Put can
+/// carry: its frame is within [`FRAME_LIMIT`] and it holds at most
+/// [`REFERENCE_LIMIT`] values. A value over [`VALUE_LIMIT`] is left out,
+/// because the agent would refuse any Put that holds it. No group is empty,
+/// so values that are all over the limit return no group.
+///
+/// # Errors
+///
+/// Returns [`AgentError::Protocol`] for an `op` path that is not UTF-8.
+pub(super) fn put_groups<'a>(
+    scope: &CacheScope,
+    values: &[(&'a OnePasswordRef, &'a Secret)],
+) -> Result<Vec<Vec<(&'a OnePasswordRef, &'a Secret)>>, AgentError> {
+    let head = put_head_size(scope)?;
+    let mut groups = Vec::new();
+    let mut group = Vec::new();
+    let mut size = head;
+    for &(reference, value) in values {
+        let bytes = exposed(value).len();
+        if bytes > VALUE_LIMIT {
+            continue;
+        }
+        let entry = put_entry_size(reference.as_str(), bytes);
+        if group.len() == REFERENCE_LIMIT || (!group.is_empty() && size + entry + 2 > FRAME_LIMIT) {
+            groups.push(mem::take(&mut group));
+            size = head;
+        }
+        size += entry;
+        group.push((reference, value));
+    }
+    if !group.is_empty() {
+        groups.push(group);
+    }
+    Ok(groups)
+}
+
+/// Returns the bytes that the fields of a Put in `scope` take before its
+/// first value.
+fn put_head_size(scope: &CacheScope) -> Result<usize, AgentError> {
+    Ok(text_size(scope.account()) + text_size(op_text(scope)?) + 8 + 2)
+}
+
+/// Returns the bytes that a Put's entry of `reference` and a value of
+/// `value` bytes takes.
+fn put_entry_size(reference: &str, value: usize) -> usize {
+    text_size(reference) + 4 + value
 }
 
 /// Returns the frame of a Clear.
@@ -247,6 +299,8 @@ pub(super) fn status() -> Zeroizing<Vec<u8>> {
 ///
 /// Returns [`AgentError::TooManyReferences`] for more than 256 values,
 /// because no Get asks for more.
+#[cfg(feature = "agent-server")]
+#[doc(hidden)]
 pub fn hits(
     generation: Generation,
     values: &[Option<&Secret>],
@@ -294,6 +348,8 @@ pub fn hits(
 ///
 /// Returns [`AgentError::TooManyReferences`] for more than 256 outcomes,
 /// because no Put holds more.
+#[cfg(feature = "agent-server")]
+#[doc(hidden)]
 pub fn stored(outcomes: &[PutOutcome]) -> Result<Zeroizing<Vec<u8>>, AgentError> {
     if outcomes.len() > REFERENCE_LIMIT {
         return Err(AgentError::TooManyReferences);
@@ -310,6 +366,8 @@ pub fn stored(outcomes: &[PutOutcome]) -> Result<Zeroizing<Vec<u8>>, AgentError>
 }
 
 /// Returns the frame of a Cleared that dropped `values` values.
+#[cfg(feature = "agent-server")]
+#[doc(hidden)]
 #[must_use]
 pub fn cleared(values: u32) -> Zeroizing<Vec<u8>> {
     let mut frame = Frame::fixed(CLEARED, 4);
@@ -318,6 +376,8 @@ pub fn cleared(values: u32) -> Zeroizing<Vec<u8>> {
 }
 
 /// Returns the frame of the agent's answer to a Status request.
+#[cfg(feature = "agent-server")]
+#[doc(hidden)]
 #[must_use]
 pub fn status_answer(status: &AgentStatus) -> Zeroizing<Vec<u8>> {
     let mut frame = Frame::fixed(STATUS_ANSWER, 8 + 4 + 4 + 8 + 8);
@@ -332,6 +392,8 @@ pub fn status_answer(status: &AgentStatus) -> Zeroizing<Vec<u8>> {
 /// Returns the frame of a refusal with the code of `error`. The frame
 /// carries the code alone, so no message, reference or value reaches the
 /// client.
+#[cfg(feature = "agent-server")]
+#[doc(hidden)]
 #[must_use]
 pub fn refused(error: &AgentError) -> Zeroizing<Vec<u8>> {
     let code = error.code();
@@ -366,6 +428,7 @@ fn text_size(text: &str) -> usize {
 
 /// Returns `time` in whole Unix seconds, or 0 for `None`. A time before
 /// 1970 is negative.
+#[cfg(feature = "agent-server")]
 fn unix_seconds(time: Option<SystemTime>) -> i64 {
     match time.map(|time| time.duration_since(UNIX_EPOCH)) {
         None => 0,
@@ -447,6 +510,8 @@ impl Frame {
 /// Returns [`AgentError::TooManyReferences`] for a Get or a Put of more
 /// than 256 references, and [`AgentError::Protocol`] for any other broken
 /// rule, an unknown kind, or an unknown version on anything but Clear.
+#[cfg(feature = "agent-server")]
+#[doc(hidden)]
 pub fn request(body: &[u8]) -> Result<Request, AgentError> {
     let mut reader = Reader(body);
     let version = reader.u8()?;
@@ -625,6 +690,7 @@ impl<'a> Reader<'a> {
 
     /// Takes a request's `u16` count of references, refused over 256
     /// before anything is allocated for it.
+    #[cfg(feature = "agent-server")]
     fn count(&mut self) -> Result<usize, AgentError> {
         let count = usize::from(self.u16()?);
         if count > REFERENCE_LIMIT {
@@ -640,6 +706,7 @@ impl<'a> Reader<'a> {
     }
 
     /// Takes a text and returns it as an owned string.
+    #[cfg(feature = "agent-server")]
     fn owned_text(&mut self) -> Result<String, AgentError> {
         self.text().map(str::to_owned)
     }

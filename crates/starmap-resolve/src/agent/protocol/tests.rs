@@ -1,14 +1,20 @@
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
+#[cfg(feature = "agent-server")]
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use starmap::Secret;
+use starmap::{OnePasswordRef, Secret};
 
 use super::{
-    Expect, FRAME_LIMIT, Request, Response, cleared, get, hits, put, read_frame, refused, request,
-    response, status_answer, stored, write_frame,
+    Expect, FRAME_LIMIT, Response, VALUE_LIMIT, get, put, put_groups, read_frame, response,
+    write_frame,
 };
-use crate::agent::{AgentError, AgentStatus, CacheScope, Generation, PutOutcome};
+#[cfg(feature = "agent-server")]
+use super::{Request, cleared, hits, refused, request, status_answer, stored};
+use crate::agent::{AgentError, CacheScope, Generation};
+#[cfg(feature = "agent-server")]
+use crate::agent::{AgentStatus, PutOutcome};
 
 fn scope() -> CacheScope {
     CacheScope::new(PathBuf::from("/opt/op"), [("OP_ACCOUNT", "my")]).unwrap()
@@ -165,6 +171,80 @@ fn a_put_whose_values_pass_the_frame_limit_is_refused() {
     assert!(put(&scope(), &values[..15], Generation(0)).is_ok());
 }
 
+/// Returns `count` copies of the reference `op://a/b/c`, each paired with
+/// `value`, as the splitter takes them.
+fn group_input<'a>(
+    reference: &'a OnePasswordRef,
+    value: &'a Secret,
+    count: usize,
+) -> Vec<(&'a OnePasswordRef, &'a Secret)> {
+    vec![(reference, value); count]
+}
+
+/// Returns the reference text and value of each entry of `group`, as
+/// `put` takes them.
+fn put_entries<'a>(group: &[(&'a OnePasswordRef, &'a Secret)]) -> Vec<(&'a str, &'a Secret)> {
+    group
+        .iter()
+        .map(|(reference, value)| (reference.as_str(), *value))
+        .collect()
+}
+
+#[test]
+fn values_are_split_so_no_put_holds_more_than_256() {
+    let reference: OnePasswordRef = "op://a/b/c".parse().unwrap();
+    let value = secret("v");
+    let groups = put_groups(&scope(), &group_input(&reference, &value, 300)).unwrap();
+    assert_eq!(groups.iter().map(Vec::len).collect::<Vec<_>>(), [256, 44]);
+    for group in &groups {
+        assert!(put(&scope(), &put_entries(group), Generation(0)).is_ok());
+    }
+    let groups = put_groups(&scope(), &group_input(&reference, &value, 256)).unwrap();
+    assert_eq!(groups.iter().map(Vec::len).collect::<Vec<_>>(), [256]);
+}
+
+#[test]
+fn values_that_fill_a_frame_exactly_stay_in_one_put_and_one_more_byte_starts_another() {
+    let reference: OnePasswordRef = "op://a/b/c".parse().unwrap();
+    let large = secret(std::str::from_utf8(large_bytes()).unwrap());
+    // The body holds the version and kind, the account, the op path, the
+    // generation and the count, then each entry's reference, length and
+    // value.
+    let head = 2 + (2 + "my".len()) + (2 + "/opt/op".len()) + 8 + 2;
+    let entry = 2 + reference.as_str().len() + 4;
+    let filling = FRAME_LIMIT - head - 15 * (entry + VALUE_LIMIT) - entry;
+    let fits = secret(&"y".repeat(filling));
+    let over = secret(&"y".repeat(filling + 1));
+    let values = |last: &'_ Secret| -> usize {
+        let mut values = group_input(&reference, &large, 15);
+        values.push((&reference, last));
+        let groups = put_groups(&scope(), &values).unwrap();
+        for group in &groups {
+            assert!(put(&scope(), &put_entries(group), Generation(0)).is_ok());
+        }
+        groups.len()
+    };
+    assert_eq!(values(&fits), 1);
+    assert_eq!(values(&over), 2);
+}
+
+#[test]
+fn a_value_over_64_kib_is_left_out_of_every_put_and_no_group_is_empty() {
+    let reference: OnePasswordRef = "op://a/b/c".parse().unwrap();
+    let limit = secret(std::str::from_utf8(large_bytes()).unwrap());
+    let over = secret(&"x".repeat(VALUE_LIMIT + 1));
+    let groups = put_groups(&scope(), &[(&reference, &over), (&reference, &limit)]).unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].len(), 1);
+    assert_eq!(text(groups[0][0].1).len(), VALUE_LIMIT);
+    assert!(
+        put_groups(&scope(), &[(&reference, &over)])
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_parses_a_get_that_the_client_wrote() {
     let frame = get(&scope(), &["op://a/b/c", "op://d/e/f"]).unwrap();
@@ -180,6 +260,7 @@ fn the_agent_parses_a_get_that_the_client_wrote() {
     assert_eq!(references, ["op://a/b/c", "op://d/e/f"]);
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_parses_a_put_that_the_client_wrote() {
     let (one, two) = (secret("v4lue"), secret("é"));
@@ -213,6 +294,7 @@ fn the_agent_parses_a_put_that_the_client_wrote() {
     );
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_refuses_a_put_of_no_values_and_one_of_257_before_reading_any() {
     assert_eq!(code(request(&put_body(0, &[]))), "starmap::agent::protocol");
@@ -225,6 +307,7 @@ fn the_agent_refuses_a_put_of_no_values_and_one_of_257_before_reading_any() {
     assert!(request(&put_body(1, &[("op://a/b/c", b"v")])).is_ok());
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_refuses_a_put_value_over_64_kib_before_reading_it() {
     let mut body = put_body(1, &[]);
@@ -236,6 +319,33 @@ fn the_agent_refuses_a_put_value_over_64_kib_before_reading_it() {
     assert!(refused.to_string().contains("over 64 KiB"), "{refused}");
 }
 
+#[cfg(feature = "agent-server")]
+#[test]
+fn the_agent_refuses_an_account_op_path_or_reference_that_is_not_utf8() {
+    let scoped = |account: &[u8], op: &[u8], reference: &[u8]| {
+        let mut body = vec![1, 0x01];
+        for text in [account, op] {
+            body.extend_from_slice(&u16::try_from(text.len()).unwrap().to_be_bytes());
+            body.extend_from_slice(text);
+        }
+        body.extend_from_slice(&[0, 1]);
+        body.extend_from_slice(&u16::try_from(reference.len()).unwrap().to_be_bytes());
+        body.extend_from_slice(reference);
+        body
+    };
+    for body in [
+        scoped(b"\xFF", b"/opt/op", b"op://a/b/c"),
+        scoped(b"my", b"/opt/\xFF", b"op://a/b/c"),
+        scoped(b"my", b"/opt/op", b"op://a/\xFF/c"),
+    ] {
+        let refused = request(&body).unwrap_err();
+        assert_eq!(refused.code(), "starmap::agent::protocol");
+        assert!(refused.to_string().contains("not UTF-8"), "{refused}");
+    }
+    assert!(request(&scoped(b"my", b"/opt/op", b"op://a/b/c")).is_ok());
+}
+
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_refuses_a_put_value_that_is_not_utf8() {
     assert_eq!(
@@ -244,6 +354,7 @@ fn the_agent_refuses_a_put_value_that_is_not_utf8() {
     );
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_refuses_a_get_of_257_references_before_reading_any() {
     let mut body = vec![1, 0x01, 0, 0, 0, 0];
@@ -251,6 +362,7 @@ fn the_agent_refuses_a_get_of_257_references_before_reading_any() {
     assert_eq!(code(request(&body)), "starmap::agent::too_many_references");
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_refuses_a_request_with_bytes_after_its_last_field() {
     let frame = get(&scope(), &["op://a/b/c"]).unwrap();
@@ -261,6 +373,7 @@ fn the_agent_refuses_a_request_with_bytes_after_its_last_field() {
     assert_eq!(code(request(&[1, 0x04, 0])), "starmap::agent::protocol");
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_accepts_a_clear_of_any_version_and_refuses_other_kinds_of_another_version() {
     assert!(matches!(request(&[9, 0x03]), Ok(Request::Clear)));
@@ -272,6 +385,7 @@ fn the_agent_accepts_a_clear_of_any_version_and_refuses_other_kinds_of_another_v
     assert_eq!(code(request(&body)), "starmap::agent::protocol");
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_agent_refuses_an_unknown_kind_and_an_empty_body() {
     assert_eq!(code(request(&[1, 0x05])), "starmap::agent::protocol");
@@ -290,6 +404,11 @@ fn a_hits_returns_each_hit_in_request_order_and_misses_and_over_budget_as_none()
     );
 }
 
+#[cfg(feature = "agent-server")]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "BASE-24: the test checks the frames that the Hits writer builds"
+)]
 #[test]
 fn the_client_reads_the_hits_that_the_agent_wrote() {
     let (one, two) = (secret("one"), secret("two"));
@@ -303,6 +422,11 @@ fn the_client_reads_the_hits_that_the_agent_wrote() {
     );
 }
 
+#[cfg(feature = "agent-server")]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "BASE-24: the test checks the frames that the Hits writer builds"
+)]
 #[test]
 fn the_hits_writer_sends_every_hit_after_the_first_over_budget_as_over_budget() {
     let large = secret(&"x".repeat(64 * 1024));
@@ -319,6 +443,11 @@ fn the_hits_writer_sends_every_hit_after_the_first_over_budget_as_over_budget() 
     assert_eq!(body(&frame), hits_body(1, &expected));
 }
 
+#[cfg(feature = "agent-server")]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "BASE-24: the test checks the frames that the Hits writer builds"
+)]
 #[test]
 fn the_hits_writer_refuses_more_than_256_entries() {
     assert_eq!(
@@ -429,6 +558,7 @@ fn an_answer_of_another_kind_than_the_request_is_refused() {
     );
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_client_reads_the_stored_outcomes_that_the_agent_wrote() {
     let frame = stored(&[PutOutcome::Stored, PutOutcome::AlreadyHeld]).unwrap();
@@ -438,6 +568,7 @@ fn the_client_reads_the_stored_outcomes_that_the_agent_wrote() {
     assert_eq!(outcomes, [PutOutcome::Stored, PutOutcome::AlreadyHeld]);
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn a_stored_with_another_count_than_the_put_is_refused() {
     let frame = stored(&[PutOutcome::Stored]).unwrap();
@@ -456,6 +587,7 @@ fn a_stored_outcome_byte_of_2_is_refused_and_1_is_admitted() {
     assert!(response(&[1, 0x82, 0, 1, 1], Expect::Stored(1)).is_ok());
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_client_reads_the_count_of_a_cleared_that_the_agent_wrote() {
     let frame = cleared(3);
@@ -465,6 +597,7 @@ fn the_client_reads_the_count_of_a_cleared_that_the_agent_wrote() {
     ));
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn the_client_reads_the_status_that_the_agent_wrote() {
     let unlocked = UNIX_EPOCH + Duration::from_secs(1_800_000_000);
@@ -480,6 +613,7 @@ fn the_client_reads_the_status_that_the_agent_wrote() {
     }
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn a_status_time_keeps_only_whole_seconds() {
     let unlocked = UNIX_EPOCH + Duration::from_millis(1_800_000_000_500);
@@ -494,11 +628,11 @@ fn a_status_time_keeps_only_whole_seconds() {
     );
 }
 
+#[cfg(feature = "agent-server")]
 #[test]
 fn a_refusal_that_the_agent_wrote_returns_the_error_of_its_code() {
     for error in [
         AgentError::PeerRefused,
-        AgentError::Exists,
         AgentError::StaleGeneration,
         AgentError::Busy,
         AgentError::TooManyReferences,
@@ -528,7 +662,7 @@ fn a_refusal_with_an_unknown_code_is_a_protocol_error_that_keeps_no_text() {
 fn a_frame_written_on_one_end_is_read_whole_on_the_other() {
     let (mut one, mut two) = UnixStream::pair().unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
-    write_frame(&mut one, &cleared(2), deadline).unwrap();
+    write_frame(&mut one, &[0, 0, 0, 6, 1, 0x83, 0, 0, 0, 2], deadline).unwrap();
     let read = read_frame(&mut two, deadline).unwrap();
     assert_eq!(*read, [1, 0x83, 0, 0, 0, 2]);
     assert_eq!(read.capacity(), read.len());

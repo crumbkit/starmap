@@ -73,6 +73,10 @@ one-password = ["dep:zeroize", "dep:getrandom"]
 # agent finds the per-user agent's socket, on macOS and Linux. It builds
 # on `one-password`, whose resolver reads what the agent does not hold.
 agent = ["one-password", "dep:nix", "dep:landlock"]
+# agent-server adds the agent's half of the wire protocol: the request
+# parser and the writers of its answers. Only starmap's agent crate turns it
+# on, because the Hits writer reads each value it sends (BASE-24).
+agent-server = ["agent"]
 # keychain creates, reads and forgets generated secrets in the macOS Keychain.
 keychain = ["dep:security-framework", "dep:core-foundation", "dep:base64", "dep:zeroize"]
 

@@ -15,9 +15,9 @@
 //! program a cache entry belongs to, and [`AgentClient`] sends one request
 //! per connection. [`AgentStarter`] starts an agent when none answers.
 //!
-//! [`protocol`] is the wire protocol, both the client's half and the
-//! agent's, so the agent's own crate parses requests and writes answers
-//! with the same code.
+//! [`protocol`] is the wire protocol. It holds the client's half, and
+//! behind the `agent-server` feature the agent's half, so the agent's own
+//! crate parses requests and writes answers with the same code.
 //!
 //! The feature builds on macOS and Linux only.
 
@@ -256,8 +256,6 @@ pub enum AgentError {
     /// The agent's answer was malformed or did not arrive in time, as
     /// given.
     Protocol(String),
-    /// A Put named a key the agent already holds.
-    Exists,
     /// A Put carried a generation from before the agent's latest clear or
     /// restart.
     StaleGeneration,
@@ -282,7 +280,6 @@ impl AgentError {
             Self::PeerRefused => "starmap::agent::peer_refused",
             Self::ServerUntrusted => "starmap::agent::server_untrusted",
             Self::Protocol(_) => "starmap::agent::protocol",
-            Self::Exists => "starmap::agent::exists",
             Self::StaleGeneration => "starmap::agent::stale_generation",
             Self::Busy => "starmap::agent::busy",
             Self::TooManyReferences => "starmap::agent::too_many_references",
@@ -299,7 +296,6 @@ impl AgentError {
                 Self::Protocol("the agent refused the request as malformed".to_owned())
             }
             "starmap::agent::peer_refused" => Self::PeerRefused,
-            "starmap::agent::exists" => Self::Exists,
             "starmap::agent::stale_generation" => Self::StaleGeneration,
             "starmap::agent::busy" => Self::Busy,
             "starmap::agent::too_many_references" => Self::TooManyReferences,
@@ -330,7 +326,6 @@ impl fmt::Display for AgentError {
                 formatter.write_str("the process behind the agent's socket runs as another user")
             }
             Self::Protocol(reason) => write!(formatter, "the agent's answer is unusable: {reason}"),
-            Self::Exists => formatter.write_str("the agent already holds this reference"),
             Self::StaleGeneration => {
                 formatter.write_str("the value was read before the agent's latest clear or restart")
             }

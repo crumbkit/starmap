@@ -203,8 +203,10 @@ const AGENT_START_OUTPUT_LIMIT: usize = 4 * 1024;
 /// for it and stops it at its deadline. It states the items of PROC-2
 /// where they differ from [`op_read`].
 ///
-/// - Program: `program`, the path of the starmap program that the host
-///   passed to `AgentStarter::new`.
+/// - Program: `program`, the path of the starmap program. The host
+///   supplies it through `AgentStarter::new`, and the operation does not
+///   check the file, so a process of the same user could replace that
+///   binary.
 /// - Arguments: `agent`, `start`, `--socket` and the socket's path, each a
 ///   separate value.
 /// - Environment: cleared, then `environment`, which `AgentStarter` keeps
@@ -219,6 +221,11 @@ const AGENT_START_OUTPUT_LIMIT: usize = 4 * 1024;
 ///   streams of its own, so both pipes close when `starmap agent start`
 ///   exits. The deadline is 10 seconds from the start, and the caller does
 ///   not wait for it.
+/// - Contract with the program: `starmap agent start` must exit once the
+///   agent answers, and must give the agent it launches null standard
+///   input, output and error, so the starter's pipes close when it exits.
+///   An agent that inherited a pipe would keep it open, and the waiting
+///   thread would wait until the deadline.
 /// - End: as for `op read`, on the waiting thread. The kill stops
 ///   `starmap agent start` only. The agent it started runs in a session of
 ///   its own and survives it, which is the point of starting it.

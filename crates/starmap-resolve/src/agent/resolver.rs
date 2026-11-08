@@ -1,5 +1,5 @@
 //! [`Agent`], the [`Resolver`] that reads hits from the agent, reads misses
-//! from `op`, and puts the misses back with one request.
+//! from `op`, and puts the misses back when the resolution ends.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use starmap::{OnePasswordRef, Secret, SecretRef};
 
-use super::{AgentClient, AgentError, AgentStarter, CacheScope, Generation};
+use super::{AgentClient, AgentError, AgentStarter, CacheScope, Generation, protocol};
 use crate::{Lookup, OnePassword, Resolver, SecretError};
 
 #[cfg(test)]
@@ -18,9 +18,10 @@ mod tests;
 /// A [`Resolver`] that asks the agent for each 1Password lookup that
 /// [`crate::resolve`] marked [`crate::Cacheable`], and reads every other
 /// lookup and every miss through [`OnePassword`], with one batched `op`
-/// call. When the resolution ends, it puts every miss it read into the
-/// agent with one Put, carrying the generation of the Get, so a value read
-/// before a clear never lands after it.
+/// call. When the resolution ends, it puts the misses it read into the
+/// agent, with one Put unless they pass one frame's limits, each Put
+/// carrying the generation of the Get, so a value read before a clear never
+/// lands after it.
 ///
 /// A lookup without the mark, such as one of a `cache = false` bind or
 /// one resolved in production mode, never reaches the socket. Every
@@ -176,17 +177,14 @@ impl Resolver for Agent {
         lock(&self.prepared).insert(thread::current().id(), prepared);
     }
 
-    /// Puts every miss that `resolve` read on this thread into the agent
-    /// with one Put, when the Get succeeded and the deadline has not
-    /// passed, then drops every value that `prepare` readied and `resolve`
-    /// did not take. A failed Put is a warning, and a value the agent
-    /// already holds is not.
-    ///
-    /// The Put carries every value in one frame of at most 1 MiB. Misses
-    /// whose values together pass that limit are put by no resolution, and
-    /// each resolution warns with `starmap::agent::protocol`; values of
-    /// that size are not secrets that a person types, so the limit stands
-    /// until such a value appears, and splitting the Put would replace it.
+    /// Puts the misses that `resolve` read on this thread into the agent,
+    /// when the Get succeeded, then drops every value that `prepare`
+    /// readied and `resolve` did not take. A value over 64 KiB is left out,
+    /// because the agent can never hold it. The rest go in one Put, or in
+    /// as many as it takes for each frame to fit within 1 MiB and hold at
+    /// most 256 values. No Put is sent once the deadline has passed. A
+    /// failed Put is a warning and ends the sending, and a value the agent
+    /// already holds is not a warning.
     fn finish(&self) {
         self.one_password.finish();
         let Some(prepared) = lock(&self.prepared).remove(&thread::current().id()) else {
@@ -195,19 +193,29 @@ impl Resolver for Agent {
         let Some(generation) = prepared.generation else {
             return;
         };
-        if prepared.read.is_empty() || Instant::now() >= prepared.deadline {
-            return;
-        }
         let values: Vec<(&OnePasswordRef, &Secret)> = prepared
             .read
             .iter()
             .map(|(reference, value)| (reference, value))
             .collect();
-        if let Err(error) = self
-            .client
-            .put(&self.scope, &values, generation, prepared.deadline)
-        {
-            self.warn(error);
+        let groups = match protocol::put_groups(&self.scope, &values) {
+            Ok(groups) => groups,
+            Err(error) => {
+                self.warn(error);
+                return;
+            }
+        };
+        for group in groups {
+            if Instant::now() >= prepared.deadline {
+                return;
+            }
+            if let Err(error) = self
+                .client
+                .put(&self.scope, &group, generation, prepared.deadline)
+            {
+                self.warn(error);
+                return;
+            }
         }
     }
 
