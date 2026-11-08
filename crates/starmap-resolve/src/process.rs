@@ -1,14 +1,19 @@
 //! The one module of starmap-resolve that starts a process (PROC-1). Its
 //! operations are [`op_read`], which reads one secret with the 1Password
 //! CLI, [`op_inject`], which reads several with one run of it, and, for the
-//! `agent` feature on macOS, `getconf_user_temp_dir`, which asks macOS for
-//! the person's own temporary directory.
+//! `agent` feature, `agent_start`, which starts starmap's agent, and on
+//! macOS `getconf_user_temp_dir`, which asks macOS for the person's own
+//! temporary directory.
 
+#[cfg(feature = "agent")]
+use std::ffi::OsString;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::process::{self, Command, ExitStatus, Stdio};
-use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
+#[cfg(feature = "agent")]
+use std::time::Duration;
 use std::time::Instant;
 
 use zeroize::Zeroizing;
@@ -182,65 +187,215 @@ pub(crate) fn getconf_user_temp_dir(deadline: Instant) -> io::Result<OpRun> {
     run(command, None, GETCONF_OUTPUT_LIMIT, deadline)
 }
 
+/// The longest that `starmap agent start` may run before the operation
+/// stops it.
+#[cfg(feature = "agent")]
+const AGENT_START_DEADLINE: Duration = Duration::from_secs(10);
+
+/// The most bytes of standard output that `starmap agent start` may print:
+/// its socket, process id and lapse.
+#[cfg(feature = "agent")]
+const AGENT_START_OUTPUT_LIMIT: usize = 4 * 1024;
+
+/// Starts `program agent start --socket <socket>`, which starts starmap's
+/// agent when none answers at `socket` and exits once one does, and returns
+/// once it is started, without waiting for it. A thread of its own waits
+/// for it and stops it at its deadline. It states the items of PROC-2
+/// where they differ from [`op_read`].
+///
+/// - Program: `program`, the path of the starmap program. The host
+///   supplies it through `AgentStarter::new`, and the operation does not
+///   check the file, so a process of the same user could replace that
+///   binary.
+/// - Arguments: `agent`, `start`, `--socket` and the socket's path, each a
+///   separate value.
+/// - Environment: cleared, then `environment`, which `AgentStarter` keeps
+///   to `HOME`, `USER`, `LOGNAME`, `LANG`, `XDG_STATE_HOME` and
+///   `STARMAP_AGENT_LAPSE`. The agent never runs `op`, so it needs no
+///   `OP_` variable and no `PATH`, and no credential in the host's
+///   environment reaches it.
+/// - Streams and deadline: standard input is empty. Standard output is
+///   kept up to 4 KiB and standard error as for `op read`, and both are
+///   dropped unread once it ends. The pipes are how the operation learns
+///   that `starmap agent start` has exited: the agent it starts gets empty
+///   streams of its own, so both pipes close when `starmap agent start`
+///   exits. The deadline is 10 seconds from the start, and the caller does
+///   not wait for it.
+/// - Contract with the program: `starmap agent start` must exit once the
+///   agent answers, and must give the agent it launches null standard
+///   input, output and error, so the starter's pipes close when it exits.
+///   An agent that inherited a pipe would keep it open, and the waiting
+///   thread would wait until the deadline.
+/// - End: as for `op read`, on the waiting thread. The kill stops
+///   `starmap agent start` only. The agent it started runs in a session of
+///   its own and survives it, which is the point of starting it.
+///
+/// # Errors
+///
+/// Returns the error of starting the program, of starting a reader thread,
+/// or of starting the waiting thread. Each stops the program first when
+/// it had started.
+#[cfg(feature = "agent")]
+pub(crate) fn agent_start(
+    program: &Path,
+    socket: &Path,
+    environment: &[(OsString, OsString)],
+) -> io::Result<()> {
+    let deadline = Instant::now() + AGENT_START_DEADLINE;
+    let running = match start(
+        agent_start_command(program, socket, environment),
+        None,
+        AGENT_START_OUTPUT_LIMIT,
+    )? {
+        Started::Running(running) => running,
+        Started::NotStarted(error) => return Err(error),
+    };
+    thread::Builder::new()
+        .name("starmap agent start".to_owned())
+        .spawn(move || {
+            // Nothing waits for the outcome: the next resolution finds
+            // the agent, or starts it again.
+            let _ = running.finish(deadline);
+        })?;
+    Ok(())
+}
+
+/// Returns the command of `starmap agent start`, which `agent_start`
+/// starts.
+#[cfg(feature = "agent")]
+fn agent_start_command(
+    program: &Path,
+    socket: &Path,
+    environment: &[(OsString, OsString)],
+) -> Command {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "PROC-1: agent_start is an operation that starts starmap agent start"
+    )]
+    let mut command = Command::new(program);
+    command
+        .args(["agent", "start", "--socket"])
+        .arg(socket)
+        .env_clear()
+        .envs(environment.iter().map(|(name, value)| (name, value)))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command
+}
+
 /// Starts `command`, writes `input` to its standard input when there is
 /// one, keeps up to `limit` bytes of its standard output, and stops it as
 /// [`op_read`] describes.
 fn run(
-    mut command: Command,
+    command: Command,
     input: Option<Vec<u8>>,
     limit: usize,
     deadline: Instant,
 ) -> io::Result<OpRun> {
+    match start(command, input, limit)? {
+        Started::Running(running) => running.finish(deadline),
+        Started::NotStarted(error) => Ok(OpRun::NotStarted(error)),
+    }
+}
+
+/// Whether [`start`] started its command.
+enum Started {
+    Running(Running),
+    /// The program could not be started.
+    NotStarted(io::Error),
+}
+
+/// A started child whose streams reader threads read. Dropping it stops
+/// and reaps the child, so no path leaves it running unwatched.
+struct Running {
+    #[expect(
+        clippy::disallowed_types,
+        reason = "PROC-1: Running owns its child, stops it and reaps it"
+    )]
+    child: process::Child,
+    receiver: Receiver<Stream>,
+    limit: usize,
+}
+
+/// Starts `command`, and the threads that read its output and error and
+/// write `input` to its standard input when there is one.
+///
+/// # Errors
+///
+/// Returns the error of starting a thread, after the child is stopped.
+fn start(mut command: Command, input: Option<Vec<u8>>, limit: usize) -> io::Result<Started> {
     #[expect(
         clippy::disallowed_methods,
-        reason = "PROC-1: run starts op for op_read and op_inject"
+        reason = "PROC-1: start starts the command of each operation of this module"
     )]
     let mut child = match command.spawn() {
         Ok(child) => child,
-        Err(error) => return Ok(OpRun::NotStarted(error)),
+        Err(error) => return Ok(Started::NotStarted(error)),
     };
     let (sender, receiver) = mpsc::channel();
     let (stdin, stdout, stderr) = (child.stdin.take(), child.stdout.take(), child.stderr.take());
-    let started = stdout
-        .map_or(Ok(()), |pipe| read_output(pipe, limit, sender.clone()))
-        .and_then(|()| stderr.map_or(Ok(()), |pipe| read_error(pipe, sender)))
-        .and_then(|()| match (stdin, input) {
-            (Some(pipe), Some(input)) => write_input(pipe, input),
-            _ => Ok(()),
-        });
-    if let Err(error) = started {
-        // The thread's error is the one reported, so a failure to stop the
-        // child adds nothing.
-        let _ = stop(&mut child);
-        return Err(error);
+    // From here a failure drops `running`, which stops the child.
+    let running = Running {
+        child,
+        receiver,
+        limit,
+    };
+    stdout.map_or(Ok(()), |pipe| read_output(pipe, limit, sender.clone()))?;
+    stderr.map_or(Ok(()), |pipe| read_error(pipe, sender))?;
+    if let (Some(pipe), Some(input)) = (stdin, input) {
+        write_input(pipe, input)?;
     }
-    let mut output = Zeroizing::new(Vec::new());
-    let mut error = Vec::new();
-    loop {
-        let left = deadline.saturating_duration_since(Instant::now());
-        match receiver.recv_timeout(left) {
-            Ok(Stream::Output(bytes)) if bytes.len() > limit => {
-                stop(&mut child)?;
-                return Ok(OpRun::TooLong);
+    Ok(Started::Running(running))
+}
+
+impl Running {
+    /// Waits until both streams close, the output passes its limit or
+    /// `deadline` passes, then stops and reaps the child and returns how it
+    /// ended.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error of waiting for the child.
+    fn finish(mut self, deadline: Instant) -> io::Result<OpRun> {
+        let mut output = Zeroizing::new(Vec::new());
+        let mut error = Vec::new();
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.receiver.recv_timeout(left) {
+                Ok(Stream::Output(bytes)) if bytes.len() > self.limit => {
+                    stop(&mut self.child)?;
+                    return Ok(OpRun::TooLong);
+                }
+                Ok(Stream::Output(bytes)) => output = bytes,
+                Ok(Stream::Error(bytes)) => error = bytes,
+                Err(RecvTimeoutError::Timeout) => {
+                    stop(&mut self.child)?;
+                    return Ok(OpRun::Deadline);
+                }
+                // Both readers have sent their stream.
+                Err(RecvTimeoutError::Disconnected) => break,
             }
-            Ok(Stream::Output(bytes)) => output = bytes,
-            Ok(Stream::Error(bytes)) => error = bytes,
-            Err(RecvTimeoutError::Timeout) => {
-                stop(&mut child)?;
-                return Ok(OpRun::Deadline);
-            }
-            // Both readers have sent their stream.
-            Err(RecvTimeoutError::Disconnected) => break,
+        }
+        let status = stop(&mut self.child)?;
+        if status.success() {
+            Ok(OpRun::Printed(output))
+        } else {
+            Ok(OpRun::Failed {
+                status,
+                message: String::from_utf8_lossy(&error).into_owned(),
+            })
         }
     }
-    let status = stop(&mut child)?;
-    if status.success() {
-        Ok(OpRun::Printed(output))
-    } else {
-        Ok(OpRun::Failed {
-            status,
-            message: String::from_utf8_lossy(&error).into_owned(),
-        })
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        // `finish` has already reaped a child that it stopped, and a
+        // second wait returns the status it kept, so this stops only a
+        // child that `finish` never saw. A failure here has no caller to
+        // report to.
+        let _ = stop(&mut self.child);
     }
 }
 

@@ -6,6 +6,18 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `AgentClient::put` takes a slice of
+  `(&OnePasswordRef, &Secret)` and sends all of them in one Put, and it
+  returns a `Vec<PutOutcome>` with the outcome of each value, in order.
+
+### Removed
+
+- **Breaking:** `AgentError::Exists` and the code `starmap::agent::exists`
+  are gone. A Put reports a value the agent already holds as
+  `PutOutcome::AlreadyHeld`.
+
 ## [0.1.0] - 2026-11-05
 
 ### Added

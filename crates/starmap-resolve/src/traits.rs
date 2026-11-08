@@ -86,8 +86,9 @@ pub trait Resolver {
 
     /// Drops every secret that [`Resolver::prepare`] readied and
     /// [`Resolver::resolve`] did not take, and forgets every failure it
-    /// recorded. [`crate::resolve`] calls it on each resolver when the
-    /// resolution ends. The default has nothing to drop.
+    /// recorded. Before it drops what it read, a resolver may hand it off,
+    /// such as storing it in a cache. [`crate::resolve`] calls it on each
+    /// resolver when the resolution ends. The default has nothing to drop.
     fn finish(&self) {}
 
     /// Returns the secret that `lookup` names. The resolver returns by
