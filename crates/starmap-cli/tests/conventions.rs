@@ -358,8 +358,8 @@ const TWINS: Twins<'_> = Twins::new(EXAMPLES, &[codes::ALL])
     .unprovoked(UNPROVOKED);
 
 /// Everything the checks read, which `conventions!` expands to one test for
-/// each check. The root verbs are crumbkit's own and `usage`, which
-/// `self usage` adds. The budgets of the `-h` pages are crumbkit's defaults.
+/// each check. `Suite::verbs` sets the verbs accepted under a resource, and
+/// `usage` is the one that `self usage` adds. The budgets of the `-h` pages are crumbkit's defaults.
 const SUITE: Suite<'_> = Suite::new(|| (Cli::command(), TOOL))
     .allow(ALLOW)
     .verbs(&["usage"])

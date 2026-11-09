@@ -8,9 +8,12 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- `starmap-cli` uses crumbkit 0.2. The JSON Schemas that `starmap schemas
-  show` prints for the `init` and `diff` documents describe an optional
-  `next` list of next steps, and the schemas of the other documents no
+- `starmap-cli` uses crumbkit 0.2. `starmap init --json` and `starmap init
+  --dry-run --json` now print a `next` list of next steps. `starmap commands
+  list --json --full` gives the root row a `goals` field. The JSON Schemas
+  that `starmap schemas show` prints for the `init` and `diff` documents
+  describe an optional `next` list, the schema of `commands list` gains
+  `goals` and `prints_no_result`, and the schemas of the other documents no
   longer say that a failure's code is in the tool's spelling.
 - **Breaking:** `AgentClient::put` takes a slice of
   `(&OnePasswordRef, &Secret)` and sends all of them in one Put, and it

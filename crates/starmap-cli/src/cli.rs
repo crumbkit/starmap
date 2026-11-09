@@ -42,8 +42,10 @@ pub struct Cli {
 /// examples. `init`, `check`, `explain`, `diff` and `run` sit directly under
 /// the root, because a person types `starmap check` as one step of their
 /// work.
-pub const TOOL: Tool = Tool::new().help(
-    Help::new()
+pub const TOOL: Tool = Tool::new().help(HELP).failures(FAILURES);
+
+/// The goal headings, root verbs and leaves of the `starmap` command.
+const HELP: Help = Help::new()
     .groups(&[Group::new(
         &[],
         &[
@@ -127,16 +129,15 @@ pub const TOOL: Tool = Tool::new().help(
             .examples(&[Example::new(&[], "Report the findings of the last 7 days")])
             .effects(Effects::read_only())
             .document(SELF_USAGE),
-    ])
-    )
-    .failures(
-        Failures::new().exits(&[Exit::range(
-            3,
-            255,
-            "starmap run passes on the exit code of the program it runs. The program's exit codes 0, 1 and 2 pass on as well, and are then the same numbers as starmap's own success, failure and refused command line.",
-        )
-        .commands(&[&["run"]])]),
-    );
+    ]);
+
+/// The exit codes that `starmap run` passes on from its program.
+const FAILURES: Failures = Failures::new().exits(&[Exit::range(
+    3,
+    255,
+    "starmap run passes on the exit code of the program it runs. The program's exit codes 0, 1 and 2 pass on as well, and are then the same numbers as starmap's own success, failure and refused command line.",
+)
+.commands(&[&["run"]])]);
 
 /// The commands of `starmap`.
 #[derive(Debug, Subcommand)]
