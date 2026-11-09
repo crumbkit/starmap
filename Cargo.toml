@@ -83,12 +83,12 @@ trybuild = "1.0.122"
 # (the cli profile of the Rust standards): `parse` and `finish`, documents,
 # failures with codes and next steps, and the help guide. The workspace entry
 # enables no feature, and starmap-cli enables the ones it uses.
-crumbkit = { version = "0.1.0", default-features = false }
+crumbkit = { version = "0.2", default-features = false }
 
 # crumbkit-child hands the terminal to the program that `starmap run`
 # starts: the child reads and writes the terminal, Ctrl-C reaches only the
 # child, and the command returns the child's exit code.
-crumbkit-child = "0.1.0"
+crumbkit-child = "0.2"
 
 # rpassword reads a secret that `starmap run` asks a person for from the
 # terminal with echo turned off, so the value never shows on screen.
@@ -96,11 +96,11 @@ rpassword = "7.5.4"
 
 # crumbkit-usage keeps the `starmap` command's local usage log and adds
 # `self usage` (CLI-7).
-crumbkit-usage = "0.1.0"
+crumbkit-usage = "0.2"
 
 # crumbkit-test checks the `starmap` command against crumbkit's conventions
 # (CLI-6). Only tests use it.
-crumbkit-test = "0.1.0"
+crumbkit-test = "0.2"
 
 # miette describes a spec problem as a diagnostic whose labels point into
 # starmap.toml, which crumbkit's `miette` feature prints with an excerpt of

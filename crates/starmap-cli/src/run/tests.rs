@@ -12,12 +12,10 @@ use crumbkit::Code;
 use starmap::{Name, Secret};
 use starmap_resolve::{Lookup, ResolveProblem, Resolver, SecretError};
 
-use clap::CommandFactory as _;
-
 use super::{Ask, Ready, Refused, RunFailure, gather, run_with, settle};
 use crate::cli::{Assignment, RunArgs, SpecFile, Verb};
 use crate::codes;
-use crate::{Cli, GUIDE};
+use crate::{Cli, TOOL};
 
 /// A spec with a setting that has a default, a bound secret, a secret
 /// without a bind, a provided variable and an inherited one.
@@ -692,14 +690,14 @@ fn run_json(checkout: &Checkout, resolver: &Counting) {
         "--",
         "true",
     ];
-    let Ok((cli, output)) = crumbkit::parse_from::<Cli, _, _>(Cli::command(), &GUIDE, words) else {
+    let Ok((cli, output)) = crumbkit::parse_from::<Cli>(&TOOL, words) else {
         panic!("the command line does not parse");
     };
     let Verb::Run(args) = cli.verb else {
         panic!("the command line is not run");
     };
     let mut notes = Vec::new();
-    let _ = run_with(&args, Vec::new(), output, true, &mut notes, &[resolver]);
+    let _ = run_with(&args, Vec::new(), output, &mut notes, &[resolver]);
 }
 
 #[test]

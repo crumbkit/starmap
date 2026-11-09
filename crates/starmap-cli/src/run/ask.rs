@@ -4,7 +4,7 @@
 
 use std::io::{self, IsTerminal as _};
 
-use crumbkit::{Output, Yes};
+use crumbkit::{Run, Yes};
 use starmap::{Name, Secret};
 use zeroize::Zeroizing;
 
@@ -28,7 +28,7 @@ pub(crate) trait Ask {
 pub(crate) struct Terminal<'a> {
     /// The run's output, which asks the yes-or-no question as crumbkit
     /// asks every question.
-    output: &'a mut Output,
+    output: &'a mut Run,
     /// Whether a person can answer.
     interactive: bool,
 }
@@ -36,7 +36,7 @@ pub(crate) struct Terminal<'a> {
 impl<'a> Terminal<'a> {
     /// Returns the person at the terminal, who can answer when
     /// `interactive` is true.
-    pub(crate) fn new(output: &'a mut Output, interactive: bool) -> Self {
+    pub(crate) fn new(output: &'a mut Run, interactive: bool) -> Self {
         Self {
             output,
             interactive,
