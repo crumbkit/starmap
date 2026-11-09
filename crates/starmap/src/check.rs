@@ -6,7 +6,7 @@ use std::fmt;
 
 use crate::env::Held;
 use crate::{
-    Bindings, Bound, Environment, FormError, Mode, Name, Secret, Show, Spec, Unset, Value, Variable,
+    Bindings, Bound, Environment, FormError, Mode, Name, Secret, Show, Spec, Unset, Variable,
 };
 
 #[cfg(test)]
@@ -166,7 +166,7 @@ fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option
     match variable.unset().in_mode(mode) {
         Unset::Required => Err(Problem::Missing { mode }),
         Unset::Optional => Ok(None),
-        Unset::Default(value) => default(variable, value).map(Some),
+        Unset::Default(value) => Ok(Some(Held::Shown(value.clone()))),
     }
 }
 
@@ -184,22 +184,6 @@ fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
         (Show::Withheld, Bound::Secret(secret)) => Ok(Some(Held::Withheld(secret.duplicate()))),
         (Show::Withheld, Bound::NotUnicode) => Err(Problem::Invalid(FormError::NotUnicode)),
         (show, _) => Err(Problem::ShowMismatch { show }),
-    }
-}
-
-/// Holds `variable`'s default `value`. The spec parser refuses a default on
-/// a withheld variable, so a withheld variable reaches this function only
-/// from a `Spec` built by hand; it holds the default as a secret.
-fn default(variable: &Variable, value: &Value) -> Result<Held, Problem> {
-    let text = match value {
-        Value::String(string) => string.to_str(),
-        _ => None,
-    };
-    match (variable.show(), text) {
-        (Show::Shown, _) => Ok(Held::Shown(value.clone())),
-        (Show::Withheld, Some(text)) => Ok(Held::Withheld(Secret::new(text.to_owned()))),
-        // The parser refuses a withheld default, so this arm is not taken.
-        (Show::Withheld, None) => Err(Problem::Invalid(FormError::NotUnicode)),
     }
 }
 

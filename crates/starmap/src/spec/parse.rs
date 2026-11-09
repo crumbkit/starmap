@@ -563,7 +563,7 @@ impl Parser {
         };
         let local = match (field.child(table, "local"), field.child(table, "default")) {
             (Some(local), None) => self.word(&local, UNSET_WORDS),
-            (None, Some(_)) if withheld => {
+            (_, Some(_)) if withheld => {
                 // The default is never read, so no message can echo it.
                 let message = format!(
                     "`{}` sets a default, and a withheld variable has none, because \

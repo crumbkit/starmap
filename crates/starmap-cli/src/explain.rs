@@ -10,7 +10,7 @@ use crumbkit::{Batch, Document, Failure, Recovery, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{
-    Bindings, Bound, Cache, Form, Mode, Name, SecretRef, Show, Source, Spec, Unset, Value, Variable,
+    Bindings, Bound, Cache, Form, Mode, Name, SecretRef, Source, Spec, Unset, Value, Variable,
 };
 
 use crate::cli::{ExplainArgs, SpecFile};
@@ -219,7 +219,6 @@ fn row(
 /// shell sets it. A value that counts as unset, such as a relative path
 /// where the type takes an absolute one, falls back to the default.
 fn cell(variable: &Variable, bound: Option<&Bound>) -> Cell {
-    let withheld = variable.show() == Show::Withheld;
     match bound {
         Some(Bound::Plain(raw)) => match variable.form().parse(raw) {
             Ok(Some(_)) => return Cell::new(State::Set, Some(raw.to_string_lossy().into_owned())),
@@ -233,9 +232,7 @@ fn cell(variable: &Variable, bound: Option<&Bound>) -> Cell {
         None => {}
     }
     match variable.unset().in_mode(Mode::Local) {
-        // The parser refuses a withheld default, so `withheld` is false here
-        // for any spec that was parsed.
-        Unset::Default(value) => Cell::new(State::Default, (!withheld).then(|| value_text(value))),
+        Unset::Default(value) => Cell::new(State::Default, Some(value_text(value))),
         Unset::Required | Unset::Optional => Cell::new(State::Unset, None),
     }
 }
@@ -279,11 +276,6 @@ pub(crate) fn unset_text(variable: &Variable) -> String {
     let word = |unset: &Unset| match unset {
         Unset::Required => "required".to_owned(),
         Unset::Optional => "optional".to_owned(),
-        // The parser refuses a withheld default; this arm keeps the dots for
-        // a spec built by hand.
-        Unset::Default(_) if variable.show() == Show::Withheld => {
-            format!("default {DOTS}")
-        }
         Unset::Default(value) => format!("default {}", value_text(value)),
     };
     let local = variable.unset().in_mode(Mode::Local);
