@@ -15,7 +15,7 @@ use super::{
 };
 use crate::bind::BIND_KINDS;
 use crate::{
-    Cache, Choice, Choices, ChoicesError, Form, IntegerRange, Mode, ModeRule, Name, OnePasswordRef,
+    Cache, Choice, Choices, ChoicesError, Form, IntegerRange, ModeRule, Name, OnePasswordRef,
     PathTemplate, PathTemplateError, ProvidedRef, ProviderKind, SecretBind, SecretBytes, SecretRef,
     Value,
 };
@@ -336,13 +336,13 @@ impl Parser {
         let form = self
             .required(field, table, "type")
             .and_then(|form| Some((self.form(&form)?, form)));
-        let unset_field = self.required(field, table, "unset");
-        let unset = unset_field
-            .as_ref()
-            .and_then(|unset| self.unset(unset, form.as_ref().map(|(form, _)| form)));
         let show = self
             .required(field, table, "show")
             .and_then(|show| Some((self.word(&show, SHOW_WORDS)?, show)));
+        let withheld = matches!(show, Some((Show::Withheld, _)));
+        let unset = self
+            .required(field, table, "unset")
+            .and_then(|unset| self.unset(&unset, form.as_ref().map(|(form, _)| form), withheld));
         let kind = self
             .required(field, table, "source")
             .and_then(|source| Some((self.word(&source, SOURCE_WORDS)?, source)));
@@ -366,17 +366,6 @@ impl Parser {
                 type_field.path
             );
             self.report(type_field.span(), Kind::SecretForm, message);
-        }
-        if let (Some((Show::Withheld, _)), Some(rule), Some(unset_field)) =
-            (&show, &unset, &unset_field)
-            && matches!(rule.in_mode(Mode::Local), Unset::Default(_))
-        {
-            let message = format!(
-                "`{}` sets a default, and a withheld variable has none, because `starmap.toml` \
-                 would hold it in plain text",
-                unset_field.path
-            );
-            self.report(unset_field.span(), Kind::WithheldDefault, message);
         }
         let source = kind
             .as_ref()
@@ -551,8 +540,14 @@ impl Parser {
 
     /// Parses the `unset` field: a word, or a table with `local` or
     /// `default` and an optional `production`. A default is checked against
-    /// `form`, and a variable whose type did not parse gets no rule.
-    fn unset(&mut self, field: &Field<'_>, form: Option<&Form>) -> Option<UnsetRule> {
+    /// `form`, and a variable whose type did not parse gets no rule. A
+    /// `withheld` variable's default is refused without being read.
+    fn unset(
+        &mut self,
+        field: &Field<'_>,
+        form: Option<&Form>,
+        withheld: bool,
+    ) -> Option<UnsetRule> {
         if field.item.is_str() {
             let local = self.word(field, UNSET_WORDS)?;
             return Some(UnsetRule {
@@ -568,6 +563,16 @@ impl Parser {
         };
         let local = match (field.child(table, "local"), field.child(table, "default")) {
             (Some(local), None) => self.word(&local, UNSET_WORDS),
+            (None, Some(_)) if withheld => {
+                // The default is never read, so no message can echo it.
+                let message = format!(
+                    "`{}` sets a default, and a withheld variable has none, because \
+                     `starmap.toml` would hold it in plain text",
+                    field.path
+                );
+                self.report(field.span(), Kind::WithheldDefault, message);
+                None
+            }
             (None, Some(default)) => {
                 let text = default.item.as_str();
                 if text.is_none() {

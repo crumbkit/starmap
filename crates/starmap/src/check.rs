@@ -187,8 +187,9 @@ fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
     }
 }
 
-/// Holds `variable`'s default `value`, which is a secret when the variable
-/// is withheld.
+/// Holds `variable`'s default `value`. The spec parser refuses a default on
+/// a withheld variable, so a withheld variable reaches this function only
+/// from a `Spec` built by hand; it holds the default as a secret.
 fn default(variable: &Variable, value: &Value) -> Result<Held, Problem> {
     let text = match value {
         Value::String(string) => string.to_str(),
@@ -197,8 +198,7 @@ fn default(variable: &Variable, value: &Value) -> Result<Held, Problem> {
     match (variable.show(), text) {
         (Show::Shown, _) => Ok(Held::Shown(value.clone())),
         (Show::Withheld, Some(text)) => Ok(Held::Withheld(Secret::new(text.to_owned()))),
-        // The spec parser gives a withheld variable the form string, and a
-        // default is TOML text, which is Unicode, so this arm is not taken.
+        // The parser refuses a withheld default, so this arm is not taken.
         (Show::Withheld, None) => Err(Problem::Invalid(FormError::NotUnicode)),
     }
 }

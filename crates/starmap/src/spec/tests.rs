@@ -472,6 +472,44 @@ fn a_withheld_variable_refuses_a_default() {
 }
 
 #[test]
+fn a_withheld_variable_refuses_a_default_with_a_production_rule() {
+    let text = one(
+        "purpose = \"The key shelf signs with.\"\ntype = \"string\"\n\
+         unset = { default = \"shelf-signing-key\", production = \"required\" }\n\
+         show = \"withheld\"\nsource = \"setting\"",
+    );
+
+    assert_eq!(kinds(&text), [SpecProblemKind::WithheldDefault]);
+}
+
+#[test]
+fn a_withheld_generated_variable_refuses_a_default() {
+    let text = one(
+        "purpose = \"The key shelf signs with.\"\ntype = \"string\"\n\
+         unset = { default = \"shelf-signing-key\" }\n\
+         show = \"withheld\"\nsource = \"generated\"",
+    );
+
+    assert_eq!(kinds(&text), [SpecProblemKind::WithheldDefault]);
+}
+
+#[test]
+fn a_withheld_default_that_fails_its_type_is_refused_without_echoing_it() {
+    let text = one("purpose = \"The key shelf signs with.\"\ntype = \"port\"\n\
+         unset = { default = \"hunter2\" }\nshow = \"withheld\"\nsource = \"setting\"");
+
+    let problems = Spec::parse(&text).unwrap_err();
+    let rendered = problems.to_string();
+    assert!(
+        problems
+            .problems()
+            .iter()
+            .all(|problem| !problem.to_string().contains("hunter2")),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn each_source_refuses_the_binds_the_rules_forbid() {
     let binds = [
         ("provided", "{ provided = \"multiverse/port\" }"),

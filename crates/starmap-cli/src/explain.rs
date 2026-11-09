@@ -233,6 +233,8 @@ fn cell(variable: &Variable, bound: Option<&Bound>) -> Cell {
         None => {}
     }
     match variable.unset().in_mode(Mode::Local) {
+        // The parser refuses a withheld default, so `withheld` is false here
+        // for any spec that was parsed.
         Unset::Default(value) => Cell::new(State::Default, (!withheld).then(|| value_text(value))),
         Unset::Required | Unset::Optional => Cell::new(State::Unset, None),
     }
@@ -277,6 +279,8 @@ pub(crate) fn unset_text(variable: &Variable) -> String {
     let word = |unset: &Unset| match unset {
         Unset::Required => "required".to_owned(),
         Unset::Optional => "optional".to_owned(),
+        // The parser refuses a withheld default; this arm keeps the dots for
+        // a spec built by hand.
         Unset::Default(_) if variable.show() == Show::Withheld => {
             format!("default {DOTS}")
         }

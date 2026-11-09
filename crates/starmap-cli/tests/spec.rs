@@ -118,3 +118,29 @@ fn a_checkout_without_starmap_toml_fails_as_not_found() {
         .code(1)
         .stderr_eq(file!["golden/check-not-found.stderr"]);
 }
+
+#[test]
+fn a_withheld_default_is_never_printed_in_the_failure_or_its_json() {
+    let state = tempfile::tempdir().unwrap();
+    let text = starmap(
+        SPEC_FIXTURES,
+        state.path(),
+        &["check", "--spec", "withheld_default.toml"],
+    )
+    .code(1);
+    let output = text.get_output();
+    let both = [output.stdout.as_slice(), output.stderr.as_slice()].concat();
+    let both = String::from_utf8_lossy(&both);
+    assert!(both.contains("starmap::spec::withheld_default"), "{both}");
+    assert!(!both.contains("shelf-signing-key"), "{both}");
+
+    let json = starmap(
+        SPEC_FIXTURES,
+        state.path(),
+        &["check", "--spec", "withheld_default.toml", "--json"],
+    )
+    .code(1);
+    let json = String::from_utf8_lossy(&json.get_output().stdout).into_owned();
+    assert!(json.contains("starmap::spec::withheld_default"), "{json}");
+    assert!(!json.contains("shelf-signing-key"), "{json}");
+}

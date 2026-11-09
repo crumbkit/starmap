@@ -21,8 +21,11 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** a spec that holds `unset = { default = ... }` on a withheld
   variable now fails to parse with `starmap::spec::withheld_default`.
   Before, `Spec::to_toml` wrote the default in plain text while `explain` and
-  `diff` printed dots. Set `unset` to `"required"` or `"optional"`, and give
-  the variable a bind or let `starmap run` ask for it.
+  `diff` printed dots. Remove the default. A `secret` variable with
+  `unset = "required"` and no bind is asked for by `starmap run` at a
+  terminal, and a secret with a 1Password bind is read from it. A `generated`
+  variable needs no default, because starmap creates the value on first use.
+  A withheld `setting` takes its value from the shell.
 
 ### Removed
 

@@ -194,6 +194,16 @@ impl std::error::Error for SpecFailure {
 impl Diagnostic for SpecFailure {
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
+            // A withheld default is in the text, so the excerpt would print
+            // the secret.
+            Self::Invalid { error, .. }
+                if error
+                    .problems()
+                    .iter()
+                    .any(|problem| problem.kind() == SpecProblemKind::WithheldDefault) =>
+            {
+                None
+            }
             Self::Invalid { source, .. } => Some(source),
             Self::NotFound { .. }
             | Self::Exists { .. }
@@ -313,7 +323,7 @@ fn hint(kind: SpecProblemKind) -> &'static str {
         SpecProblemKind::ShownSecret => "set show = \"withheld\"",
         SpecProblemKind::SecretForm => "set type = \"string\"",
         SpecProblemKind::WithheldDefault => {
-            "make the variable required or optional with unset, and give it a bind or let starmap run ask for it"
+            "remove the default: set a secret to unset = \"required\" with a 1Password bind or no bind so that starmap run asks for it, drop it from a generated variable because starmap creates the value, and give a withheld setting its value in the shell"
         }
         SpecProblemKind::BindMismatch => "change the source or the bind, as the failure lists",
         SpecProblemKind::BadBytes => "set bytes from 16 to 1024 on a generated variable",
