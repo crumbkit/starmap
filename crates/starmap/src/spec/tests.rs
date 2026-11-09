@@ -37,7 +37,7 @@ const KINDS: [SpecProblemKind; 18] = [
     SpecProblemKind::BadRange,
     SpecProblemKind::EmptyEnumeration,
     SpecProblemKind::ShownSecret,
-    SpecProblemKind::SecretForm,
+    SpecProblemKind::WithheldType,
     SpecProblemKind::WithheldDefault,
     SpecProblemKind::BindMismatch,
     SpecProblemKind::BadBytes,
@@ -458,7 +458,7 @@ fn a_withheld_setting_must_have_the_type_string() {
          show = \"withheld\"\nsource = \"setting\"",
     );
 
-    assert_eq!(kinds(&text), [SpecProblemKind::SecretForm]);
+    assert_eq!(kinds(&text), [SpecProblemKind::WithheldType]);
 }
 
 #[test]

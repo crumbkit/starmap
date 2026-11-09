@@ -18,8 +18,9 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
   `max`, both included.
 - `{ enumeration = ["dev", "prod"] }` is one of the listed values.
 
-`Type::parse` reads a raw value in the type and returns a `Value`, or a
-`TypeError` when the value does not fit the type. `starmap explain` and
+`Type::parse` reads a raw value in the type and returns a `Value`, nothing
+when the value counts as unset, or a `TypeError` when the value does not fit
+the type. `starmap explain` and
 `starmap diff` print a variable's type under the name `type`.
 
 ## withheld
@@ -36,10 +37,14 @@ plain text, and its type is `string`. The parser refuses a withheld
 variable that breaks either rule.
 
 The parser also forces `show = "withheld"` on every variable whose source is
-`secret` or `generated`, and it refuses `show = "shown"` on them. A source of
-`setting` can be withheld too. A withheld `setting` is for a value that a
-person types or a host sets and that is kept out of output, although it is
-not a secret in the sense of the next entry.
+`secret` or `generated`, and it refuses `show = "shown"` on them. A variable
+with any other source, which is `setting`, `inherited` or `provided`, can be
+withheld too. Such a variable gets its value as any other variable of its
+source does: from the shell, from `.env` beside the spec or from `--set`, from
+its path when a `setting` has a `bind`, or from a provider. Starmap does not
+ask for it at a terminal. Only a `secret` with no `bind` is asked for there.
+A withheld variable is kept out of output although it is not a secret in the
+sense of the next entry.
 
 ## secret
 

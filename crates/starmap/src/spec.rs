@@ -354,7 +354,7 @@ pub enum SpecProblemKind {
     /// A secret or generated variable is shown.
     ShownSecret,
     /// A withheld variable has a type other than string.
-    SecretForm,
+    WithheldType,
     /// A withheld variable has a default, which `starmap.toml` would hold in
     /// plain text.
     WithheldDefault,
@@ -389,7 +389,7 @@ impl SpecProblemKind {
             Self::BadRange => "starmap::spec::bad_range",
             Self::EmptyEnumeration => "starmap::spec::empty_enumeration",
             Self::ShownSecret => "starmap::spec::shown_secret",
-            Self::SecretForm => "starmap::spec::secret_form",
+            Self::WithheldType => "starmap::spec::withheld_type",
             Self::WithheldDefault => "starmap::spec::withheld_default",
             Self::BindMismatch => "starmap::spec::bind_mismatch",
             Self::BadBytes => "starmap::spec::bad_bytes",

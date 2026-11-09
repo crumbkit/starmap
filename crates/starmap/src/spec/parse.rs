@@ -365,7 +365,7 @@ impl Parser {
                 "`{}` is not \"string\", and a withheld variable has the type string",
                 type_field.path
             );
-            self.report(type_field.span(), Kind::SecretForm, message);
+            self.report(type_field.span(), Kind::WithheldType, message);
         }
         let source = kind
             .as_ref()

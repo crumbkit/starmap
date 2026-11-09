@@ -321,7 +321,7 @@ fn hint(kind: SpecProblemKind) -> &'static str {
         SpecProblemKind::BadRange => "swap or correct the bounds",
         SpecProblemKind::EmptyEnumeration => "list each value once",
         SpecProblemKind::ShownSecret => "set show = \"withheld\"",
-        SpecProblemKind::SecretForm => "set type = \"string\"",
+        SpecProblemKind::WithheldType => "set type = \"string\"",
         SpecProblemKind::WithheldDefault => {
             "remove the default: set a secret to unset = \"required\" with a 1Password bind or no bind so that starmap run asks for it, drop it from a generated variable because starmap creates the value, and give a withheld setting its value in the shell"
         }

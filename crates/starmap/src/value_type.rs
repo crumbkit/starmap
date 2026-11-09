@@ -1,5 +1,6 @@
-//! The type a variable's value has, the types that check each type, and
-//! the value a type reads.
+//! The type a variable's value has, the checking types that back it
+//! ([`Port`], [`IntegerRange`], [`Choices`] and [`Choice`]), and the value a
+//! type reads.
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};

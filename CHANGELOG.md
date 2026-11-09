@@ -19,9 +19,11 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Type`, because the `type` field in `starmap.toml` and the glossary call it
   a type. `starmap::Form` is now `starmap::Type`, `starmap::FormError` is now
   `starmap::TypeError`, and `Variable::form()` is now `Variable::value_type()`.
-  The `type` field in `starmap.toml` and the output of the `starmap` command
-  are unchanged. Code that imports these names must rename its imports and
-  calls.
+  `SpecProblemKind::SecretForm` is now `SpecProblemKind::WithheldType`, and
+  the failure code `starmap::spec::secret_form` is now
+  `starmap::spec::withheld_type`. The `type` field in `starmap.toml` and the
+  rest of the output of the `starmap` command are unchanged. Code that
+  imports these names must rename its imports and calls.
 - **Breaking:** `AgentClient::put` takes a slice of
   `(&OnePasswordRef, &Secret)` and sends all of them in one Put, and it
   returns a `Vec<PutOutcome>` with the outcome of each value, in order.

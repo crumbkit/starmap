@@ -664,7 +664,7 @@ fn every_type_that_needs_text_refuses_a_value_that_is_not_unicode() {
 
 #[cfg(unix)]
 #[test]
-fn the_string_and_path_forms_read_a_value_that_is_not_unicode() {
+fn the_string_and_path_types_read_a_value_that_is_not_unicode() {
     use std::os::unix::ffi::OsStrExt;
 
     let raw = OsStr::from_bytes(b"/state/\xff");
