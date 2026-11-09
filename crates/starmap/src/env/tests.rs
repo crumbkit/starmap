@@ -106,7 +106,7 @@ fn apply_leaves_every_undeclared_variable_of_the_command_as_it_was() {
 }
 
 #[test]
-fn apply_writes_a_value_as_text_its_form_reads_back() {
+fn apply_writes_a_value_as_text_its_type_reads_back() {
     let mut command = command();
     environment(&[("SHELF_DEBUG", "Yes")]).apply(&mut command);
 

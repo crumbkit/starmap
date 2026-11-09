@@ -6,14 +6,16 @@ into a typed struct, and a test fails when the struct and the file
 disagree. This crate parses the declaration, checks values against it and
 applies a checked environment to a child process.
 
-The crate holds a variable's name, the forms its value takes, the mode
+The crate holds a variable's name, the type of its value, the mode
 rule, the binds a source takes, and the parser of `starmap.toml` with its
 canonical form and digest. It checks bound values against the spec into an
 environment that it applies to a `std::process::Command`, and it holds
 each withheld value in a `Secret`. With the `derive` feature, it
 re-exports `#[derive(Env)]` and `#[derive(Enumeration)]`, which read an
 application's environment into a typed struct. The repository's [README](https://github.com/crumbkit/starmap)
-describes the project.
+describes the project, and its
+[glossary](https://github.com/crumbkit/starmap/blob/main/docs/glossary.md)
+names each concept once.
 
 Licensed under either of Apache License, Version 2.0 or MIT license at your
 option.

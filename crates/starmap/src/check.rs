@@ -6,7 +6,7 @@ use std::fmt;
 
 use crate::env::Held;
 use crate::{
-    Bindings, Bound, Environment, FormError, Mode, Name, Secret, Show, Spec, Unset, Variable,
+    Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, TypeError, Unset, Variable,
 };
 
 #[cfg(test)]
@@ -75,7 +75,7 @@ fn discard(raw: OsString) {
 /// spec without a `[mode]` table always runs in local mode. When nothing
 /// binds the mode variable, or its value counts as unset or is not
 /// Unicode, its local default decides. Any other value that does not fit
-/// its form decides local mode, and `check` refuses it.
+/// its type decides local mode, and `check` refuses it.
 #[must_use]
 pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
     let Some(rule) = spec.mode() else {
@@ -87,7 +87,7 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
     };
     let value = match bindings.get(name).map(|bound| read(variable, bound)) {
         Some(Ok(Some(Held::Shown(value)))) => Some(value),
-        None | Some(Ok(None) | Err(Problem::Invalid(FormError::NotUnicode))) => {
+        None | Some(Ok(None) | Err(Problem::Invalid(TypeError::NotUnicode))) => {
             match variable.unset().in_mode(Mode::Local) {
                 Unset::Default(value) => Some(value.clone()),
                 Unset::Required | Unset::Optional => None,
@@ -102,7 +102,7 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 
 /// Checks `bindings` against every variable `spec` declares, in `mode`.
 ///
-/// A bound value is read in its variable's form, and a value that the form
+/// A bound value is read in its variable's type, and a value that the type
 /// counts as unset, such as a relative path where `absolute = true`, is
 /// treated as unbound. An unbound variable takes its default in `mode`,
 /// stays unset when it is optional, and is missing when it is required.
@@ -175,14 +175,14 @@ fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option
 fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
     match (variable.show(), bound) {
         (Show::Shown, Bound::Plain(raw)) => variable
-            .form()
+            .value_type()
             .parse(raw)
             .map(|value| value.map(Held::Shown))
             .map_err(Problem::Invalid),
-        // A withheld variable has the form string, which the spec parser
+        // A withheld variable has the type string, which the spec parser
         // checks, and a string takes any text that a Secret holds.
         (Show::Withheld, Bound::Secret(secret)) => Ok(Some(Held::Withheld(secret.duplicate()))),
-        (Show::Withheld, Bound::NotUnicode) => Err(Problem::Invalid(FormError::NotUnicode)),
+        (Show::Withheld, Bound::NotUnicode) => Err(Problem::Invalid(TypeError::NotUnicode)),
         (show, _) => Err(Problem::ShowMismatch { show }),
     }
 }
@@ -190,7 +190,7 @@ fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
 /// The outcome of [`check`].
 #[derive(Debug)]
 pub enum Verdict {
-    /// Every variable fits its form and its unset rule in the mode.
+    /// Every variable fits its type and its unset rule in the mode.
     Ready(Environment),
     /// At least one variable has a finding.
     Refused(Refusals),
@@ -266,8 +266,8 @@ pub enum Problem {
         /// The mode the check ran in.
         mode: Mode,
     },
-    /// The variable's value does not fit its form.
-    Invalid(FormError),
+    /// The variable's value does not fit its type.
+    Invalid(TypeError),
     /// The kind of bound value does not match the variable's `show`: a
     /// plain value is bound to a withheld variable, or a secret or a
     /// [`Bound::NotUnicode`] to a shown one.

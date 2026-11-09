@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Table, Value as Toml, value};
 
 use super::{
-    FORM_WORDS, SHOW_WORDS, SOURCE_WORDS, Source, SourceKind, Spec, UNSET_WORDS, Unset, UnsetRule,
+    SHOW_WORDS, SOURCE_WORDS, Source, SourceKind, Spec, TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule,
     Variable, word_of,
 };
-use crate::{Cache, Form, Mode, SecretBind, SecretRef, Value};
+use crate::{Cache, Mode, SecretBind, SecretRef, Type, Value};
 
 /// Writes `spec` as TOML: the `[mode]` table, then one table per variable
 /// in the spec's order, each with its fields in the order of the field
@@ -38,7 +38,7 @@ pub(super) fn to_toml(spec: &Spec) -> String {
 fn variable(variable: &Variable) -> Table {
     let mut table = Table::new();
     table.insert("purpose", value(variable.purpose()));
-    table.insert("type", value(form(variable.form())));
+    table.insert("type", value(value_type(variable.value_type())));
     table.insert("unset", value(unset(variable.unset())));
     table.insert("show", value(word_of(SHOW_WORDS, &variable.show())));
     let (kind, bind) = source(variable.source());
@@ -57,19 +57,19 @@ fn inline<const N: usize>(entries: [(&str, Toml); N]) -> Toml {
     Toml::InlineTable(entries.into_iter().collect::<InlineTable>())
 }
 
-/// Writes a form as its word, or as its table when it has no word.
-fn form(form: &Form) -> Toml {
-    match form {
-        Form::Path { absolute: true } => inline([("path", inline([("absolute", true.into())]))]),
-        Form::Integer(range) => inline([(
+/// Writes a type as its word, or as its table when it has no word.
+fn value_type(value_type: &Type) -> Toml {
+    match value_type {
+        Type::Path { absolute: true } => inline([("path", inline([("absolute", true.into())]))]),
+        Type::Integer(range) => inline([(
             "integer",
             inline([("min", range.min().into()), ("max", range.max().into())]),
         )]),
-        Form::Enumeration(choices) => {
+        Type::Enumeration(choices) => {
             let values: Array = choices.iter().map(|choice| choice.as_str()).collect();
             inline([("enumeration", Toml::Array(values))])
         }
-        word => word_of(FORM_WORDS, word).into(),
+        word => word_of(TYPE_WORDS, word).into(),
     }
 }
 
@@ -130,7 +130,7 @@ fn secret_bind(bind: &SecretBind) -> Toml {
     Toml::InlineTable(table)
 }
 
-/// Writes a default's value as the text that its form reads back as an
+/// Writes a default's value as the text that its type reads back as an
 /// equal value. A default is read from TOML text, which is Unicode, so the
 /// lossy conversions never change it.
 fn text(value: &Value) -> String {

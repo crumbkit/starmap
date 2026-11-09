@@ -10,7 +10,7 @@ use crumbkit::{Batch, Document, Failure, Recovery, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{
-    Bindings, Bound, Cache, Form, Mode, Name, SecretRef, Source, Spec, Unset, Value, Variable,
+    Bindings, Bound, Cache, Mode, Name, SecretRef, Source, Spec, Type, Unset, Value, Variable,
 };
 
 use crate::cli::{ExplainArgs, SpecFile};
@@ -203,7 +203,7 @@ fn row(
         });
     };
     Ok(Explained {
-        kind: form_text(variable.form()),
+        kind: type_text(variable.value_type()),
         unset: unset_text(variable),
         source: source_text(variable.source()),
         value: cell(variable, bindings.get(&name)),
@@ -220,7 +220,7 @@ fn row(
 /// where the type takes an absolute one, falls back to the default.
 fn cell(variable: &Variable, bound: Option<&Bound>) -> Cell {
     match bound {
-        Some(Bound::Plain(raw)) => match variable.form().parse(raw) {
+        Some(Bound::Plain(raw)) => match variable.value_type().parse(raw) {
             Ok(Some(_)) => return Cell::new(State::Set, Some(raw.to_string_lossy().into_owned())),
             Ok(None) => {}
             Err(_) => {
@@ -253,19 +253,19 @@ pub(crate) fn value_text(value: &Value) -> String {
     }
 }
 
-/// Returns the type of a form, such as `integer 1..=100`.
-pub(crate) fn form_text(form: &Form) -> String {
-    match form {
-        Form::Path { absolute: false } => "path".to_owned(),
-        Form::Path { absolute: true } => "absolute path".to_owned(),
-        Form::Port => "port".to_owned(),
-        Form::Url => "url".to_owned(),
-        Form::SocketAddress => "ip socket address".to_owned(),
-        Form::Boolean => "boolean".to_owned(),
-        Form::Integer(range) => format!("integer {}..={}", range.min(), range.max()),
-        Form::Enumeration(choices) => format!("one of {choices}"),
-        Form::String => "string".to_owned(),
-        // A form that a later release of starmap adds.
+/// Returns the text of a type, such as `integer 1..=100`.
+pub(crate) fn type_text(ty: &Type) -> String {
+    match ty {
+        Type::Path { absolute: false } => "path".to_owned(),
+        Type::Path { absolute: true } => "absolute path".to_owned(),
+        Type::Port => "port".to_owned(),
+        Type::Url => "url".to_owned(),
+        Type::SocketAddress => "ip socket address".to_owned(),
+        Type::Boolean => "boolean".to_owned(),
+        Type::Integer(range) => format!("integer {}..={}", range.min(), range.max()),
+        Type::Enumeration(choices) => format!("one of {choices}"),
+        Type::String => "string".to_owned(),
+        // A type that a later release of starmap adds.
         _ => "another type".to_owned(),
     }
 }

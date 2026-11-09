@@ -47,8 +47,8 @@ starmap check --spec shown_secret.toml
   fails with starmap::spec::shown_secret
   hint
 
-starmap check --spec secret_form.toml
-  fails with starmap::spec::secret_form
+starmap check --spec withheld_type.toml
+  fails with starmap::spec::withheld_type
   hint
 
 starmap check --spec withheld_default.toml

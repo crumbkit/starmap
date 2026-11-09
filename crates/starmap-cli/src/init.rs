@@ -40,7 +40,7 @@ const SECRET_WORDS: &[&str] = &["TOKEN", "SECRET", "KEY", "PASSWORD"];
 
 /// The endings of a name that make init guess a type, in the order init
 /// tries them.
-const FORM_ENDINGS: &[(&str, &str)] = &[
+const TYPE_ENDINGS: &[(&str, &str)] = &[
     ("_PORT", "port"),
     ("_URL", "url"),
     ("_DIR", "path"),
@@ -64,7 +64,7 @@ pub(crate) struct Guess {
     name: String,
     /// The guessed type, such as port?.
     #[serde(rename = "type")]
-    form: String,
+    ty: String,
     /// The guessed unset rule: required? for a setting, and optional? otherwise.
     unset: String,
     /// The guessed show: withheld? for a secret, and shown? otherwise.
@@ -157,15 +157,15 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, Fai
 
 /// Returns the guesses for the variable `name`, which src reads at
 /// `places`. The name decides each guess, by the rules that
-/// `INHERITED`, `SECRET_WORDS` and `FORM_ENDINGS` state.
+/// `INHERITED`, `SECRET_WORDS` and `TYPE_ENDINGS` state.
 fn guess(name: Name, places: Vec<String>) -> Guess {
     let text = name.as_str();
     let inherited = INHERITED.contains(&text) || text.starts_with("XDG_");
     let secret = !inherited && text.split('_').any(|word| SECRET_WORDS.contains(&word));
-    let form = FORM_ENDINGS
+    let ty = TYPE_ENDINGS
         .iter()
         .find(|(ending, _)| !secret && text.ends_with(ending))
-        .map_or("string", |(_, form)| form);
+        .map_or("string", |(_, ty)| ty);
     let (unset, show, source) = if secret {
         ("optional", "withheld", "secret")
     } else if inherited {
@@ -175,7 +175,7 @@ fn guess(name: Name, places: Vec<String>) -> Guess {
     };
     Guess {
         name: text.to_owned(),
-        form: format!("{form}?"),
+        ty: format!("{ty}?"),
         unset: format!("{unset}?"),
         show: format!("{show}?"),
         source: format!("{source}?"),
@@ -197,7 +197,7 @@ fn spec_text(guesses: &[Guess]) -> String {
             "\n[variables.{}]\n# Read at {}.\npurpose = \"?\"\ntype = \"{}\"\nunset = \"{}\"\nshow = \"{}\"\nsource = \"{}\"\n",
             guess.name,
             places.escape_debug(),
-            guess.form,
+            guess.ty,
             guess.unset,
             guess.show,
             guess.source,

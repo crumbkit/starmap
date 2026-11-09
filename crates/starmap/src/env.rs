@@ -9,7 +9,7 @@ use crate::{Mode, Name, Secret, Value};
 mod tests;
 
 /// The values of every variable a spec declares, each checked against its
-/// form and its unset rule in one mode. Only [`check`](crate::check)
+/// type and its unset rule in one mode. Only [`check`](crate::check)
 /// builds one, so an `Environment` always holds checked values.
 #[derive(Debug)]
 pub struct Environment {

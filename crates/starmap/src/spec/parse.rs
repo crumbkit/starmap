@@ -10,14 +10,14 @@ use std::ops::Range;
 use toml_edit::{Document, Item, Key, TableLike};
 
 use super::{
-    FORM_WORDS, SHOW_WORDS, SOURCE_WORDS, Show, Source, SourceKind, Spec, SpecError, SpecProblem,
-    SpecProblemKind as Kind, UNSET_WORDS, Unset, UnsetRule, Variable, word_of,
+    SHOW_WORDS, SOURCE_WORDS, Show, Source, SourceKind, Spec, SpecError, SpecProblem,
+    SpecProblemKind as Kind, TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule, Variable, word_of,
 };
 use crate::bind::BIND_KINDS;
 use crate::{
-    Cache, Choice, Choices, ChoicesError, Form, IntegerRange, ModeRule, Name, OnePasswordRef,
+    Cache, Choice, Choices, ChoicesError, IntegerRange, ModeRule, Name, OnePasswordRef,
     PathTemplate, PathTemplateError, ProvidedRef, ProviderKind, SecretBind, SecretBytes, SecretRef,
-    Value,
+    Type, Value,
 };
 
 /// The keys of the file's top-level table.
@@ -29,7 +29,7 @@ const VARIABLE_FIELDS: &[&str] = &[
     "purpose", "type", "unset", "show", "source", "bind", "bytes",
 ];
 /// The keys of a type table.
-const FORM_TABLES: &[&str] = &["path", "integer", "enumeration"];
+const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration"];
 /// The keys of an unset table.
 const UNSET_FIELDS: &[&str] = &["local", "default", "production"];
 
@@ -333,16 +333,16 @@ impl Parser {
         let purpose = self
             .required(field, table, "purpose")
             .and_then(|purpose| self.purpose(&purpose));
-        let form = self
+        let ty = self
             .required(field, table, "type")
-            .and_then(|form| Some((self.form(&form)?, form)));
+            .and_then(|type_field| Some((self.value_type(&type_field)?, type_field)));
         let show = self
             .required(field, table, "show")
             .and_then(|show| Some((self.word(&show, SHOW_WORDS)?, show)));
         let withheld = matches!(show, Some((Show::Withheld, _)));
         let unset = self
             .required(field, table, "unset")
-            .and_then(|unset| self.unset(&unset, form.as_ref().map(|(form, _)| form), withheld));
+            .and_then(|unset| self.unset(&unset, ty.as_ref().map(|(ty, _)| ty), withheld));
         let kind = self
             .required(field, table, "source")
             .and_then(|source| Some((self.word(&source, SOURCE_WORDS)?, source)));
@@ -358,23 +358,23 @@ impl Parser {
             );
             self.report(show.span(), Kind::ShownSecret, message);
         }
-        if let (Some((Show::Withheld, _)), Some((form, type_field))) = (&show, &form)
-            && *form != Form::String
+        if let (Some((Show::Withheld, _)), Some((ty, type_field))) = (&show, &ty)
+            && *ty != Type::String
         {
             let message = format!(
                 "`{}` is not \"string\", and a withheld variable has the type string",
                 type_field.path
             );
-            self.report(type_field.span(), Kind::SecretForm, message);
+            self.report(type_field.span(), Kind::WithheldType, message);
         }
         let source = kind
             .as_ref()
             .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes));
-        let variable = match (purpose, form, unset, show, source) {
-            (Some(purpose), Some((form, _)), Some(unset), Some((show, _)), Some(source)) => {
+        let variable = match (purpose, ty, unset, show, source) {
+            (Some(purpose), Some((ty, _)), Some(unset), Some((show, _)), Some(source)) => {
                 Some(Variable {
                     purpose,
-                    form,
+                    value_type: ty,
                     unset,
                     show,
                     source,
@@ -407,23 +407,23 @@ impl Parser {
     }
 
     /// Parses the `type` field: a word, or a table with one key.
-    fn form(&mut self, field: &Field<'_>) -> Option<Form> {
+    fn value_type(&mut self, field: &Field<'_>) -> Option<Type> {
         if field.item.is_str() {
-            return self.word(field, FORM_WORDS);
+            return self.word(field, TYPE_WORDS);
         }
         let table = self.table(field)?;
-        self.known(table, &field.path, FORM_TABLES);
-        let named: Vec<&str> = FORM_TABLES
+        self.known(table, &field.path, TYPE_TABLES);
+        let named: Vec<&str> = TYPE_TABLES
             .iter()
             .copied()
             .filter(|name| table.contains_key(name))
             .collect();
         match named.as_slice() {
-            ["path"] => self.path_form(&field.child(table, "path")?),
-            ["integer"] => self.integer_form(&field.child(table, "integer")?),
+            ["path"] => self.path_type(&field.child(table, "path")?),
+            ["integer"] => self.integer_type(&field.child(table, "integer")?),
             ["enumeration"] => {
                 let enumeration = field.child(table, "enumeration")?;
-                self.choices(&enumeration).map(Form::Enumeration)
+                self.choices(&enumeration).map(Type::Enumeration)
             }
             // Each unknown key was reported above.
             [] if !table.is_empty() => None,
@@ -448,21 +448,21 @@ impl Parser {
     }
 
     /// Parses `{ path = { absolute = .. } }`.
-    fn path_form(&mut self, field: &Field<'_>) -> Option<Form> {
+    fn path_type(&mut self, field: &Field<'_>) -> Option<Type> {
         let table = self.table(field)?;
         self.known(table, &field.path, &["absolute"]);
         let Some(absolute) = field.child(table, "absolute") else {
-            return Some(Form::Path { absolute: false });
+            return Some(Type::Path { absolute: false });
         };
         let value = absolute.item.as_bool();
         if value.is_none() {
             self.wrong_type(&absolute, "true or false");
         }
-        Some(Form::Path { absolute: value? })
+        Some(Type::Path { absolute: value? })
     }
 
     /// Parses `{ integer = { min = .., max = .. } }`.
-    fn integer_form(&mut self, field: &Field<'_>) -> Option<Form> {
+    fn integer_type(&mut self, field: &Field<'_>) -> Option<Type> {
         let table = self.table(field)?;
         self.known(table, &field.path, &["min", "max"]);
         let mut bound = |name: &str| {
@@ -484,7 +484,7 @@ impl Parser {
             );
             self.report(field.span(), Kind::BadRange, message);
         }
-        range.map(Form::Integer)
+        range.map(Type::Integer)
     }
 
     /// Parses an array of choices, which has at least one and repeats none.
@@ -540,14 +540,9 @@ impl Parser {
 
     /// Parses the `unset` field: a word, or a table with `local` or
     /// `default` and an optional `production`. A default is checked against
-    /// `form`, and a variable whose type did not parse gets no rule. A
+    /// `ty`, and a variable whose type did not parse gets no rule. A
     /// `withheld` variable's default is refused without being read.
-    fn unset(
-        &mut self,
-        field: &Field<'_>,
-        form: Option<&Form>,
-        withheld: bool,
-    ) -> Option<UnsetRule> {
+    fn unset(&mut self, field: &Field<'_>, ty: Option<&Type>, withheld: bool) -> Option<UnsetRule> {
         if field.item.is_str() {
             let local = self.word(field, UNSET_WORDS)?;
             return Some(UnsetRule {
@@ -578,8 +573,7 @@ impl Parser {
                 if text.is_none() {
                     self.wrong_type(&default, "text, such as \"20\"");
                 }
-                self.default_value(&default, text?, form?)
-                    .map(Unset::Default)
+                self.default_value(&default, text?, ty?).map(Unset::Default)
             }
             (local, _) => {
                 let (kind, count) = match local {
@@ -601,10 +595,10 @@ impl Parser {
         })
     }
 
-    /// Reads a default in the variable's form, or reports why it does not
+    /// Reads a default in the variable's type, or reports why it does not
     /// fit.
-    fn default_value(&mut self, field: &Field<'_>, text: &str, form: &Form) -> Option<Value> {
-        let result = match form.parse(OsStr::new(text)) {
+    fn default_value(&mut self, field: &Field<'_>, text: &str, ty: &Type) -> Option<Value> {
+        let result = match ty.parse(OsStr::new(text)) {
             Ok(Some(value)) => Ok(value),
             Ok(None) => Err("a relative path, and the type takes only an absolute path".to_owned()),
             Err(error) => Err(error.to_string()),

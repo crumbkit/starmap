@@ -35,7 +35,7 @@ pub const SPEC_EMPTY_ENUMERATION: Code = Code::new("starmap", "spec", "empty_enu
 /// A secret or generated variable is shown.
 pub const SPEC_SHOWN_SECRET: Code = Code::new("starmap", "spec", "shown_secret");
 /// A withheld variable has a type other than string.
-pub const SPEC_SECRET_FORM: Code = Code::new("starmap", "spec", "secret_form");
+pub const SPEC_WITHHELD_TYPE: Code = Code::new("starmap", "spec", "withheld_type");
 /// A withheld variable has a default.
 pub const SPEC_WITHHELD_DEFAULT: Code = Code::new("starmap", "spec", "withheld_default");
 /// A bind does not fit the variable's source.
@@ -105,7 +105,7 @@ pub const ALL: &[&Code] = &[
     &SPEC_BAD_RANGE,
     &SPEC_EMPTY_ENUMERATION,
     &SPEC_SHOWN_SECRET,
-    &SPEC_SECRET_FORM,
+    &SPEC_WITHHELD_TYPE,
     &SPEC_WITHHELD_DEFAULT,
     &SPEC_BIND_MISMATCH,
     &SPEC_BAD_BYTES,

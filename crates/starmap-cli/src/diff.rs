@@ -11,12 +11,12 @@ use std::path::Path;
 use crumbkit::{Code, Document, Failure, Field, Listing, Recovery, Row};
 use schemars::JsonSchema;
 use serde::Serialize;
-use starmap::{Form, Name, Source, Spec, Variable};
+use starmap::{Name, Source, Spec, Type, Variable};
 
 use crate::Failed;
 use crate::cli::DiffArgs;
 use crate::codes;
-use crate::explain::{bind_text, cache_text, form_text, source_text, unset_text};
+use crate::explain::{bind_text, cache_text, source_text, type_text, unset_text};
 use crate::git::{self, Entry, GitError};
 use crate::spec::{self, SpecFailure};
 
@@ -271,11 +271,11 @@ type FieldChange = (&'static str, Option<String>, Option<String>);
 /// differs, which reads `allowed` or `never`.
 fn changed_fields(old: &Variable, new: &Variable) -> Vec<FieldChange> {
     let mut changed = Vec::new();
-    if old.form() != new.form() {
+    if old.value_type() != new.value_type() {
         changed.push((
             "type",
-            Some(form_text(old.form())),
-            Some(form_text(new.form())),
+            Some(type_text(old.value_type())),
+            Some(type_text(new.value_type())),
         ));
     }
     if old.unset() != new.unset() {
@@ -320,25 +320,25 @@ fn changed_fields(old: &Variable, new: &Variable) -> Vec<FieldChange> {
 fn summary(variable: &Variable) -> String {
     format!(
         "{}, {}, {}",
-        form_word(variable.form()),
+        type_word(variable.value_type()),
         variable.show(),
         source_word(variable.source())
     )
 }
 
-/// Returns the word of a form's type, such as `integer`, without its range
-/// or its choices.
-fn form_word(form: &Form) -> &'static str {
-    match form {
-        Form::Path { .. } => "path",
-        Form::Port => "port",
-        Form::Url => "url",
-        Form::SocketAddress => "ip socket address",
-        Form::Boolean => "boolean",
-        Form::Integer(_) => "integer",
-        Form::Enumeration(_) => "enumeration",
-        Form::String => "string",
-        // A form that a later release of starmap adds.
+/// Returns the word of a type, such as `integer`, without its range or its
+/// choices.
+fn type_word(ty: &Type) -> &'static str {
+    match ty {
+        Type::Path { .. } => "path",
+        Type::Port => "port",
+        Type::Url => "url",
+        Type::SocketAddress => "ip socket address",
+        Type::Boolean => "boolean",
+        Type::Integer(_) => "integer",
+        Type::Enumeration(_) => "enumeration",
+        Type::String => "string",
+        // A type that a later release of starmap adds.
         _ => "another type",
     }
 }

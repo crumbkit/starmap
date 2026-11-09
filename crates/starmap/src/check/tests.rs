@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use proptest::prelude::*;
 
 use super::{Finding, Problem, Verdict, capture, check, mode};
-use crate::{Bindings, Bound, Environment, FormError, Mode, Name, Secret, Show, Spec, Value};
+use crate::{Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, TypeError, Value};
 
 /// A spec with a mode variable, a required port, a defaulted boolean, an
 /// optional absolute path, and a withheld token that only production
@@ -202,12 +202,12 @@ fn an_invalid_mode_value_decides_local_mode_and_check_refuses_it() {
     assert_eq!(findings[0].name, name("SHELF_ENV"));
     assert!(matches!(
         findings[0].problem,
-        Problem::Invalid(FormError::NotChoice(_))
+        Problem::Invalid(TypeError::NotChoice(_))
     ));
 }
 
 #[test]
-fn a_mode_value_the_form_counts_as_unset_falls_back_to_the_default() {
+fn a_mode_value_the_type_counts_as_unset_falls_back_to_the_default() {
     let spec = Spec::parse(
         r#"
 [mode]
@@ -231,7 +231,7 @@ source = "setting"
 // check
 
 #[test]
-fn every_variable_that_fits_its_form_makes_the_check_ready() {
+fn every_variable_that_fits_its_type_makes_the_check_ready() {
     let environment = ready(verdict(&[
         ("SHELF_PORT", "8080"),
         ("SHELF_DEBUG", "yes"),
@@ -302,10 +302,10 @@ fn a_variable_that_production_requires_is_missing_only_in_production() {
 }
 
 #[test]
-fn a_value_that_does_not_fit_its_form_is_invalid() {
+fn a_value_that_does_not_fit_its_type_is_invalid() {
     assert_eq!(
         findings(verdict(&[("SHELF_PORT", "0")])),
-        [finding("SHELF_PORT", Problem::Invalid(FormError::NotPort))]
+        [finding("SHELF_PORT", Problem::Invalid(TypeError::NotPort))]
     );
 }
 
@@ -329,7 +329,7 @@ fn a_withheld_value_that_is_not_unicode_is_invalid() {
         findings(check(&spec, &bindings, Mode::Local)),
         [finding(
             "SHELF_MIRROR_TOKEN",
-            Problem::Invalid(FormError::NotUnicode)
+            Problem::Invalid(TypeError::NotUnicode)
         )]
     );
 }
@@ -421,7 +421,7 @@ fn a_refusal_lists_every_finding_in_the_spec_order() {
                     mode: Mode::Production
                 }
             ),
-            finding("SHELF_DEBUG", Problem::Invalid(FormError::NotBoolean)),
+            finding("SHELF_DEBUG", Problem::Invalid(TypeError::NotBoolean)),
             finding(
                 "SHELF_MIRROR_TOKEN",
                 Problem::Missing {
@@ -439,9 +439,9 @@ fn a_refusal_lists_every_finding_in_the_spec_order() {
 enum Binding {
     /// Nothing binds it.
     Unbound,
-    /// It is bound to a value its form accepts.
+    /// It is bound to a value its type accepts.
     Valid,
-    /// It is bound to a value its form refuses.
+    /// It is bound to a value its type refuses.
     Invalid,
 }
 
@@ -449,17 +449,17 @@ enum Binding {
 /// value, an invalid value, and how it is bound.
 #[derive(Debug, Clone)]
 struct Generated {
-    form: &'static str,
+    ty: &'static str,
     unset: &'static str,
     valid: &'static str,
     invalid: &'static str,
     binding: Binding,
 }
 
-/// A variable of a port, boolean or integer form with any unset rule, and
+/// A variable of a port, boolean or integer type with any unset rule, and
 /// any binding.
 fn generated() -> impl Strategy<Value = Generated> {
-    let form = prop::sample::select(vec![
+    let ty = prop::sample::select(vec![
         ("\"port\"", "8080", "0"),
         ("\"boolean\"", "on", "maybe"),
         ("{ integer = { min = 1, max = 9 } }", "5", "10"),
@@ -471,8 +471,8 @@ fn generated() -> impl Strategy<Value = Generated> {
         "{ local = \"required\", production = \"optional\" }",
     ]);
     let binding = prop::sample::select(vec![Binding::Unbound, Binding::Valid, Binding::Invalid]);
-    (form, unset, binding).prop_map(|((form, valid, invalid), unset, binding)| Generated {
-        form,
+    (ty, unset, binding).prop_map(|((ty, valid, invalid), unset, binding)| Generated {
+        ty,
         unset,
         valid,
         invalid,
@@ -492,7 +492,7 @@ fn generated_spec(variables: &[Generated]) -> Spec {
         text.push_str(&format!(
             "[variables.V{index}]\npurpose = \"A variable.\"\ntype = {}\nunset = {}\n\
              show = \"shown\"\nsource = \"setting\"\n",
-            variable.form, variable.unset
+            variable.ty, variable.unset
         ));
     }
     Spec::parse(&text).unwrap()

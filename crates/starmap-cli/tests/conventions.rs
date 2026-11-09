@@ -192,8 +192,8 @@ const STARTS: &[Failing<'static>] = &[
         &["check", "--spec", "shown_secret.toml"],
     ),
     spec(
-        &codes::SPEC_SECRET_FORM,
-        &["check", "--spec", "secret_form.toml"],
+        &codes::SPEC_WITHHELD_TYPE,
+        &["check", "--spec", "withheld_type.toml"],
     ),
     spec(
         &codes::SPEC_WITHHELD_DEFAULT,
