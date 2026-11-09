@@ -1,0 +1,4 @@
+starmap::spec::withheld_default: `variables.SHELF_SIGNING_KEY.unset` sets a default, and a withheld variable has none, because `starmap.toml` would hold it in plain text
+  at: 5:9 to 5:42, bytes 137..170
+   5 | unset = { default = "shelf-signing-key" }
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -7,12 +7,12 @@ fn spec(text: &str) -> Spec {
     Spec::parse(text).unwrap()
 }
 
-/// A withheld secret with a default and a 1Password bind.
+/// A withheld secret with a 1Password bind.
 const TOKEN: &str = r#"
 [variables.SHELF_TOKEN]
 purpose = "The token."
 type = "string"
-unset = { default = "a-default-secret" }
+unset = "required"
 show = "withheld"
 source = "secret"
 bind = { one-password = "op://Personal/shelf/token" }
@@ -51,17 +51,6 @@ fn a_changed_bind_and_purpose_are_one_change_each_in_field_order() {
         fields,
         vec![Some("bind".to_owned()), Some("purpose".to_owned())]
     );
-}
-
-#[test]
-fn a_changed_withheld_default_is_listed_and_prints_as_dots_and_never_as_the_secret() {
-    let now = TOKEN.replace("a-default-secret", "another-secret");
-    let changes = changes(Some(&spec(TOKEN)), &spec(&now));
-    assert_eq!(changes.len(), 1);
-    assert_eq!(changes[0].field.as_deref(), Some("unset"));
-    let text = format!("{changes:?}");
-    assert!(!text.contains("a-default-secret"), "{text}");
-    assert!(!text.contains("another-secret"), "{text}");
 }
 
 /// A port setting, which a later spec turns into a socket address.

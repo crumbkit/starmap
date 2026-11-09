@@ -312,6 +312,9 @@ fn hint(kind: SpecProblemKind) -> &'static str {
         SpecProblemKind::EmptyEnumeration => "list each value once",
         SpecProblemKind::ShownSecret => "set show = \"withheld\"",
         SpecProblemKind::SecretForm => "set type = \"string\"",
+        SpecProblemKind::WithheldDefault => {
+            "make the variable required or optional with unset, and give it a bind or let starmap run ask for it"
+        }
         SpecProblemKind::BindMismatch => "change the source or the bind, as the failure lists",
         SpecProblemKind::BadBytes => "set bytes from 16 to 1024 on a generated variable",
         SpecProblemKind::UnknownPlaceholder => "use {workspace}, {checkout} or {home}",

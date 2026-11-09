@@ -121,35 +121,6 @@ fn a_name_the_spec_does_not_declare_is_a_failure_of_that_name() {
 }
 
 #[test]
-fn a_withheld_variable_with_a_default_hides_the_default_in_every_column() {
-    let spec = Spec::parse(
-        r#"
-[variables.SHELF_SALT]
-purpose = "Salts the catalogue's cache keys."
-type = "string"
-unset = { default = "pepper" }
-show = "withheld"
-source = "setting"
-"#,
-    )
-    .unwrap();
-    let bindings = starmap::capture(&spec, Vec::new());
-    let row = row(
-        &spec,
-        "starmap.toml",
-        &bindings,
-        "SHELF_SALT".parse().unwrap(),
-    )
-    .unwrap();
-    assert_eq!(row.unset, "default ••••••••");
-    assert_eq!(row.value.to_string(), "•••••••• (default)");
-    assert_eq!(
-        serde_json::to_value(&row.value.0).unwrap(),
-        serde_json::json!({ "state": "default" })
-    );
-}
-
-#[test]
 fn a_value_reads_as_the_text_an_environment_holds() {
     let spec = example();
     let name: Name = "SHELF_PAGE_SIZE".parse().unwrap();

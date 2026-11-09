@@ -370,25 +370,6 @@ fn a_secret_bound_to_a_shown_variable_is_a_show_mismatch() {
 }
 
 #[test]
-fn a_withheld_variable_with_a_default_holds_it_as_a_secret() {
-    let spec = Spec::parse(
-        r#"
-[variables.SHELF_SALT]
-purpose = "Salts the cache keys."
-type = "string"
-unset = { default = "pepper" }
-show = "withheld"
-source = "setting"
-"#,
-    )
-    .unwrap();
-    let environment = ready(check(&spec, &Bindings::new(), Mode::Local));
-
-    assert_eq!(environment.value(&name("SHELF_SALT")), None);
-    assert!(environment.secret(&name("SHELF_SALT")).is_some());
-}
-
-#[test]
 fn a_check_in_another_mode_than_the_bindings_decide_is_refused_on_the_mode_variable() {
     let spec = spec();
     let bindings = capture(

@@ -264,8 +264,8 @@ type FieldChange = (&'static str, Option<String>, Option<String>);
 /// Returns each field that differs between `old` and `new`, in the order
 /// type, unset, show, source, bind, cache and purpose, with the text that
 /// explain prints for it. The fields are compared by value and shown as
-/// text, so a withheld default that changed is listed and prints as dots
-/// on both sides, and diff shows no secret value. A changed source lists
+/// text, and a withheld variable has no default, so diff shows no secret
+/// value. A changed source lists
 /// `source` when the kind of source differs, `bind` when the bind's
 /// reference differs, and `cache` when whether a cache may keep the value
 /// differs, which reads `allowed` or `never`.

@@ -36,6 +36,8 @@ pub const SPEC_EMPTY_ENUMERATION: Code = Code::new("starmap", "spec", "empty_enu
 pub const SPEC_SHOWN_SECRET: Code = Code::new("starmap", "spec", "shown_secret");
 /// A withheld variable has a type other than string.
 pub const SPEC_SECRET_FORM: Code = Code::new("starmap", "spec", "secret_form");
+/// A withheld variable has a default.
+pub const SPEC_WITHHELD_DEFAULT: Code = Code::new("starmap", "spec", "withheld_default");
 /// A bind does not fit the variable's source.
 pub const SPEC_BIND_MISMATCH: Code = Code::new("starmap", "spec", "bind_mismatch");
 /// `bytes` lies outside 16 to 1024, or is on a variable that is not
@@ -104,6 +106,7 @@ pub const ALL: &[&Code] = &[
     &SPEC_EMPTY_ENUMERATION,
     &SPEC_SHOWN_SECRET,
     &SPEC_SECRET_FORM,
+    &SPEC_WITHHELD_DEFAULT,
     &SPEC_BIND_MISMATCH,
     &SPEC_BAD_BYTES,
     &SPEC_UNKNOWN_PLACEHOLDER,
