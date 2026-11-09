@@ -1,5 +1,5 @@
 {
-  "schema": "starmap/opt-outs/v1",
+  "schema": "starmap/opt-outs/v2",
   "data": [
     {
       "rule": "examples/run",
@@ -125,7 +125,7 @@
       "budget": null
     }
   ],
-  "customisations": [
+  "declarations": [
     {
       "declaration": "root-verbs",
       "applies_to": "starmap init, starmap check, starmap explain, starmap diff, starmap run",

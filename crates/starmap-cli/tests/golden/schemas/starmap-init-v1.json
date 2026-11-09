@@ -14,7 +14,7 @@
           "minimum": 0
         },
         "code": {
-          "description": "The over-budget code, in the tool's spelling.",
+          "description": "The over-budget code.",
           "type": "string"
         }
       },
@@ -34,6 +34,58 @@
     "dry_run": {
       "description": "Present, and true, when the run was a dry run that changed nothing.",
       "const": true
+    },
+    "next": {
+      "description": "The next steps, in the order the text prints them. It is absent when there are none.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "commands": {
+            "description": "The commands that carry out the step, in order.",
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "call": {
+                      "description": "A command line of this tool.",
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "call"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "run": {
+                      "description": "A command line of another program.",
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "run"
+                  ]
+                }
+              ]
+            }
+          },
+          "text": {
+            "description": "The sentence or phrase that the text prints for the step.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "commands"
+        ]
+      }
     },
     "schema": {
       "description": "The id of this document.",

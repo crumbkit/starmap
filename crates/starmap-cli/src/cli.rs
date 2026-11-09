@@ -1,4 +1,4 @@
-//! The `starmap` command's command-line grammar and help guide.
+//! The `starmap` command's command-line grammar and tool record.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Args, Parser, Subcommand};
 use crumbkit::commands::{COMMANDS_LIST, CommandsList};
-use crumbkit::help::{Effects, Example, Exit, Goal, Group, Guide, Leaf};
+use crumbkit::help::{Effects, Example, Goal, Group, Help, Leaf};
 use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
-use crumbkit::{Call, DryRun, NoInput, ViewFlags};
+use crumbkit::tool::{Exit, Failures};
+use crumbkit::{Call, DryRun, NoInput, Tool, ViewFlags};
 use crumbkit_usage::{SELF_USAGE, SelfUsage};
 use starmap::Name;
 use starmap_resolve::WorkspaceName;
@@ -41,7 +42,8 @@ pub struct Cli {
 /// examples. `init`, `check`, `explain`, `diff` and `run` sit directly under
 /// the root, because a person types `starmap check` as one step of their
 /// work.
-pub const GUIDE: Guide = Guide::new()
+pub const TOOL: Tool = Tool::new().help(
+    Help::new()
     .groups(&[Group::new(
         &[],
         &[
@@ -126,12 +128,15 @@ pub const GUIDE: Guide = Guide::new()
             .effects(Effects::read_only())
             .document(SELF_USAGE),
     ])
-    .exits(&[Exit::range(
-        3,
-        255,
-        "starmap run passes on the exit code of the program it runs. The program's exit codes 0, 1 and 2 pass on as well, and are then the same numbers as starmap's own success, failure and refused command line.",
     )
-    .commands(&[&["run"]])]);
+    .failures(
+        Failures::new().exits(&[Exit::range(
+            3,
+            255,
+            "starmap run passes on the exit code of the program it runs. The program's exit codes 0, 1 and 2 pass on as well, and are then the same numbers as starmap's own success, failure and refused command line.",
+        )
+        .commands(&[&["run"]])]),
+    );
 
 /// The commands of `starmap`.
 #[derive(Debug, Subcommand)]

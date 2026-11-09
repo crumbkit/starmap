@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use crumbkit::{Failure, Output, Sink};
+use crumbkit::{Failure, Run, Sink};
 use starmap::{
     Bindings, Bound, Environment, Mode, Name, NoPlace, Placeholder, Problem, ProviderKind, Source,
     Spec, Verdict,
@@ -56,33 +56,25 @@ const SAVE_DEADLINE: Duration = Duration::from_secs(30);
 
 /// Why `--fields` is refused.
 ///
-/// BASE-37: crumbkit-child 0.1.0 keeps its own copy of this text private,
+/// BASE-37: crumbkit-child 0.2.0 keeps its own copy of this text private,
 /// so this one repeats it word for word, and the two can drift apart. A
 /// crumbkit-child release that exports the text replaces this copy.
 const TEXT_ONLY: &str = "this command hands the terminal to another program";
 
 /// Runs `args.program` with the environment that the spec declares, and
 /// returns its exit code. `vars` is the process environment, and `notes`
-/// receives each note before the program starts. `no_input` says whether
-/// the caller passed `--no-input`. 1Password and the Keychain resolve the
+/// receives each note before the program starts. `output` says whether the
+/// caller passed `--no-input`. 1Password and the Keychain resolve the
 /// secrets.
 pub(crate) fn run(
     args: &RunArgs,
     vars: Vec<(OsString, OsString)>,
-    output: Output,
-    no_input: bool,
+    output: Run,
     notes: &mut dyn Write,
 ) -> ExitCode {
     let one_password = OnePassword::new(PathBuf::from("op"));
     let keychain = Keychain::new();
-    run_with(
-        args,
-        vars,
-        output,
-        no_input,
-        notes,
-        &[&one_password, &keychain],
-    )
+    run_with(args, vars, output, notes, &[&one_password, &keychain])
 }
 
 /// Runs `args.program` as [`run`] does, with `resolvers` resolving the
@@ -90,8 +82,7 @@ pub(crate) fn run(
 fn run_with(
     args: &RunArgs,
     vars: Vec<(OsString, OsString)>,
-    mut output: Output,
-    no_input: bool,
+    mut output: Run,
     notes: &mut dyn Write,
     resolvers: &[&dyn Resolver],
 ) -> ExitCode {
@@ -112,7 +103,7 @@ fn run_with(
         // is created for a run that cannot start.
         return crumbkit_child::hand_over(output, command);
     }
-    let interactive = !no_input && ask::terminals();
+    let interactive = !output.no_input() && ask::terminals();
     let settled = {
         let mut terminal = Terminal::new(&mut output, interactive);
         settle(gathered, resolvers, &mut terminal)
@@ -136,7 +127,7 @@ fn run_with(
 /// exit code of its first failure.
 fn refuse<O: Write, E: Write>(
     sink: &mut Sink<O, E>,
-    output: &mut Output,
+    output: &mut Run,
     refused: &Refused,
     notes: &mut dyn Write,
 ) -> ExitCode {

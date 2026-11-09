@@ -1,13 +1,13 @@
 //! End-to-end tests of the command lines that a UI client runs. A UI client
 //! adds `--json --full --no-input` to every command line it runs, so each
-//! example in the guide must accept those flags and print a JSON document.
+//! example in the tool record must accept those flags and print a JSON document.
 
 #![cfg(test)]
 
 use clap::CommandFactory as _;
 use serde_json::Value;
 use snapbox::cmd::Command;
-use starmap_cli::{Cli, GUIDE};
+use starmap_cli::{Cli, TOOL};
 
 /// The directory that holds the example `starmap.toml`,
 /// relative to this package.
@@ -60,8 +60,8 @@ fn assert_accepts_ui_flags(words: &[&str]) {
 }
 
 #[test]
-fn every_example_in_the_guide_accepts_the_flags_that_a_ui_client_adds() {
-    for leaf in GUIDE.get_leaves() {
+fn every_example_in_the_tool_record_accepts_the_flags_that_a_ui_client_adds() {
+    for leaf in TOOL.get_help().get_leaves() {
         for example in leaf.get_examples() {
             let words: Vec<&str> = leaf.path().iter().chain(example.words()).copied().collect();
             assert_accepts_ui_flags(&words);

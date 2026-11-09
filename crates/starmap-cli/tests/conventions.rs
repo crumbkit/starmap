@@ -1,5 +1,5 @@
 //! The convention tests of the `starmap` command, which hold its command
-//! tree, guide, help pages, examples and failures to crumbkit's conventions
+//! tree, tool record, help pages, examples and failures to crumbkit's conventions
 //! with crumbkit-test (CLI-6).
 //!
 //! They live in an integration test so that the example check can run the
@@ -16,10 +16,9 @@
 use clap::CommandFactory as _;
 use crumbkit::Code;
 use crumbkit_test::{
-    Allow, Budgets, Examples, Failing, Pages, PathBudgets, Recoveries, Rule, Twin, Twins,
-    Unprovoked,
+    Allow, Examples, Failing, PathBudgets, Recoveries, Rule, Suite, Twin, Twins, Unprovoked,
 };
-use starmap_cli::{Cli, GUIDE, codes};
+use starmap_cli::{Cli, TOOL, codes};
 
 /// The directory that holds the example `starmap.toml`,
 /// relative to this package.
@@ -95,9 +94,6 @@ const ALLOW: &[Allow] = &[
     ),
 ];
 
-/// The budgets of the `-h` pages, which are crumbkit's defaults.
-const BUDGETS: Budgets = Budgets::new();
-
 /// The budgets of the paths through the help, which are crumbkit's
 /// defaults.
 const PATH_BUDGETS: PathBudgets<'_> = PathBudgets::new("tests/golden/examples");
@@ -118,97 +114,9 @@ const EXAMPLES: Examples<'_> =
         .allow(ALLOW);
 
 #[test]
-fn every_command_and_argument_has_one_name() {
-    crumbkit_test::check_names(&Cli::command(), Pages::rendered(&GUIDE), ALLOW);
-}
-
-#[test]
-fn every_command_is_a_root_verb_or_a_resource_followed_by_list_or_usage() {
-    crumbkit_test::check_grammar(&Cli::command(), Pages::rendered(&GUIDE), &["usage"], ALLOW);
-}
-
-#[test]
-fn every_command_declares_its_effects() {
-    crumbkit_test::check_effects(&Cli::command(), &GUIDE, ALLOW);
-}
-
-#[test]
-fn every_list_command_pages() {
-    crumbkit_test::check_listings(&Cli::command(), ALLOW);
-}
-
-#[test]
-fn every_option_with_many_values_accepts_repeats_and_commas() {
-    crumbkit_test::check_filters(&Cli::command(), ALLOW);
-}
-
-#[test]
-fn every_command_leaf_and_topic_meets_the_guide_rules() {
-    crumbkit_test::check_guide(&Cli::command(), &GUIDE, ALLOW);
-}
-
-#[test]
-fn every_exit_code_meets_the_exit_code_rules() {
-    crumbkit_test::check_exit_codes(&Cli::command(), &GUIDE, ALLOW);
-}
-
-#[test]
-fn every_failure_code_is_declared_once_and_spelled_by_the_rules() {
-    crumbkit_test::check_codes(&GUIDE, &[codes::ALL]);
-}
-
-#[test]
-fn every_help_page_fits_its_size_budget() {
-    crumbkit_test::check_help_sizes(&Cli::command(), Pages::rendered(&GUIDE), &BUDGETS);
-}
-
-#[test]
-fn every_path_through_the_help_fits_its_weight_budget() {
-    crumbkit_test::check_path_weights(&Cli::command(), Pages::rendered(&GUIDE), &PATH_BUDGETS);
-}
-
-#[test]
-fn every_help_page_matches_its_golden_file() {
-    crumbkit_test::check_help_goldens(
-        &Cli::command(),
-        Pages::rendered(&GUIDE),
-        "tests/golden/help",
-    );
-}
-
-#[test]
-fn every_document_schema_matches_its_golden_file() {
-    crumbkit_test::check_schema_goldens(&Cli::command(), &GUIDE, "tests/golden/schemas");
-}
-
-#[test]
-fn every_document_is_named_after_the_path_of_the_command_that_prints_it() {
-    crumbkit_test::check_document_ids(&Cli::command(), &GUIDE, ALLOW);
-}
-
-#[test]
-fn every_crumbkit_command_sits_at_its_fixed_path() {
-    crumbkit_test::check_mounts(&Cli::command(), &GUIDE);
-}
-
-#[test]
-fn every_example_in_the_guide_runs_and_prints_its_golden_output() {
-    crumbkit_test::check_examples(&Cli::command(), &GUIDE, &EXAMPLES);
-}
-
-#[test]
-fn every_json_example_cuts_or_refuses_a_result_past_its_output_budget() {
-    crumbkit_test::check_output_budget(&Cli::command(), &GUIDE, &EXAMPLES);
-}
-
-#[test]
-fn every_command_matches_the_checked_in_command_reference() {
-    crumbkit_test::check_command_reference(env!("CARGO_BIN_EXE_starmap"), "docs/commands.md");
-}
-
-#[test]
 fn the_root_help_lists_the_commands_under_four_goal_headings_in_order() {
-    let goals: Vec<(&str, &[&str])> = GUIDE
+    let goals: Vec<(&str, &[&str])> = TOOL
+        .get_help()
         .get_groups()
         .iter()
         .filter(|group| group.path().is_empty())
@@ -223,18 +131,6 @@ fn the_root_help_lists_the_commands_under_four_goal_headings_in_order() {
             ("Read the variables", &["explain", "diff"][..]),
             ("Explore commands", &["commands", "schemas", "self"][..]),
         ]
-    );
-}
-
-#[test]
-fn every_opt_out_matches_the_opt_out_report() {
-    crumbkit_test::check_opt_outs(
-        &Cli::command(),
-        &GUIDE,
-        ALLOW,
-        &BUDGETS,
-        Some(&PATH_BUDGETS),
-        "tests/golden",
     );
 }
 
@@ -412,11 +308,6 @@ const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, &[codes::ALL])
     .starts(STARTS)
     .unprovoked(UNPROVOKED);
 
-#[test]
-fn every_recovery_leads_to_a_command_that_runs() {
-    crumbkit_test::check_recoveries(&Cli::command(), &GUIDE, &RECOVERIES, "tests/golden");
-}
-
 /// The line that each spec failure's twin runs in [`SPEC_FIXTURES`]: the
 /// same command with the valid example file in place of the fixture.
 const VALID: &[&str] = &["check", "--spec", "../example/starmap.toml"];
@@ -466,7 +357,15 @@ const TWINS: Twins<'_> = Twins::new(EXAMPLES, &[codes::ALL])
     .pairs(PAIRS)
     .unprovoked(UNPROVOKED);
 
-#[test]
-fn every_declared_code_has_a_twin_that_the_command_accepts() {
-    crumbkit_test::check_twins(&Cli::command(), &GUIDE, &TWINS);
-}
+/// Everything the checks read, which `conventions!` expands to one test for
+/// each check. The root verbs are crumbkit's own and `usage`, which
+/// `self usage` adds. The budgets of the `-h` pages are crumbkit's defaults.
+const SUITE: Suite<'_> = Suite::new(|| (Cli::command(), TOOL))
+    .allow(ALLOW)
+    .verbs(&["usage"])
+    .path_budgets(PATH_BUDGETS)
+    .examples(EXAMPLES)
+    .recoveries(RECOVERIES)
+    .twins(TWINS);
+
+crumbkit_test::conventions!(SUITE);
