@@ -180,8 +180,8 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `starmap_resolve::resolve` sets the mark only in local mode and only when
   the bind allows a cache, so no lookup is cacheable in production mode.
   Only `resolve` can build a `Cacheable`. `Lookup::reference` builds a
-  lookup without the mark, as a host builds one by hand. No resolver reads
-  the mark yet.
+  lookup without the mark, as a host builds one by hand. `agent::Agent`,
+  described below, is the resolver that reads the mark.
 - starmap-resolve's `agent` feature, on macOS and Linux, adds
   `agent::AgentSocket::for_user`, which returns the path of the per-user
   agent's socket: `starmap-agent/agent.sock` in the directory that
