@@ -118,3 +118,63 @@ fn a_checkout_without_starmap_toml_fails_as_not_found() {
         .code(1)
         .stderr_eq(file!["golden/check-not-found.stderr"]);
 }
+
+#[test]
+fn a_withheld_default_is_never_printed_in_the_failure_or_its_json() {
+    let state = tempfile::tempdir().unwrap();
+    let text = starmap(
+        SPEC_FIXTURES,
+        state.path(),
+        &["check", "--spec", "withheld_default.toml"],
+    )
+    .code(1);
+    let output = text.get_output();
+    let both = [output.stdout.as_slice(), output.stderr.as_slice()].concat();
+    let both = String::from_utf8_lossy(&both);
+    assert!(both.contains("starmap::spec::withheld_default"), "{both}");
+    assert!(!both.contains("shelf-signing-key"), "{both}");
+
+    let json = starmap(
+        SPEC_FIXTURES,
+        state.path(),
+        &["check", "--spec", "withheld_default.toml", "--json"],
+    )
+    .code(1);
+    let json = String::from_utf8_lossy(&json.get_output().stdout).into_owned();
+    assert!(json.contains("starmap::spec::withheld_default"), "{json}");
+    assert!(!json.contains("shelf-signing-key"), "{json}");
+}
+
+/// Runs `check` on `spec` in a temporary directory and returns its stderr
+/// and its `--json` stdout, which must both fail without `secret`.
+fn refuses_without_printing(spec: &str, secret: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("starmap.toml"), spec).unwrap();
+    let text = starmap(dir.path(), dir.path(), &["check"]).code(1);
+    let stderr = String::from_utf8_lossy(&text.get_output().stderr).into_owned();
+    assert!(!stderr.contains(secret), "{stderr}");
+    let json = starmap(dir.path(), dir.path(), &["check", "--json"]).code(1);
+    let stdout = String::from_utf8_lossy(&json.get_output().stdout).into_owned();
+    assert!(!stdout.contains(secret), "{stdout}");
+}
+
+#[test]
+fn a_withheld_default_beside_a_local_rule_is_never_printed() {
+    refuses_without_printing(
+        "[variables.SHELF_KEY]\npurpose = \"The key.\"\ntype = \"string\"\n\
+         unset = { local = \"required\", default = \"hunter2\" }\n\
+         show = \"withheld\"\nsource = \"setting\"\n",
+        "hunter2",
+    );
+}
+
+#[test]
+fn a_withheld_default_after_another_problem_is_never_printed() {
+    refuses_without_printing(
+        "[variables.SHELF_A]\npurpose = \"A port.\"\ntype = \"port\"\n\
+         unset = { default = \"99999\" }\nshow = \"shown\"\nsource = \"setting\"\n\n\
+         [variables.SHELF_KEY]\npurpose = \"The key.\"\ntype = \"string\"\n\
+         unset = { default = \"hunter2\" }\nshow = \"withheld\"\nsource = \"setting\"\n",
+        "hunter2",
+    );
+}

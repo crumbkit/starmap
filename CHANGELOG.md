@@ -18,6 +18,14 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** `AgentClient::put` takes a slice of
   `(&OnePasswordRef, &Secret)` and sends all of them in one Put, and it
   returns a `Vec<PutOutcome>` with the outcome of each value, in order.
+- **Breaking:** a spec that holds `unset = { default = ... }` on a withheld
+  variable now fails to parse with `starmap::spec::withheld_default`.
+  Before, `Spec::to_toml` wrote the default in plain text while `explain` and
+  `diff` printed dots. Remove the default. A `secret` variable with
+  `unset = "required"` and no bind is asked for by `starmap run` at a
+  terminal, and a secret with a 1Password bind is read from it. A `generated`
+  variable needs no default, because starmap creates the value on first use.
+  A withheld `setting` takes its value from the shell.
 
 ### Removed
 

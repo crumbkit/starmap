@@ -51,6 +51,10 @@ starmap check --spec secret_form.toml
   fails with starmap::spec::secret_form
   hint
 
+starmap check --spec withheld_default.toml
+  fails with starmap::spec::withheld_default
+  hint
+
 starmap check --spec bind_mismatch.toml
   fails with starmap::spec::bind_mismatch
   hint

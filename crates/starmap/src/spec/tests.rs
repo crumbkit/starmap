@@ -25,7 +25,7 @@ const CANONICAL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/example/cano
 
 /// Every problem kind. A kind added to `SpecProblemKind` belongs here too,
 /// with a fixture or a test of its own that writes its golden.
-const KINDS: [SpecProblemKind; 17] = [
+const KINDS: [SpecProblemKind; 18] = [
     SpecProblemKind::TooLarge,
     SpecProblemKind::Syntax,
     SpecProblemKind::UnknownField,
@@ -38,6 +38,7 @@ const KINDS: [SpecProblemKind; 17] = [
     SpecProblemKind::EmptyEnumeration,
     SpecProblemKind::ShownSecret,
     SpecProblemKind::SecretForm,
+    SpecProblemKind::WithheldDefault,
     SpecProblemKind::BindMismatch,
     SpecProblemKind::BadBytes,
     SpecProblemKind::UnknownPlaceholder,
@@ -375,22 +376,6 @@ fn an_unset_rule_describes_itself_for_help_text() {
 }
 
 #[test]
-fn a_withheld_variables_unset_text_holds_no_default_value() {
-    let spec = spec(&one("purpose = \"The key shelf signs with.\"\n\
-         type = \"string\"\nunset = { default = \"shelf-signing-key\" }\n\
-         show = \"withheld\"\nsource = \"setting\""));
-    let text = spec
-        .variable(&name("SHELF_X"))
-        .unwrap()
-        .unset()
-        .in_mode(Mode::Local)
-        .to_string();
-
-    assert_eq!(text, "default");
-    assert!(!text.contains("shelf-signing-key"));
-}
-
-#[test]
 fn an_unset_table_takes_local_or_default_and_not_both() {
     let text = one("purpose = \"A port.\"\ntype = \"port\"\n\
          unset = { local = \"optional\", default = \"8080\" }\n\
@@ -474,6 +459,54 @@ fn a_withheld_setting_must_have_the_type_string() {
     );
 
     assert_eq!(kinds(&text), [SpecProblemKind::SecretForm]);
+}
+
+#[test]
+fn a_withheld_variable_refuses_a_default() {
+    let text = one(
+        "purpose = \"The key shelf signs with.\"\ntype = \"string\"\n\
+         unset = { default = \"shelf-signing-key\" }\nshow = \"withheld\"\nsource = \"setting\"",
+    );
+
+    assert_eq!(kinds(&text), [SpecProblemKind::WithheldDefault]);
+}
+
+#[test]
+fn a_withheld_variable_refuses_a_default_with_a_production_rule() {
+    let text = one(
+        "purpose = \"The key shelf signs with.\"\ntype = \"string\"\n\
+         unset = { default = \"shelf-signing-key\", production = \"required\" }\n\
+         show = \"withheld\"\nsource = \"setting\"",
+    );
+
+    assert_eq!(kinds(&text), [SpecProblemKind::WithheldDefault]);
+}
+
+#[test]
+fn a_withheld_generated_variable_refuses_a_default() {
+    let text = one(
+        "purpose = \"The key shelf signs with.\"\ntype = \"string\"\n\
+         unset = { default = \"shelf-signing-key\" }\n\
+         show = \"withheld\"\nsource = \"generated\"",
+    );
+
+    assert_eq!(kinds(&text), [SpecProblemKind::WithheldDefault]);
+}
+
+#[test]
+fn a_withheld_default_that_fails_its_type_is_refused_without_echoing_it() {
+    let text = one("purpose = \"The key shelf signs with.\"\ntype = \"port\"\n\
+         unset = { default = \"hunter2\" }\nshow = \"withheld\"\nsource = \"setting\"");
+
+    let problems = Spec::parse(&text).unwrap_err();
+    let rendered = problems.to_string();
+    assert!(
+        problems
+            .problems()
+            .iter()
+            .all(|problem| !problem.to_string().contains("hunter2")),
+        "{rendered}"
+    );
 }
 
 #[test]
@@ -835,18 +868,23 @@ fn form_with_default() -> impl Strategy<Value = (String, String)> {
     ]
 }
 
-/// An unset field written as TOML, which may use `default`.
-fn unset_with(default: String) -> impl Strategy<Value = String> {
-    let default = quote(&default);
-    prop::sample::select(vec![
-        "\"required\"".to_owned(),
-        "\"optional\"".to_owned(),
-        format!("{{ default = {default} }}"),
-        format!("{{ default = {default}, production = \"required\" }}"),
+/// An unset field written as TOML, which uses `default` unless the variable
+/// is withheld, because a withheld variable has none.
+fn unset_with(default: Option<String>) -> impl Strategy<Value = String> {
+    let mut words = vec!["\"required\"".to_owned(), "\"optional\"".to_owned()];
+    if let Some(default) = default {
+        let default = quote(&default);
+        words.push(format!("{{ default = {default} }}"));
+        words.push(format!(
+            "{{ default = {default}, production = \"required\" }}"
+        ));
+    }
+    words.extend([
         "{ local = \"optional\", production = \"required\" }".to_owned(),
         "{ local = \"required\", production = \"optional\" }".to_owned(),
         "{ local = \"required\" }".to_owned(),
-    ])
+    ]);
+    prop::sample::select(words)
 }
 
 /// A source, the show it allows and its bind, written as TOML lines.
@@ -903,11 +941,11 @@ fn variable() -> impl Strategy<Value = (&'static str, String)> {
         |((source, secret, bind), withheld, purpose)| {
             let withheld = secret || withheld;
             let form = if withheld {
-                "\\PC{0,12}"
-                    .prop_map(|text| ("\"string\"".to_owned(), text))
-                    .boxed()
+                Just(("\"string\"".to_owned(), None)).boxed()
             } else {
-                form_with_default().boxed()
+                form_with_default()
+                    .prop_map(|(form, default)| (form, Some(default)))
+                    .boxed()
             };
             form.prop_flat_map(move |(form, default)| {
                 let purpose = purpose.clone();

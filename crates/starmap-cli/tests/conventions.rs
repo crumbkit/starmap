@@ -68,10 +68,10 @@ const ALLOW: &[Allow] = &[
     Allow::example("init", &["--dry-run"], INIT_RUNS_ELSEWHERE),
     Allow::example("diff", &["main"], DIFF_NEEDS_GIT),
     Allow::example("run", &["--", "cargo", "run"], RUN_RESOLVES),
-    Allow::untwinned(STARTS[24], RUN_TWINS),
     Allow::untwinned(STARTS[25], RUN_TWINS),
     Allow::untwinned(STARTS[26], RUN_TWINS),
     Allow::untwinned(STARTS[27], RUN_TWINS),
+    Allow::untwinned(STARTS[28], RUN_TWINS),
     Allow::new(
         Rule::Items,
         "run",
@@ -194,6 +194,10 @@ const STARTS: &[Failing<'static>] = &[
     spec(
         &codes::SPEC_SECRET_FORM,
         &["check", "--spec", "secret_form.toml"],
+    ),
+    spec(
+        &codes::SPEC_WITHHELD_DEFAULT,
+        &["check", "--spec", "withheld_default.toml"],
     ),
     spec(
         &codes::SPEC_BIND_MISMATCH,
@@ -345,11 +349,12 @@ const PAIRS: &[Twin<'static>] = &[
     Twin::new(STARTS[15], VALID),
     Twin::new(STARTS[16], VALID),
     Twin::new(STARTS[17], VALID),
-    Twin::new(STARTS[18], &["explain", "SHELF_PORT"]),
-    Twin::new(STARTS[19], NEW_SPEC),
+    Twin::new(STARTS[18], VALID),
+    Twin::new(STARTS[19], &["explain", "SHELF_PORT"]),
     Twin::new(STARTS[20], NEW_SPEC),
-    Twin::new(STARTS[21], VALID_SOURCE),
+    Twin::new(STARTS[21], NEW_SPEC),
     Twin::new(STARTS[22], VALID_SOURCE),
+    Twin::new(STARTS[23], VALID_SOURCE),
 ];
 
 /// The settings of the twin check.

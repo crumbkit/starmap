@@ -229,9 +229,8 @@ pub enum Unset {
 
 impl fmt::Display for Unset {
     /// Writes `required`, `optional` or `default`, as a program's `--help`
-    /// describes a variable. It never writes the default's value, which may
-    /// belong to a withheld variable, so a caller that describes a shown
-    /// variable writes the [`Value`] after it.
+    /// describes a variable. It never writes the default's value, so a
+    /// caller that describes a variable writes the [`Value`] after it.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Required => "required",
@@ -356,6 +355,9 @@ pub enum SpecProblemKind {
     ShownSecret,
     /// A withheld variable has a type other than string.
     SecretForm,
+    /// A withheld variable has a default, which `starmap.toml` would hold in
+    /// plain text.
+    WithheldDefault,
     /// A bind does not fit the source, or a provided source has no
     /// provided bind.
     BindMismatch,
@@ -388,6 +390,7 @@ impl SpecProblemKind {
             Self::EmptyEnumeration => "starmap::spec::empty_enumeration",
             Self::ShownSecret => "starmap::spec::shown_secret",
             Self::SecretForm => "starmap::spec::secret_form",
+            Self::WithheldDefault => "starmap::spec::withheld_default",
             Self::BindMismatch => "starmap::spec::bind_mismatch",
             Self::BadBytes => "starmap::spec::bad_bytes",
             Self::UnknownPlaceholder => "starmap::spec::unknown_placeholder",

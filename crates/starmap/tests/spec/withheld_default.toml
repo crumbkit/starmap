@@ -1,0 +1,7 @@
+# A withheld variable has a default.
+[variables.SHELF_SIGNING_KEY]
+purpose = "The key the catalogue signs with."
+type = "string"
+unset = { default = "shelf-signing-key" }
+show = "withheld"
+source = "secret"

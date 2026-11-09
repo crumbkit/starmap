@@ -25,7 +25,7 @@ source = "setting"
 [variables.SHELF_MIRROR_TOKEN]
 purpose = "The token shelf sends to the catalogue mirror."
 type = "string"
-unset = { default = "anonymous" }
+unset = "optional"
 show = "withheld"
 source = "secret"
 "#;
@@ -86,8 +86,8 @@ fn an_os_string_field_reads_a_path_variable() {
     clippy::disallowed_methods,
     reason = "the test checks the secret that the field reads"
 )]
-fn a_secret_field_reads_a_copy_of_the_withheld_default() {
-    let environment = environment(Vec::new());
+fn a_secret_field_reads_a_copy_of_the_withheld_value() {
+    let environment = environment(vec![("SHELF_MIRROR_TOKEN".into(), "anonymous".into())]);
 
     let secret: Secret = required(&environment, "SHELF_MIRROR_TOKEN").unwrap();
 
