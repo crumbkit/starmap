@@ -2,12 +2,13 @@
 
 starmap declares, checks and resolves the environment variables a Rust
 application reads. An application keeps a `starmap.toml` beside its code
-that names each variable, its form, and what happens when it is absent. The
+that names each variable, its type, and what happens when it is absent. The
 application reads its environment once, in `main`, into a typed struct that
 `#[derive(starmap::Env)]` generates from that file, and a test fails when
 the struct and the file disagree. Programs that start the application, such
 as a development host, resolve the declared values and apply them to the
-child process.
+child process. The [glossary](docs/glossary.md) names each concept once,
+including `type`, `withheld`, `secret`, `provided` and `unset`.
 
 starmap 0.1.0 is the first release. `cargo install starmap-cli` installs
 the `starmap` command, and each

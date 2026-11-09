@@ -15,6 +15,13 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   describe an optional `next` list, the schema of `commands list` gains
   `goals` and `prints_no_result`, and the schemas of the other documents no
   longer say that a failure's code is in the tool's spelling.
+- **Breaking:** the public type that describes a variable's value is named
+  `Type`, because the `type` field in `starmap.toml` and the glossary call it
+  a type. `starmap::Form` is now `starmap::Type`, `starmap::FormError` is now
+  `starmap::TypeError`, and `Variable::form()` is now `Variable::value_type()`.
+  The `type` field in `starmap.toml` and the output of the `starmap` command
+  are unchanged. Code that imports these names must rename its imports and
+  calls.
 - **Breaking:** `AgentClient::put` takes a slice of
   `(&OnePasswordRef, &Secret)` and sends all of them in one Put, and it
   returns a `Vec<PutOutcome>` with the outcome of each value, in order.

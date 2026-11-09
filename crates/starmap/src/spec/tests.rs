@@ -11,7 +11,7 @@ use snapbox::{Assert, Data};
 
 use super::{Show, Source, Spec, SpecError, SpecProblemKind, Unset};
 use crate::{
-    Cache, Choice, Form, IntegerRange, Mode, Name, Placeholder, SecretBytes, SecretRef, Value,
+    Cache, Choice, IntegerRange, Mode, Name, Placeholder, SecretBytes, SecretRef, Type, Value,
 };
 
 /// The example spec in `crates/starmap/tests/example/starmap.toml`.
@@ -178,19 +178,19 @@ fn the_example_spec_reads_its_mode_rule() {
 #[test]
 fn the_example_spec_reads_each_type() {
     let spec = spec(EXAMPLE);
-    let form = |text: &str| spec.variable(&name(text)).unwrap().form().clone();
+    let ty = |text: &str| spec.variable(&name(text)).unwrap().value_type().clone();
 
-    assert_eq!(form("SHELF_PORT"), Form::Port);
-    assert_eq!(form("SHELF_CATALOGUE_URL"), Form::Url);
-    assert_eq!(form("SHELF_DATABASE"), Form::Path { absolute: false });
-    assert_eq!(form("XDG_STATE_HOME"), Form::Path { absolute: true });
-    assert_eq!(form("SHELF_DEBUG"), Form::Boolean);
-    assert_eq!(form("SHELF_MIRROR_TOKEN"), Form::String);
+    assert_eq!(ty("SHELF_PORT"), Type::Port);
+    assert_eq!(ty("SHELF_CATALOGUE_URL"), Type::Url);
+    assert_eq!(ty("SHELF_DATABASE"), Type::Path { absolute: false });
+    assert_eq!(ty("XDG_STATE_HOME"), Type::Path { absolute: true });
+    assert_eq!(ty("SHELF_DEBUG"), Type::Boolean);
+    assert_eq!(ty("SHELF_MIRROR_TOKEN"), Type::String);
     assert_eq!(
-        form("SHELF_PAGE_SIZE"),
-        Form::Integer(IntegerRange::new(1, 100).unwrap())
+        ty("SHELF_PAGE_SIZE"),
+        Type::Integer(IntegerRange::new(1, 100).unwrap())
     );
-    let Form::Enumeration(choices) = form("SHELF_ENV") else {
+    let Type::Enumeration(choices) = ty("SHELF_ENV") else {
         panic!("SHELF_ENV is not an enumeration");
     };
     let values: Vec<&str> = choices.iter().map(Choice::as_str).collect();
@@ -349,7 +349,7 @@ fn a_socket_address_type_reads_its_default_as_a_socket_address() {
          show = \"shown\"\nsource = \"setting\""));
     let variable = spec.variable(&name("SHELF_X")).unwrap();
 
-    assert_eq!(variable.form(), &Form::SocketAddress);
+    assert_eq!(variable.value_type(), &Type::SocketAddress);
     assert_eq!(
         variable.unset().in_mode(Mode::Local),
         &Unset::Default(Value::SocketAddress(([0, 0, 0, 0], 8080).into()))
@@ -824,7 +824,7 @@ fn quote(text: &str) -> String {
 }
 
 /// A type with a default that fits it, both written as TOML.
-fn form_with_default() -> impl Strategy<Value = (String, String)> {
+fn type_with_default() -> impl Strategy<Value = (String, String)> {
     let integer = (any::<i64>(), any::<i64>()).prop_flat_map(|(a, b)| {
         let (min, max) = (a.min(b), a.max(b));
         (min..=max).prop_map(move |number| {
@@ -940,20 +940,20 @@ fn variable() -> impl Strategy<Value = (&'static str, String)> {
     (source(), any::<bool>(), "[A-Za-z][a-z ]{0,20}\\.").prop_flat_map(
         |((source, secret, bind), withheld, purpose)| {
             let withheld = secret || withheld;
-            let form = if withheld {
+            let ty = if withheld {
                 Just(("\"string\"".to_owned(), None)).boxed()
             } else {
-                form_with_default()
-                    .prop_map(|(form, default)| (form, Some(default)))
+                type_with_default()
+                    .prop_map(|(ty, default)| (ty, Some(default)))
                     .boxed()
             };
-            form.prop_flat_map(move |(form, default)| {
+            ty.prop_flat_map(move |(ty, default)| {
                 let purpose = purpose.clone();
                 let bind = bind.clone();
                 unset_with(default).prop_map(move |unset| {
                     let show = if withheld { "withheld" } else { "shown" };
                     let body = format!(
-                        "purpose = {}\ntype = {form}\nunset = {unset}\nshow = \"{show}\"\n\
+                        "purpose = {}\ntype = {ty}\nunset = {unset}\nshow = \"{show}\"\n\
                          source = \"{source}\"\n{bind}",
                         quote(&purpose)
                     );

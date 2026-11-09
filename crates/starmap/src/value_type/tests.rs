@@ -1,4 +1,4 @@
-//! Tests for the forms a variable's value takes, and the types that check
+//! Tests for the types a variable's value has, and the types that check
 //! each one.
 
 use std::error::Error;
@@ -9,10 +9,10 @@ use std::path::PathBuf;
 use proptest::prelude::*;
 
 use super::{
-    Choice, ChoiceError, Choices, ChoicesError, Form, FormError, IntegerRange, Port, Value,
+    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Port, Type, TypeError, Value,
 };
 
-/// The eight words the boolean form accepts, each with the value it reads as.
+/// The eight words the boolean type accepts, each with the value it reads as.
 const BOOLEAN_WORDS: [(&str, bool); 8] = [
     ("1", true),
     ("0", false),
@@ -24,9 +24,9 @@ const BOOLEAN_WORDS: [(&str, bool); 8] = [
     ("off", false),
 ];
 
-/// Parses `raw` as `form`.
-fn parse(form: &Form, raw: &str) -> Result<Option<Value>, FormError> {
-    form.parse(OsStr::new(raw))
+/// Parses `raw` as `ty`.
+fn parse(ty: &Type, raw: &str) -> Result<Option<Value>, TypeError> {
+    ty.parse(OsStr::new(raw))
 }
 
 /// Builds the choices of `values`, which hold no repeat.
@@ -236,34 +236,34 @@ proptest! {
     }
 }
 
-// Form::parse for paths
+// Type::parse for paths
 
 #[test]
-fn a_path_form_reads_a_relative_path_when_it_need_not_be_absolute() {
-    let form = Form::Path { absolute: false };
+fn a_path_type_reads_a_relative_path_when_it_need_not_be_absolute() {
+    let ty = Type::Path { absolute: false };
 
     assert_eq!(
-        parse(&form, "books.db"),
+        parse(&ty, "books.db"),
         Ok(Some(Value::Path(PathBuf::from("books.db"))))
     );
 }
 
 #[test]
-fn an_absolute_path_form_reads_an_absolute_path() {
-    let form = Form::Path { absolute: true };
+fn an_absolute_path_type_reads_an_absolute_path() {
+    let ty = Type::Path { absolute: true };
 
     assert_eq!(
-        parse(&form, "/Users/luke/.local/state"),
+        parse(&ty, "/Users/luke/.local/state"),
         Ok(Some(Value::Path(PathBuf::from("/Users/luke/.local/state"))))
     );
 }
 
 #[test]
-fn an_absolute_path_form_treats_a_relative_or_empty_path_as_unset() {
-    let form = Form::Path { absolute: true };
+fn an_absolute_path_type_treats_a_relative_or_empty_path_as_unset() {
+    let ty = Type::Path { absolute: true };
 
-    assert_eq!(parse(&form, "state"), Ok(None));
-    assert_eq!(parse(&form, ""), Ok(None));
+    assert_eq!(parse(&ty, "state"), Ok(None));
+    assert_eq!(parse(&ty, ""), Ok(None));
 }
 
 #[cfg(unix)]
@@ -272,7 +272,7 @@ proptest! {
     fn an_absolute_path_rule_returns_unset_exactly_for_relative_paths(
         path in "/?[a-z.]{0,5}(/[a-z.]{0,5}){0,3}",
     ) {
-        let read = parse(&Form::Path { absolute: true }, &path);
+        let read = parse(&Type::Path { absolute: true }, &path);
 
         if path.starts_with('/') {
             prop_assert_eq!(read, Ok(Some(Value::Path(PathBuf::from(&path)))));
@@ -282,30 +282,30 @@ proptest! {
     }
 
     #[test]
-    fn a_path_form_without_the_absolute_rule_reads_every_path(
+    fn a_path_type_without_the_absolute_rule_reads_every_path(
         path in "/?[a-z.]{0,5}(/[a-z.]{0,5}){0,3}",
     ) {
         prop_assert_eq!(
-            parse(&Form::Path { absolute: false }, &path),
+            parse(&Type::Path { absolute: false }, &path),
             Ok(Some(Value::Path(PathBuf::from(&path))))
         );
     }
 }
 
-// Form::parse for ports, URLs and strings
+// Type::parse for ports, URLs and strings
 
 #[test]
-fn a_port_form_reads_a_port() {
+fn a_port_type_reads_a_port() {
     assert_eq!(
-        parse(&Form::Port, "443"),
+        parse(&Type::Port, "443"),
         Ok(Some(Value::Port(Port::try_from(443).unwrap())))
     );
-    assert_eq!(parse(&Form::Port, "0"), Err(FormError::NotPort));
+    assert_eq!(parse(&Type::Port, "0"), Err(TypeError::NotPort));
 }
 
 #[test]
-fn a_url_form_reads_a_url() {
-    let read = parse(&Form::Url, "https://shelf.example/catalogue");
+fn a_url_type_reads_a_url() {
+    let read = parse(&Type::Url, "https://shelf.example/catalogue");
 
     assert_eq!(
         read,
@@ -316,30 +316,30 @@ fn a_url_form_reads_a_url() {
 }
 
 #[test]
-fn a_url_form_refuses_text_without_a_scheme_and_keeps_the_parse_error_as_its_source() {
-    let error = parse(&Form::Url, "shelf.example").unwrap_err();
+fn a_url_type_refuses_text_without_a_scheme_and_keeps_the_parse_error_as_its_source() {
+    let error = parse(&Type::Url, "shelf.example").unwrap_err();
 
     assert_eq!(
         error,
-        FormError::NotUrl(url::ParseError::RelativeUrlWithoutBase)
+        TypeError::NotUrl(url::ParseError::RelativeUrlWithoutBase)
     );
     assert_eq!(error.to_string(), "the value is not a url");
     assert!(error.source().is_some());
 }
 
-// Form::parse for socket addresses
+// Type::parse for socket addresses
 
 #[test]
-fn a_socket_address_form_reads_an_ipv4_or_an_ipv6_address_with_its_port() {
+fn a_socket_address_type_reads_an_ipv4_or_an_ipv6_address_with_its_port() {
     assert_eq!(
-        parse(&Form::SocketAddress, "0.0.0.0:8080"),
+        parse(&Type::SocketAddress, "0.0.0.0:8080"),
         Ok(Some(Value::SocketAddress(SocketAddr::from((
             Ipv4Addr::UNSPECIFIED,
             8080
         )))))
     );
     assert_eq!(
-        parse(&Form::SocketAddress, "[::1]:443"),
+        parse(&Type::SocketAddress, "[::1]:443"),
         Ok(Some(Value::SocketAddress(SocketAddr::from((
             Ipv6Addr::LOCALHOST,
             443
@@ -348,7 +348,7 @@ fn a_socket_address_form_reads_an_ipv4_or_an_ipv6_address_with_its_port() {
     for raw in ["0.0.0.0:0", "[fe80::1%1]:80"] {
         assert!(
             matches!(
-                parse(&Form::SocketAddress, raw),
+                parse(&Type::SocketAddress, raw),
                 Ok(Some(Value::SocketAddress(_)))
             ),
             "{raw:?}"
@@ -357,7 +357,7 @@ fn a_socket_address_form_reads_an_ipv4_or_an_ipv6_address_with_its_port() {
 }
 
 #[test]
-fn a_socket_address_form_refuses_a_host_name_a_named_zone_an_address_without_a_port_and_empty_text()
+fn a_socket_address_type_refuses_a_host_name_a_named_zone_an_address_without_a_port_and_empty_text()
 {
     for raw in [
         "localhost:8080",
@@ -368,13 +368,13 @@ fn a_socket_address_form_refuses_a_host_name_a_named_zone_an_address_without_a_p
         "[fe80::1%eth0]:80",
     ] {
         assert_eq!(
-            parse(&Form::SocketAddress, raw),
-            Err(FormError::NotSocketAddress),
+            parse(&Type::SocketAddress, raw),
+            Err(TypeError::NotSocketAddress),
             "{raw:?}"
         );
     }
     assert_eq!(
-        FormError::NotSocketAddress.to_string(),
+        TypeError::NotSocketAddress.to_string(),
         "the value is not an ip socket address, such as 127.0.0.1:8080 or [::1]:8080"
     );
 }
@@ -391,31 +391,31 @@ proptest! {
         let value = Value::SocketAddress(SocketAddr::new(ip, port));
 
         prop_assert_eq!(
-            Form::SocketAddress.parse(&value.to_os_string()),
+            Type::SocketAddress.parse(&value.to_os_string()),
             Ok(Some(value))
         );
     }
 }
 
 #[test]
-fn a_string_form_reads_any_text_including_an_empty_one() {
+fn a_string_type_reads_any_text_including_an_empty_one() {
     assert_eq!(
-        parse(&Form::String, ""),
+        parse(&Type::String, ""),
         Ok(Some(Value::String(OsString::new())))
     );
     assert_eq!(
-        parse(&Form::String, "two words"),
+        parse(&Type::String, "two words"),
         Ok(Some(Value::String(OsString::from("two words"))))
     );
 }
 
-// Form::parse for booleans
+// Type::parse for booleans
 
 #[test]
-fn the_boolean_form_reads_each_of_its_eight_words() {
+fn the_boolean_type_reads_each_of_its_eight_words() {
     for (word, value) in BOOLEAN_WORDS {
         assert_eq!(
-            parse(&Form::Boolean, word),
+            parse(&Type::Boolean, word),
             Ok(Some(Value::Boolean(value))),
             "word {word:?}"
         );
@@ -423,70 +423,70 @@ fn the_boolean_form_reads_each_of_its_eight_words() {
 }
 
 #[test]
-fn the_boolean_form_refuses_a_word_with_surrounding_space() {
-    assert_eq!(parse(&Form::Boolean, " true"), Err(FormError::NotBoolean));
-    assert_eq!(parse(&Form::Boolean, "true "), Err(FormError::NotBoolean));
-    assert_eq!(parse(&Form::Boolean, ""), Err(FormError::NotBoolean));
+fn the_boolean_type_refuses_a_word_with_surrounding_space() {
+    assert_eq!(parse(&Type::Boolean, " true"), Err(TypeError::NotBoolean));
+    assert_eq!(parse(&Type::Boolean, "true "), Err(TypeError::NotBoolean));
+    assert_eq!(parse(&Type::Boolean, ""), Err(TypeError::NotBoolean));
 }
 
 proptest! {
     #[test]
-    fn the_boolean_form_reads_each_word_in_any_mix_of_case(
+    fn the_boolean_type_reads_each_word_in_any_mix_of_case(
         index in 0..BOOLEAN_WORDS.len(),
         upper in proptest::collection::vec(any::<bool>(), 5),
     ) {
         let (word, value) = BOOLEAN_WORDS[index];
 
         prop_assert_eq!(
-            parse(&Form::Boolean, &with_case(word, &upper)),
+            parse(&Type::Boolean, &with_case(word, &upper)),
             Ok(Some(Value::Boolean(value)))
         );
     }
 
     #[test]
-    fn the_boolean_form_refuses_a_word_with_any_text_around_it(
+    fn the_boolean_type_refuses_a_word_with_any_text_around_it(
         (prefix, suffix) in text_around_a_word(),
         index in 0..BOOLEAN_WORDS.len(),
     ) {
         let text = format!("{prefix}{}{suffix}", BOOLEAN_WORDS[index].0);
         prop_assume!(!BOOLEAN_WORDS.iter().any(|(word, _)| word.eq_ignore_ascii_case(&text)));
 
-        prop_assert_eq!(parse(&Form::Boolean, &text), Err(FormError::NotBoolean));
+        prop_assert_eq!(parse(&Type::Boolean, &text), Err(TypeError::NotBoolean));
     }
 
     #[test]
-    fn the_boolean_form_refuses_every_other_string(text in "\\PC{0,6}") {
+    fn the_boolean_type_refuses_every_other_string(text in "\\PC{0,6}") {
         prop_assume!(!BOOLEAN_WORDS.iter().any(|(word, _)| word.eq_ignore_ascii_case(&text)));
 
-        prop_assert_eq!(parse(&Form::Boolean, &text), Err(FormError::NotBoolean));
+        prop_assert_eq!(parse(&Type::Boolean, &text), Err(TypeError::NotBoolean));
     }
 }
 
-// Form::parse for integers
+// Type::parse for integers
 
 #[test]
-fn an_integer_form_reads_a_number_with_an_optional_sign() {
-    let form = Form::Integer(IntegerRange::new(-10, 10).unwrap());
+fn an_integer_type_reads_a_number_with_an_optional_sign() {
+    let ty = Type::Integer(IntegerRange::new(-10, 10).unwrap());
 
-    assert_eq!(parse(&form, "-3"), Ok(Some(Value::Integer(-3))));
-    assert_eq!(parse(&form, "+3"), Ok(Some(Value::Integer(3))));
+    assert_eq!(parse(&ty, "-3"), Ok(Some(Value::Integer(-3))));
+    assert_eq!(parse(&ty, "+3"), Ok(Some(Value::Integer(3))));
 }
 
 #[test]
-fn an_integer_form_refuses_text_that_is_not_a_whole_number() {
-    let form = Form::Integer(IntegerRange::new(1, 100).unwrap());
+fn an_integer_type_refuses_text_that_is_not_a_whole_number() {
+    let ty = Type::Integer(IntegerRange::new(1, 100).unwrap());
 
-    assert_eq!(parse(&form, "2.5"), Err(FormError::NotInteger));
-    assert_eq!(parse(&form, ""), Err(FormError::NotInteger));
-    assert_eq!(parse(&form, "-"), Err(FormError::NotInteger));
+    assert_eq!(parse(&ty, "2.5"), Err(TypeError::NotInteger));
+    assert_eq!(parse(&ty, ""), Err(TypeError::NotInteger));
+    assert_eq!(parse(&ty, "-"), Err(TypeError::NotInteger));
 }
 
 #[test]
-fn an_integer_form_refuses_a_number_outside_its_range_with_the_range() {
-    let form = Form::Integer(IntegerRange::new(1, 100).unwrap());
-    let error = parse(&form, "0").unwrap_err();
+fn an_integer_type_refuses_a_number_outside_its_range_with_the_range() {
+    let ty = Type::Integer(IntegerRange::new(1, 100).unwrap());
+    let error = parse(&ty, "0").unwrap_err();
 
-    assert_eq!(error, FormError::OutOfRange { min: 1, max: 100 });
+    assert_eq!(error, TypeError::OutOfRange { min: 1, max: 100 });
     assert_eq!(
         error.to_string(),
         "the value is not a whole number from 1 to 100"
@@ -494,19 +494,19 @@ fn an_integer_form_refuses_a_number_outside_its_range_with_the_range() {
 }
 
 #[test]
-fn an_integer_form_refuses_a_number_beyond_64_bits_as_out_of_range() {
-    let form = Form::Integer(IntegerRange::new(i64::MIN, i64::MAX).unwrap());
+fn an_integer_type_refuses_a_number_beyond_64_bits_as_out_of_range() {
+    let ty = Type::Integer(IntegerRange::new(i64::MIN, i64::MAX).unwrap());
 
     assert_eq!(
-        parse(&form, "9223372036854775808"),
-        Err(FormError::OutOfRange {
+        parse(&ty, "9223372036854775808"),
+        Err(TypeError::OutOfRange {
             min: i64::MIN,
             max: i64::MAX
         })
     );
     assert_eq!(
-        parse(&form, "-9223372036854775809"),
-        Err(FormError::OutOfRange {
+        parse(&ty, "-9223372036854775809"),
+        Err(TypeError::OutOfRange {
             min: i64::MIN,
             max: i64::MAX
         })
@@ -559,68 +559,68 @@ fn range_and_number() -> impl Strategy<Value = (i64, i64, i64)> {
 
 proptest! {
     #[test]
-    fn an_integer_form_accepts_a_number_exactly_when_it_lies_in_the_range(
+    fn an_integer_type_accepts_a_number_exactly_when_it_lies_in_the_range(
         (min, max, number) in range_and_number(),
     ) {
-        let form = Form::Integer(IntegerRange::new(min, max).unwrap());
-        let read = parse(&form, &number.to_string());
+        let ty = Type::Integer(IntegerRange::new(min, max).unwrap());
+        let read = parse(&ty, &number.to_string());
 
         if (min..=max).contains(&number) {
             prop_assert_eq!(read, Ok(Some(Value::Integer(number))));
         } else {
-            prop_assert_eq!(read, Err(FormError::OutOfRange { min, max }));
+            prop_assert_eq!(read, Err(TypeError::OutOfRange { min, max }));
         }
     }
 
     #[test]
-    fn an_integer_form_reads_text_exactly_when_it_is_one_optional_sign_and_digits(
+    fn an_integer_type_reads_text_exactly_when_it_is_one_optional_sign_and_digits(
         text in "[+-]{0,2}[0-9]{0,4}[+-]{0,2}[0-9]{0,4}",
     ) {
-        let form = Form::Integer(IntegerRange::new(i64::MIN, i64::MAX).unwrap());
+        let ty = Type::Integer(IntegerRange::new(i64::MIN, i64::MAX).unwrap());
 
-        prop_assert_eq!(parse(&form, &text), match signed_digits(&text) {
+        prop_assert_eq!(parse(&ty, &text), match signed_digits(&text) {
             Some(number) => Ok(Some(Value::Integer(number))),
-            None => Err(FormError::NotInteger),
+            None => Err(TypeError::NotInteger),
         });
     }
 
     #[test]
-    fn an_integer_form_refuses_text_with_a_character_other_than_a_sign_or_digit(
+    fn an_integer_type_refuses_text_with_a_character_other_than_a_sign_or_digit(
         text in "[0-9]{0,3}[^0-9+-][0-9]{0,3}",
     ) {
-        let form = Form::Integer(IntegerRange::new(i64::MIN, i64::MAX).unwrap());
+        let ty = Type::Integer(IntegerRange::new(i64::MIN, i64::MAX).unwrap());
 
-        prop_assert_eq!(parse(&form, &text), Err(FormError::NotInteger));
+        prop_assert_eq!(parse(&ty, &text), Err(TypeError::NotInteger));
     }
 }
 
-// Form::parse for enumerations
+// Type::parse for enumerations
 
 #[test]
-fn an_enumeration_form_reads_one_of_its_choices() {
-    let form = Form::Enumeration(choices(&["dev", "prod"]));
+fn an_enumeration_type_reads_one_of_its_choices() {
+    let ty = Type::Enumeration(choices(&["dev", "prod"]));
 
     assert_eq!(
-        parse(&form, "prod"),
+        parse(&ty, "prod"),
         Ok(Some(Value::Choice("prod".parse().unwrap())))
     );
 }
 
 #[test]
-fn an_enumeration_form_refuses_another_value_and_lists_its_choices() {
-    let form = Form::Enumeration(choices(&["dev", "prod"]));
-    let error = parse(&form, "Prod").unwrap_err();
+fn an_enumeration_type_refuses_another_value_and_lists_its_choices() {
+    let ty = Type::Enumeration(choices(&["dev", "prod"]));
+    let error = parse(&ty, "Prod").unwrap_err();
 
-    assert_eq!(error, FormError::NotChoice(choices(&["dev", "prod"])));
+    assert_eq!(error, TypeError::NotChoice(choices(&["dev", "prod"])));
     assert_eq!(error.to_string(), "the value is not one of dev, prod");
 }
 
 #[test]
-fn an_enumeration_form_refuses_an_empty_value_as_empty_and_lists_its_choices() {
-    let form = Form::Enumeration(choices(&["dev", "prod"]));
-    let error = parse(&form, "").unwrap_err();
+fn an_enumeration_type_refuses_an_empty_value_as_empty_and_lists_its_choices() {
+    let ty = Type::Enumeration(choices(&["dev", "prod"]));
+    let error = parse(&ty, "").unwrap_err();
 
-    assert_eq!(error, FormError::EmptyChoice(choices(&["dev", "prod"])));
+    assert_eq!(error, TypeError::EmptyChoice(choices(&["dev", "prod"])));
     assert_eq!(
         error.to_string(),
         "the value is empty, and it must be one of dev, prod"
@@ -629,36 +629,36 @@ fn an_enumeration_form_refuses_an_empty_value_as_empty_and_lists_its_choices() {
 
 proptest! {
     #[test]
-    fn an_enumeration_form_accepts_a_value_exactly_when_it_is_a_choice(
+    fn an_enumeration_type_accepts_a_value_exactly_when_it_is_a_choice(
         values in proptest::collection::btree_set("[a-c]{1,2}", 1..5),
         text in "[a-c]{0,3}",
     ) {
         let values: Vec<&str> = values.iter().map(String::as_str).collect();
-        let form = Form::Enumeration(choices(&values));
+        let ty = Type::Enumeration(choices(&values));
 
-        prop_assert_eq!(parse(&form, &text).is_ok(), values.contains(&text.as_str()));
+        prop_assert_eq!(parse(&ty, &text).is_ok(), values.contains(&text.as_str()));
     }
 }
 
-// Form::parse for text that is not Unicode
+// Type::parse for text that is not Unicode
 
 #[cfg(unix)]
 #[test]
-fn every_form_that_needs_text_refuses_a_value_that_is_not_unicode() {
+fn every_type_that_needs_text_refuses_a_value_that_is_not_unicode() {
     use std::os::unix::ffi::OsStrExt;
 
     let raw = OsStr::from_bytes(b"\xff80");
-    let forms = [
-        Form::Port,
-        Form::Url,
-        Form::SocketAddress,
-        Form::Boolean,
-        Form::Integer(IntegerRange::new(1, 100).unwrap()),
-        Form::Enumeration(choices(&["dev"])),
+    let types = [
+        Type::Port,
+        Type::Url,
+        Type::SocketAddress,
+        Type::Boolean,
+        Type::Integer(IntegerRange::new(1, 100).unwrap()),
+        Type::Enumeration(choices(&["dev"])),
     ];
 
-    for form in forms {
-        assert_eq!(form.parse(raw), Err(FormError::NotUnicode), "form {form:?}");
+    for ty in types {
+        assert_eq!(ty.parse(raw), Err(TypeError::NotUnicode), "type {ty:?}");
     }
 }
 
@@ -670,46 +670,46 @@ fn the_string_and_path_forms_read_a_value_that_is_not_unicode() {
     let raw = OsStr::from_bytes(b"/state/\xff");
 
     assert_eq!(
-        Form::String.parse(raw),
+        Type::String.parse(raw),
         Ok(Some(Value::String(raw.to_os_string())))
     );
     assert_eq!(
-        Form::Path { absolute: true }.parse(raw),
+        Type::Path { absolute: true }.parse(raw),
         Ok(Some(Value::Path(PathBuf::from(raw))))
     );
 }
 
-// Display of forms and values
+// Display of types and values
 
 #[test]
-fn each_form_describes_its_values_for_help_text() {
+fn each_type_describes_its_values_for_help_text() {
     let described = [
-        (Form::Path { absolute: false }, "a path"),
-        (Form::Path { absolute: true }, "an absolute path"),
-        (Form::Port, "a port"),
-        (Form::Url, "a url"),
-        (Form::SocketAddress, "an ip socket address"),
-        (Form::Boolean, "a boolean"),
+        (Type::Path { absolute: false }, "a path"),
+        (Type::Path { absolute: true }, "an absolute path"),
+        (Type::Port, "a port"),
+        (Type::Url, "a url"),
+        (Type::SocketAddress, "an ip socket address"),
+        (Type::Boolean, "a boolean"),
         (
-            Form::Integer(IntegerRange::new(-5, 100).unwrap()),
+            Type::Integer(IntegerRange::new(-5, 100).unwrap()),
             "a whole number from -5 to 100",
         ),
         (
-            Form::Enumeration(choices(&["dev", "prod"])),
+            Type::Enumeration(choices(&["dev", "prod"])),
             "one of dev, prod",
         ),
-        (Form::String, "a string"),
+        (Type::String, "a string"),
     ];
 
-    for (form, text) in described {
-        assert_eq!(form.to_string(), text);
+    for (ty, text) in described {
+        assert_eq!(ty.to_string(), text);
     }
 }
 
 #[test]
 fn a_value_prints_as_the_text_an_environment_holds() {
-    let address = parse(&Form::SocketAddress, "[::1]:8080").unwrap().unwrap();
-    let choice = parse(&Form::Enumeration(choices(&["dev"])), "dev")
+    let address = parse(&Type::SocketAddress, "[::1]:8080").unwrap().unwrap();
+    let choice = parse(&Type::Enumeration(choices(&["dev"])), "dev")
         .unwrap()
         .unwrap();
 

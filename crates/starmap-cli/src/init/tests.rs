@@ -15,18 +15,18 @@ fn guessed(name: &str) -> Guess {
 
 /// Returns the type, unset rule, show and source of a guess.
 fn fields(guess: &Guess) -> [&str; 4] {
-    [&guess.form, &guess.unset, &guess.show, &guess.source]
+    [&guess.ty, &guess.unset, &guess.show, &guess.source]
 }
 
 #[test]
 fn a_name_guesses_its_type_from_its_last_word() {
-    assert_eq!(guessed("SHELF_PORT").form, "port?");
-    assert_eq!(guessed("SHELF_CATALOGUE_URL").form, "url?");
+    assert_eq!(guessed("SHELF_PORT").ty, "port?");
+    assert_eq!(guessed("SHELF_CATALOGUE_URL").ty, "url?");
     for name in ["CACHE_DIR", "CONFIG_PATH", "LOG_FILE", "JAVA_HOME"] {
-        assert_eq!(guessed(name).form, "path?", "{name}");
+        assert_eq!(guessed(name).ty, "path?", "{name}");
     }
-    assert_eq!(guessed("SHELF_PAGE_SIZE").form, "string?");
-    assert_eq!(guessed("PORT").form, "string?");
+    assert_eq!(guessed("SHELF_PAGE_SIZE").ty, "string?");
+    assert_eq!(guessed("PORT").ty, "string?");
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn a_variable_of_the_shell_or_the_xdg_directories_is_guessed_inherited() {
             "{name}"
         );
     }
-    assert_eq!(guessed("XDG_STATE_HOME").form, "path?");
+    assert_eq!(guessed("XDG_STATE_HOME").ty, "path?");
 }
 
 #[test]

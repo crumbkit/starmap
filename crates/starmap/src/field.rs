@@ -106,7 +106,7 @@ impl ReadField for Field {
 }
 
 /// The kind of value a field's type holds. An integer type's bounds are
-/// held as `i64`, the bounds of an integer form, so a type wider than `i64`
+/// held as `i64`, the bounds of an integer type, so a type wider than `i64`
 /// gives the bound of `i64`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]

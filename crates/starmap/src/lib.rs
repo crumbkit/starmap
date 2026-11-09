@@ -4,7 +4,7 @@
 //! disagree.
 //!
 //! [`Spec::parse`] reads a `starmap.toml` into a [`Spec`]: each variable's
-//! [`Name`], the [`Form`] its value takes with the [`Value`] that form
+//! [`Name`], the [`Type`] of its value with the [`Value`] that type
 //! reads, its [`UnsetRule`], its [`Show`] and its [`Source`] merged with the
 //! bind that source allows, and the [`ModeRule`] that decides whether the
 //! application runs in local or production [`Mode`]. A file that breaks a
@@ -29,7 +29,7 @@
 //! a host prints as it is.
 //!
 //! The `url` crate is part of starmap's public API, because [`Value::Url`]
-//! holds a `url::Url` and [`FormError::NotUrl`] holds its parse error.
+//! holds a `url::Url` and [`TypeError::NotUrl`] holds its parse error.
 //! starmap re-exports it as [`url`], so a host names the same version.
 //!
 //! The crate reads no environment variable itself. A caller passes each
@@ -44,11 +44,11 @@ mod bind;
 mod check;
 mod env;
 mod field;
-mod form;
 mod mode;
 mod name;
 mod secret;
 mod spec;
+mod value_type;
 
 pub use bind::{
     Bindings, Bound, BytesError, Cache, NoPlace, OnePasswordRef, OnePasswordRefError, PathTemplate,
@@ -58,10 +58,6 @@ pub use bind::{
 pub use check::{Finding, Problem, Refusals, Verdict, capture, check, mode};
 pub use env::Environment;
 pub use field::{Field, FieldError, FieldProblem, Presence, Shape};
-pub use form::{
-    Choice, ChoiceError, Choices, ChoicesError, Form, FormError, IntegerRange, Port, PortError,
-    RangeError, Value,
-};
 pub use mode::{Mode, ModeRule};
 pub use name::{Name, NameError};
 pub use secret::Secret;
@@ -69,6 +65,10 @@ pub use spec::{
     Digest, Show, Source, Spec, SpecError, SpecProblem, SpecProblemKind, Unset, UnsetRule, Variable,
 };
 pub use url;
+pub use value_type::{
+    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Port, PortError, RangeError, Type,
+    TypeError, Value,
+};
 
 /// Derives [`Enumeration`] for an enum of unit variants. A variant reads as
 /// its name in kebab case, such as `dry-run` for `DryRun`, and
@@ -115,7 +115,7 @@ pub trait Env: Sized {
     fn load() -> Result<Self, ReadError>;
 
     /// Reads `vars` into the struct. The embedded spec gives each
-    /// variable's form, its unset rule and its default, and the mode
+    /// variable's type, its unset rule and its default, and the mode
     /// variable decides the mode. A variable that the spec does not
     /// declare is ignored.
     ///
@@ -123,7 +123,7 @@ pub trait Env: Sized {
     ///
     /// Returns [`ReadError::Spec`] when the embedded spec does not parse,
     /// [`ReadError::Refused`] when a variable is missing or does not fit
-    /// its form, and [`ReadError::Field`] when a field cannot hold a
+    /// its type, and [`ReadError::Field`] when a field cannot hold a
     /// checked value.
     fn from_vars(vars: impl IntoIterator<Item = (OsString, OsString)>) -> Result<Self, ReadError> {
         let spec = Spec::parse(Self::SPEC).map_err(ReadError::Spec)?;
@@ -168,7 +168,7 @@ pub trait Enumeration: Sized {
 pub enum ReadError {
     /// The embedded `starmap.toml` does not parse.
     Spec(SpecError),
-    /// A variable is missing or does not fit its form.
+    /// A variable is missing or does not fit its type.
     Refused(Refusals),
     /// A field cannot hold its variable's checked value.
     Field(FieldError),

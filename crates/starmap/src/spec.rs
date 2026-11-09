@@ -9,7 +9,7 @@ use std::fmt;
 use std::ops::Range;
 
 use crate::{
-    Form, Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind, SecretBytes, Value,
+    Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind, SecretBytes, Type, Value,
 };
 
 #[cfg(test)]
@@ -33,7 +33,7 @@ mod tests;
 /// "#,
 /// )?;
 /// let name: starmap::Name = "SHELF_PORT".parse()?;
-/// assert_eq!(spec.variable(&name).map(|variable| variable.form()), Some(&starmap::Form::Port));
+/// assert_eq!(spec.variable(&name).map(|variable| variable.value_type()), Some(&starmap::Type::Port));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,7 +106,7 @@ impl Spec {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variable {
     purpose: String,
-    form: Form,
+    value_type: Type,
     unset: UnsetRule,
     show: Show,
     source: Source,
@@ -119,11 +119,11 @@ impl Variable {
         &self.purpose
     }
 
-    /// Returns the form the variable's value takes, which the file's `type`
+    /// Returns the type of the variable's value, which the file's `type`
     /// field states.
     #[must_use]
-    pub fn form(&self) -> &Form {
-        &self.form
+    pub fn value_type(&self) -> &Type {
+        &self.value_type
     }
 
     /// Returns what happens when the variable has no value, in each mode.
@@ -223,7 +223,7 @@ pub enum Unset {
     Required,
     /// The variable may stay unset.
     Optional,
-    /// The variable takes this value, which fits its form.
+    /// The variable takes this value, which fits its type.
     Default(Value),
 }
 
@@ -410,15 +410,15 @@ enum SourceKind {
     Provided,
 }
 
-/// The words a type takes, with the form each names. The parser reads them,
+/// The words a type takes, with the type each names. The parser reads them,
 /// and the canonical form writes them.
-const FORM_WORDS: &[(&str, Form)] = &[
-    ("path", Form::Path { absolute: false }),
-    ("port", Form::Port),
-    ("url", Form::Url),
-    ("socket-address", Form::SocketAddress),
-    ("boolean", Form::Boolean),
-    ("string", Form::String),
+const TYPE_WORDS: &[(&str, Type)] = &[
+    ("path", Type::Path { absolute: false }),
+    ("port", Type::Port),
+    ("url", Type::Url),
+    ("socket-address", Type::SocketAddress),
+    ("boolean", Type::Boolean),
+    ("string", Type::String),
 ];
 /// The words an unset rule takes in one mode.
 const UNSET_WORDS: &[(&str, Unset)] =

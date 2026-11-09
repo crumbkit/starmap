@@ -17,7 +17,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
-use starmap::{Env, Field, Form, Mode, Presence, Shape, Show, Spec, Unset, Variable};
+use starmap::{Env, Field, Mode, Presence, Shape, Show, Spec, Type, Unset, Variable};
 
 #[cfg(test)]
 mod tests;
@@ -167,7 +167,7 @@ fn disagreements(field: &Field, variable: &Variable, has_mode: bool) -> Vec<Stri
         )),
         _ => {}
     }
-    found.extend(shape(field, variable.form()));
+    found.extend(shape(field, variable.value_type()));
     let modes: &[Mode] = if has_mode {
         &[Mode::Local, Mode::Production]
     } else {
@@ -191,18 +191,18 @@ fn disagreements(field: &Field, variable: &Variable, has_mode: bool) -> Vec<Stri
     found
 }
 
-/// Returns each way the shape of `field` cannot hold a value of `form`.
-fn shape(field: &Field, form: &Form) -> Vec<String> {
+/// Returns each way the shape of `field` cannot hold a value of `ty`.
+fn shape(field: &Field, ty: &Type) -> Vec<String> {
     let rust_type = field.rust_type;
-    match (field.shape, form) {
-        (Shape::Path, Form::Path { .. })
-        | (Shape::Port, Form::Port)
-        | (Shape::Url, Form::Url)
-        | (Shape::SocketAddress, Form::SocketAddress)
-        | (Shape::Boolean, Form::Boolean)
-        | (Shape::String | Shape::OsString, Form::String)
-        | (Shape::OsString, Form::Path { .. }) => Vec::new(),
-        (Shape::Integer { min, max }, Form::Integer(range)) => {
+    match (field.shape, ty) {
+        (Shape::Path, Type::Path { .. })
+        | (Shape::Port, Type::Port)
+        | (Shape::Url, Type::Url)
+        | (Shape::SocketAddress, Type::SocketAddress)
+        | (Shape::Boolean, Type::Boolean)
+        | (Shape::String | Shape::OsString, Type::String)
+        | (Shape::OsString, Type::Path { .. }) => Vec::new(),
+        (Shape::Integer { min, max }, Type::Integer(range)) => {
             let mut found = Vec::new();
             if range.max() > max {
                 found.push(format!(
@@ -218,16 +218,16 @@ fn shape(field: &Field, form: &Form) -> Vec<String> {
             }
             found
         }
-        (Shape::Enumeration(values), Form::Enumeration(choices)) => choices
+        (Shape::Enumeration(values), Type::Enumeration(choices)) => choices
             .iter()
             .filter(|choice| !values.contains(&choice.as_str()))
             .map(|choice| {
                 format!("starmap.toml allows {choice}, and the field type {rust_type} has no value {choice}")
             })
             .collect(),
-        (shape, form) => vec![format!(
+        (shape, ty) => vec![format!(
             "starmap.toml types it as {}, and the field type {rust_type} holds {}",
-            form,
+            ty,
             shape_words(shape)
         )],
     }

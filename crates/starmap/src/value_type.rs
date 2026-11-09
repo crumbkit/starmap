@@ -1,5 +1,5 @@
-//! The form a variable's value takes, the types that check each form, and
-//! the value a form reads.
+//! The type a variable's value has, the types that check each type, and
+//! the value a type reads.
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -14,16 +14,16 @@ use url::Url;
 #[cfg(test)]
 mod tests;
 
-/// The words the boolean form reads as `true`.
+/// The words the boolean type reads as `true`.
 const TRUE_WORDS: [&str; 4] = ["1", "true", "yes", "on"];
-/// The words the boolean form reads as `false`.
+/// The words the boolean type reads as `false`.
 const FALSE_WORDS: [&str; 4] = ["0", "false", "no", "off"];
 
-/// The form a variable's value takes, which a variable's `type` field in
+/// The type of a variable's value, which a variable's `type` field in
 /// `starmap.toml` states.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum Form {
+pub enum Type {
     /// A file system path. With `absolute`, a relative path counts as unset,
     /// as the XDG Base Directory rule says of its variables.
     Path {
@@ -51,19 +51,19 @@ pub enum Form {
     String,
 }
 
-impl Form {
-    /// Reads `raw` in this form.
+impl Type {
+    /// Reads `raw` in this type.
     ///
     /// `Ok(None)` means the value counts as unset, which happens only for a
     /// relative path, including an empty one, where `absolute` is true. The
-    /// path and string forms read a value that is not Unicode; every other
-    /// form needs Unicode text. A value is never trimmed, so a space around
+    /// path and string types read a value that is not Unicode; every other
+    /// type needs Unicode text. A value is never trimmed, so a space around
     /// a word makes it a different word.
     ///
     /// # Errors
     ///
-    /// Returns [`FormError`] when the value does not fit the form.
-    pub fn parse(&self, raw: &OsStr) -> Result<Option<Value>, FormError> {
+    /// Returns [`TypeError`] when the value does not fit the type.
+    pub fn parse(&self, raw: &OsStr) -> Result<Option<Value>, TypeError> {
         let value = match self {
             Self::Path { absolute } => {
                 let path = PathBuf::from(raw);
@@ -73,23 +73,23 @@ impl Form {
                 Value::Path(path)
             }
             Self::String => Value::String(raw.to_os_string()),
-            Self::Port => Value::Port(text(raw)?.parse().map_err(|_| FormError::NotPort)?),
-            Self::Url => Value::Url(Url::parse(text(raw)?).map_err(FormError::NotUrl)?),
+            Self::Port => Value::Port(text(raw)?.parse().map_err(|_| TypeError::NotPort)?),
+            Self::Url => Value::Url(Url::parse(text(raw)?).map_err(TypeError::NotUrl)?),
             Self::SocketAddress => Value::SocketAddress(
                 text(raw)?
                     .parse()
-                    .map_err(|_| FormError::NotSocketAddress)?,
+                    .map_err(|_| TypeError::NotSocketAddress)?,
             ),
             Self::Boolean => Value::Boolean(boolean(text(raw)?)?),
             Self::Integer(range) => Value::Integer(range.parse(text(raw)?)?),
             Self::Enumeration(choices) => {
                 let text = text(raw)?;
                 if text.is_empty() {
-                    return Err(FormError::EmptyChoice(choices.clone()));
+                    return Err(TypeError::EmptyChoice(choices.clone()));
                 }
                 let choice = choices
                     .get(text)
-                    .ok_or_else(|| FormError::NotChoice(choices.clone()))?;
+                    .ok_or_else(|| TypeError::NotChoice(choices.clone()))?;
                 Value::Choice(choice.clone())
             }
         };
@@ -97,8 +97,8 @@ impl Form {
     }
 }
 
-impl fmt::Display for Form {
-    /// Writes what a value of the form is, such as `a port` or `a whole
+impl fmt::Display for Type {
+    /// Writes what a value of the type is, such as `a port` or `a whole
     /// number from 1 to 100`, as a program's `--help` describes a variable.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -120,46 +120,46 @@ impl fmt::Display for Form {
 }
 
 /// Returns `raw` as Unicode text.
-fn text(raw: &OsStr) -> Result<&str, FormError> {
-    raw.to_str().ok_or(FormError::NotUnicode)
+fn text(raw: &OsStr) -> Result<&str, TypeError> {
+    raw.to_str().ok_or(TypeError::NotUnicode)
 }
 
 /// Reads one of the eight boolean words, in any mix of ASCII case.
-fn boolean(text: &str) -> Result<bool, FormError> {
+fn boolean(text: &str) -> Result<bool, TypeError> {
     let is = |words: [&str; 4]| words.iter().any(|word| word.eq_ignore_ascii_case(text));
     if is(TRUE_WORDS) {
         Ok(true)
     } else if is(FALSE_WORDS) {
         Ok(false)
     } else {
-        Err(FormError::NotBoolean)
+        Err(TypeError::NotBoolean)
     }
 }
 
-/// A value that a [`Form`] has read.
+/// A value that a [`Type`] has read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Value {
-    /// The value of a path form.
+    /// The value of a path type.
     Path(PathBuf),
-    /// The value of the port form.
+    /// The value of the port type.
     Port(Port),
-    /// The value of the URL form.
+    /// The value of the URL type.
     Url(Url),
-    /// The value of the socket-address form.
+    /// The value of the socket-address type.
     SocketAddress(SocketAddr),
-    /// The value of the boolean form.
+    /// The value of the boolean type.
     Boolean(bool),
-    /// The value of an integer form, which lies in the form's range.
+    /// The value of an integer type, which lies in the type's range.
     Integer(i64),
-    /// The value of an enumeration form, which is one of the form's choices.
+    /// The value of an enumeration type, which is one of the type's choices.
     Choice(Choice),
-    /// The value of the string form.
+    /// The value of the string type.
     String(OsString),
 }
 
 impl Value {
-    /// Returns the value as the text an environment holds, which its form
+    /// Returns the value as the text an environment holds, which its type
     /// reads back as an equal value.
     pub(crate) fn to_os_string(&self) -> OsString {
         match self {
@@ -183,12 +183,12 @@ impl fmt::Display for Value {
     }
 }
 
-/// The reason a value does not fit its [`Form`]. The text names the form's
+/// The reason a value does not fit its [`Type`]. The text names the type's
 /// rule and never repeats the value, which may be a secret.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum FormError {
-    /// The form needs Unicode text, and the value is not Unicode.
+pub enum TypeError {
+    /// The type needs Unicode text, and the value is not Unicode.
     NotUnicode,
     /// The value is not a port from 1 to 65535.
     NotPort,
@@ -200,20 +200,20 @@ pub enum FormError {
     NotBoolean,
     /// The value is not a whole number.
     NotInteger,
-    /// The value is a whole number outside the form's range.
+    /// The value is a whole number outside the type's range.
     OutOfRange {
-        /// The smallest number the form accepts.
+        /// The smallest number the type accepts.
         min: i64,
-        /// The largest number the form accepts.
+        /// The largest number the type accepts.
         max: i64,
     },
-    /// The value is not one of the form's choices.
+    /// The value is not one of the type's choices.
     NotChoice(Choices),
-    /// The value is empty, and the form takes one of these choices.
+    /// The value is empty, and the type takes one of these choices.
     EmptyChoice(Choices),
 }
 
-impl fmt::Display for FormError {
+impl fmt::Display for TypeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotUnicode => formatter.write_str("the value is not unicode text"),
@@ -241,7 +241,7 @@ impl fmt::Display for FormError {
     }
 }
 
-impl Error for FormError {
+impl Error for TypeError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::NotUrl(error) => Some(error),
@@ -323,7 +323,7 @@ impl fmt::Display for PortError {
 
 impl Error for PortError {}
 
-/// The range of an integer form, from its minimum to its maximum, both
+/// The range of an integer type, from its minimum to its maximum, both
 /// included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IntegerRange {
@@ -364,14 +364,14 @@ impl IntegerRange {
     /// Reads a whole number in the range: an optional `+` or `-` followed
     /// by ASCII digits. A number beyond the 64 bits of `i64` lies outside
     /// every range.
-    fn parse(self, text: &str) -> Result<i64, FormError> {
-        let out_of_range = FormError::OutOfRange {
+    fn parse(self, text: &str) -> Result<i64, TypeError> {
+        let out_of_range = TypeError::OutOfRange {
             min: self.min,
             max: self.max,
         };
         let number = i64::from_str(text).map_err(|error| match error.kind() {
             IntErrorKind::PosOverflow | IntErrorKind::NegOverflow => out_of_range.clone(),
-            _ => FormError::NotInteger,
+            _ => TypeError::NotInteger,
         })?;
         if self.contains(number) {
             Ok(number)
@@ -414,7 +414,7 @@ impl fmt::Display for RangeError {
 
 impl Error for RangeError {}
 
-/// One value of an enumeration form: text that is not empty and holds no
+/// One value of an enumeration type: text that is not empty and holds no
 /// whitespace.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Choice(String);
@@ -480,7 +480,7 @@ impl fmt::Display for ChoiceError {
 
 impl Error for ChoiceError {}
 
-/// The values of an enumeration form: at least one [`Choice`], none of them
+/// The values of an enumeration type: at least one [`Choice`], none of them
 /// repeated, in the order the spec lists them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Choices(Vec<Choice>);

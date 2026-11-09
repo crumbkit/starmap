@@ -27,7 +27,7 @@ fn reason(spec: &Spec, bindings: &Bindings) -> String {
         return format!("the spec does not declare {name}");
     };
     if let Some(Bound::Plain(raw)) = bindings.get(name) {
-        match variable.form().parse(raw) {
+        match variable.value_type().parse(raw) {
             Ok(Some(_)) => return format!("{name} is {}", raw.to_string_lossy()),
             Ok(None) => {}
             Err(_) => return format!("the value of {name} does not fit its type"),
