@@ -6,6 +6,13 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `starmap diff` no longer accepts a git run that exits before its output
+  limit is checked and leaves its output cut short. It reports that git
+  cannot read the revision, as it does when it stops git for printing too
+  much.
+
 ### Changed
 
 - A `starmap` failure that offers two different repairs prints each one on
