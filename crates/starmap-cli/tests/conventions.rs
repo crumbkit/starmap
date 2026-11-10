@@ -278,6 +278,14 @@ const STARTS: &[Failing<'static>] = &[
             "/usr/bin/true",
         ],
     ),
+    spec(
+        &codes::SPEC_POINTER_DECLARES,
+        &["check", "--spec", "pointer_declares.toml"],
+    ),
+    spec(
+        &codes::SPEC_POINTER_CHAIN,
+        &["check", "--spec", "pointer_chain.toml"],
+    ),
 ];
 
 /// A revision that starts with `-`, which diff refuses before git runs, so
@@ -355,6 +363,8 @@ const PAIRS: &[Twin<'static>] = &[
     Twin::new(STARTS[21], NEW_SPEC),
     Twin::new(STARTS[22], VALID_SOURCE),
     Twin::new(STARTS[23], VALID_SOURCE),
+    Twin::new(STARTS[29], VALID),
+    Twin::new(STARTS[30], VALID),
 ];
 
 /// The settings of the twin check.

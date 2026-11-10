@@ -23,7 +23,10 @@ then the default, and `.env` and `--set` never give a secret. A secret
 comes from its 1Password bind, or from the shell or the Keychain when it
 has none. At a terminal, `run` asks for a required secret that nothing
 supplies, with hidden input, and offers to save it to the Keychain. The
-program's exit code becomes `starmap`'s.
+program's exit code becomes `starmap`'s. A `starmap.toml` that holds
+`spec = "config/environment.toml"` points to the file that declares the
+variables, with optional `src` and `dotenv` paths beside it, and every
+command follows it.
 [docs/commands.md](https://github.com/crumbkit/starmap/blob/main/crates/starmap-cli/docs/commands.md) is the
 reference of every command. The repository's
 [README](https://github.com/crumbkit/starmap) describes the project.

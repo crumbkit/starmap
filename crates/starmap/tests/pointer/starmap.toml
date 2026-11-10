@@ -1,0 +1,2 @@
+# A pointer to the example spec, which the derive follows.
+spec = "../example/starmap.toml"

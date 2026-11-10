@@ -7,6 +7,7 @@ mod parse;
 use std::error::Error;
 use std::fmt;
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 use crate::{
     Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind, SecretBytes, Type, Value,
@@ -53,7 +54,9 @@ impl Spec {
     ///
     /// Returns [`SpecError`] with every problem the parser finds when the
     /// text is over [`Spec::MAX_BYTES`], is not TOML, or breaks a rule of
-    /// the file.
+    /// the file. A [`Pointer`] fails as
+    /// [`SpecProblemKind::PointerChain`], or as
+    /// [`SpecProblemKind::PointerDeclares`] when it declares variables too.
     pub fn parse(text: &str) -> Result<Self, SpecError> {
         parse::parse(text)
     }
@@ -99,6 +102,77 @@ impl Spec {
     #[must_use]
     pub fn to_toml(&self) -> String {
         canonical::to_toml(self)
+    }
+}
+
+/// A `starmap.toml` that points to the file that declares the variables,
+/// in place of declaring them itself. A file is a pointer when its top
+/// level has the key `spec`:
+///
+/// ```toml
+/// spec = "config/environment.toml"
+/// src = ["src"]
+/// dotenv = ".env"
+/// ```
+///
+/// Each path is as the file writes it, relative to the directory of the
+/// pointer file, and the host joins it to that directory. `src` lists the
+/// directories whose source `starmap check` and `starmap init` scan, and
+/// `dotenv` names the file that `starmap run` reads values from.
+///
+/// ```
+/// let pointer = starmap::Pointer::parse("spec = \"config/environment.toml\"\n")?
+///     .ok_or("the file declares variables")?;
+/// assert_eq!(pointer.spec(), std::path::Path::new("config/environment.toml"));
+/// assert_eq!(pointer.src(), [std::path::PathBuf::from("src")]);
+/// assert_eq!(pointer.dotenv(), std::path::Path::new(".env"));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pointer {
+    spec: PathBuf,
+    src: Vec<PathBuf>,
+    dotenv: PathBuf,
+}
+
+impl Pointer {
+    /// The source directory when the pointer lists none.
+    pub const SRC: &'static str = "src";
+    /// The `.env` file when the pointer names none.
+    pub const DOTENV: &'static str = ".env";
+
+    /// Parses the text of a `starmap.toml` as a pointer. It returns `None`
+    /// when the file has no top-level `spec` key, because such a file
+    /// declares variables, and [`Spec::parse`] reads it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SpecError`] when the text is over [`Spec::MAX_BYTES`] or
+    /// is not TOML, and for a pointer that also declares variables
+    /// ([`SpecProblemKind::PointerDeclares`]), holds a key that a pointer
+    /// does not take, or gives a path that is not text or is empty.
+    pub fn parse(text: &str) -> Result<Option<Self>, SpecError> {
+        parse::parse_pointer(text)
+    }
+
+    /// Returns the path of the file that declares the variables.
+    #[must_use]
+    pub fn spec(&self) -> &Path {
+        &self.spec
+    }
+
+    /// Returns the source directories that a scan reads, which are `src`
+    /// unless the pointer lists others.
+    #[must_use]
+    pub fn src(&self) -> &[PathBuf] {
+        &self.src
+    }
+
+    /// Returns the `.env` file, which is `.env` unless the pointer names
+    /// another.
+    #[must_use]
+    pub fn dotenv(&self) -> &Path {
+        &self.dotenv
     }
 }
 
@@ -371,6 +445,12 @@ pub enum SpecProblemKind {
     ModeUndeclared,
     /// The mode variable is not a setting or inherited variable.
     ModeSource,
+    /// A file has `spec`, which makes it a [`Pointer`], and declares
+    /// variables or a mode too.
+    PointerDeclares,
+    /// A [`Pointer`] is read where a file that declares variables belongs,
+    /// such as the file that another pointer names.
+    PointerChain,
 }
 
 impl SpecProblemKind {
@@ -396,6 +476,8 @@ impl SpecProblemKind {
             Self::UnknownPlaceholder => "starmap::spec::unknown_placeholder",
             Self::ModeUndeclared => "starmap::spec::mode_undeclared",
             Self::ModeSource => "starmap::spec::mode_source",
+            Self::PointerDeclares => "starmap::spec::pointer_declares",
+            Self::PointerChain => "starmap::spec::pointer_chain",
         }
     }
 }

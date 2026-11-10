@@ -170,7 +170,7 @@ pub(crate) fn explain(
     args: &ExplainArgs,
     vars: Vec<(OsString, OsString)>,
 ) -> Result<Batch<Explained, UnknownVariable>, SpecFailure> {
-    let spec = spec::load(&args.file.spec)?;
+    let spec = spec::open(&args.file.spec)?.spec;
     let file = args.file.spec.display().to_string();
     let bindings = starmap::capture(&spec, vars);
     let names: Vec<Name> = if args.names.is_empty() {

@@ -1,0 +1,2 @@
+# A pointer names a file that is a pointer too, here itself.
+spec = "pointer_chain.toml"

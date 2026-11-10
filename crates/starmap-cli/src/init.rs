@@ -14,8 +14,8 @@ use starmap::Name;
 
 use crate::cli::{InitArgs, SpecFile};
 use crate::files;
-use crate::scan;
-use crate::spec::SpecFailure;
+use crate::scan::{self, Dirs};
+use crate::spec::{self, Located, SpecFailure};
 
 #[cfg(test)]
 mod tests;
@@ -104,37 +104,46 @@ impl Shown for Places {
 crumbkit::shown!(Places);
 
 /// Scans the src directory beside the spec path that `--spec` names, and
-/// writes a spec there with a guess for each variable that src reads. A
-/// dry run prints the same guesses and writes nothing.
+/// writes a spec there with a guess for each variable that src reads. When
+/// `--spec` names a pointer, init scans the pointer's source directories
+/// and writes the file that the pointer names. A dry run prints the same
+/// guesses and writes nothing.
 ///
 /// # Errors
 ///
-/// Returns a [`crumbkit::Error`] when a file is at the spec path already, when the
-/// spec cannot be written, and when src cannot be scanned.
+/// Returns a [`crumbkit::Error`] when a file that declares variables is at the
+/// spec path already, when the spec cannot be written, and when src cannot
+/// be scanned.
 pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, crumbkit::Error> {
     let path = &args.spec;
-    let file = path.display().to_string();
-    if files::exists(path) {
-        return Err(SpecFailure::Exists { file }.into());
+    let given = path.display().to_string();
+    let located = locate(path)?;
+    let file = located.file.display().to_string();
+    let exists = || SpecFailure::Exists {
+        file: file.clone(),
+        pointer: located.pointer.clone(),
+    };
+    if files::exists(&located.file) {
+        return Err(exists().into());
     }
-    let src = path.parent().unwrap_or(Path::new("")).join("src");
-    let guesses: Vec<Guess> = scan::scan(&src)?
+    let guesses: Vec<Guess> = scan::scan_all(&located.src)?
         .into_iter()
         .map(|(name, places)| guess(name, places))
         .collect();
     let count = guesses.len();
     let noun = if count == 1 { "variable" } else { "variables" };
-    let src = src.display();
+    let src = Dirs(&located.src);
+    let reads = src.verb("reads", "read");
     let listing = if dry_run {
         Listing::new(guesses, count)
             .note(format!(
-                "{src} reads {count} {noun}, and init wrote nothing."
+                "{src} {reads} {count} {noun}, and init wrote nothing."
             ))
-            .next(SpecFile::call(&["init"], &file), "writes the file.")
+            .next(SpecFile::call(&["init"], &given), "writes the file.")
     } else {
-        files::write_new(path, &spec_text(&guesses)).map_err(|error| {
+        files::write_new(&located.file, &spec_text(&guesses)).map_err(|error| {
             if error.kind() == io::ErrorKind::AlreadyExists {
-                SpecFailure::Exists { file: file.clone() }
+                exists()
             } else {
                 SpecFailure::Unwritable {
                     file: file.clone(),
@@ -144,14 +153,31 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
         })?;
         Listing::new(guesses, count)
             .note(format!(
-                "Wrote {file} with {count} {noun} that {src} reads. Each value marked ? is a guess."
+                "Wrote {file} with {count} {noun} that {src} {reads}. Each value marked ? is a guess."
             ))
             .next(
-                SpecFile::call(&["check"], &file),
+                SpecFile::call(&["check"], &given),
                 "refuses the file until each guess is confirmed and its ? deleted.",
             )
     };
     Ok(listing.described(noun))
+}
+
+/// Returns where init writes the spec that `path` names. A file that
+/// exists and is not a pointer is a spec already, so init refuses it,
+/// whether or not it parses, and `starmap check` reports its problems.
+fn locate(path: &Path) -> Result<Located, SpecFailure> {
+    let exists = |pointer| SpecFailure::Exists {
+        file: path.display().to_string(),
+        pointer,
+    };
+    if !files::exists(path) {
+        return spec::locate(path);
+    }
+    match spec::locate(path) {
+        Ok(located) if located.pointer.is_some() => Ok(located),
+        Ok(_) | Err(_) => Err(exists(None)),
+    }
 }
 
 /// Returns the guesses for the variable `name`, which src reads at

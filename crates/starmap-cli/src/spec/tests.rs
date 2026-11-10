@@ -4,7 +4,13 @@ use std::path::Path;
 use crumbkit::{Failure as _, Spelling};
 use starmap::Spec;
 
-use super::{SpecFailure, load};
+use super::{SpecFailure, open};
+
+/// Reads and parses the spec at `path`, through its pointer when it holds
+/// one.
+fn load(path: &Path) -> Result<Spec, SpecFailure> {
+    open(path).map(|opened| opened.spec)
+}
 
 #[test]
 fn a_file_over_the_limit_that_ends_inside_a_character_is_too_large() {

@@ -33,7 +33,7 @@ The scan skips test code: files named tests.rs or ending in \_tests.rs, a file t
 
 ### Arguments
 
-- `--spec <FILE>`: Write the spec to this file, and scan the src directory beside it. Default: `starmap.toml`.
+- `--spec <FILE>`: Write the spec to this file, and scan the src directory beside it; for a pointer, write the file it names and scan the directories it lists. Default: `starmap.toml`.
 - `--dry-run`: Report what the command would change, and change nothing
 
 ### Examples
@@ -167,7 +167,7 @@ Effects: read-only, closed-world.
 
 Run a program with the environment that starmap.toml declares.
 
-run resolves every variable, checks the values and starts the program with each declared variable set or removed. A value comes from --set, then the shell, then .env beside the spec, then a setting's path bind, then the default. A secret comes from its bind, or from the shell or the Keychain when it has none; at a terminal, run asks for a missing one and offers to save it to the Keychain. .env and --set never give a secret.
+run resolves every variable, checks the values and starts the program with each declared variable set or removed. A value comes from --set, then the shell, then .env beside the spec or the file that a pointer names, then a setting's path bind, then the default. A secret comes from its bind, or from the shell or the Keychain when it has none; at a terminal, run asks for a missing one and offers to save it to the Keychain. .env and --set never give a secret.
 
 ### Arguments
 

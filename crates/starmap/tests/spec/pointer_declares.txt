@@ -1,0 +1,4 @@
+starmap::spec::pointer_declares: the file has `spec`, so it points to another file, and it has `variables` too, and a file either points or declares variables
+  at: 4:2 to 4:11, bytes 97..106
+   4 | [variables.SHELF_PORT]
+     |  ^^^^^^^^^

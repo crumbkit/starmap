@@ -1,8 +1,8 @@
 //! `starmap run`, which resolves and checks every declared variable and
 //! starts a program with exactly the declared environment applied.
 //!
-//! The values of the caller come from `.env` beside the spec, the shell
-//! and `--set`, and `.env` and `--set` never give a secret. The doc of
+//! The values of the caller come from `.env` beside the spec, or the file
+//! that a pointer names, the shell and `--set`, and `.env` and `--set` never give a secret. The doc of
 //! `Verb::Run` in cli.rs, which `starmap run --help` prints, states the
 //! order in which a value is taken from them, a setting's path bind and
 //! the default. starmap-resolve then resolves every variable under
@@ -210,18 +210,19 @@ pub(crate) struct Gathered {
 pub(crate) fn gather(args: &RunArgs, vars: Vec<(OsString, OsString)>) -> Result<Gathered, Refused> {
     let mut notes = Vec::new();
     let path = &args.file.spec;
-    let spec =
-        spec::load(path).map_err(|failure| Refused::new(vec![failure.into()], Vec::new()))?;
+    let spec::Opened { spec, located } =
+        spec::open(path).map_err(|failure| Refused::new(vec![failure.into()], Vec::new()))?;
     let checkout = checkout(path)?;
-    let dotenv_file = path.parent().unwrap_or(Path::new("")).join(".env");
+    let dotenv_file = located.dotenv;
     let dotenv = dotenv::read(&dotenv_file, &spec).map_err(|failures| {
         Refused::new(failures.into_iter().map(Into::into).collect(), Vec::new())
     })?;
     if !dotenv.undeclared.is_empty() {
         notes.push(format!(
-            "{} sets {}, which starmap.toml does not declare, so the program does not receive {}.",
+            "{} sets {}, which {} does not declare, so the program does not receive {}.",
             dotenv_file.display(),
             dotenv.undeclared.join(", "),
+            located.file.display(),
             if dotenv.undeclared.len() == 1 {
                 "it"
             } else {
@@ -442,7 +443,9 @@ fn assignments(
     }
 }
 
-/// Returns the absolute directory of the spec at `path`, the checkout.
+/// Returns the absolute directory of the file at `path`, the checkout. For a
+/// pointer, the checkout is the pointer's directory, wherever the file it
+/// names lies.
 fn checkout(path: &Path) -> Result<PathBuf, Refused> {
     let file = path.display().to_string();
     files::canonical(path)

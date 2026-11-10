@@ -25,6 +25,20 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
         _ => return Err(not_named(ident)),
     };
     let spec = spec_path(input)?;
+    let root = crate::pointer::crate_root();
+    let followed = crate::pointer::follow(&spec.value(), |path| {
+        root.as_deref()
+            .and_then(|root| crate::pointer::read(root, path))
+    })
+    .map_err(|message| syn::Error::new(spec.span(), message))?;
+    let embedded = included(&followed.file);
+    let file = &followed.file;
+    // The pointer's text is not embedded, and including it makes Cargo
+    // rebuild the crate when the pointer changes.
+    let tracked = followed.pointer.as_deref().map(|pointer| {
+        let pointer = included(pointer);
+        quote! { const _: &str = ::core::include_str!(#pointer); }
+    });
     let mut described = Vec::new();
     let mut reads = Vec::new();
     for field in fields {
@@ -49,12 +63,11 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
         described.push(description);
     }
     Ok(quote! {
+        #tracked
+
         impl ::starmap::Env for #ident {
-            const SPEC: &'static str = ::core::include_str!(::core::concat!(
-                ::core::env!("CARGO_MANIFEST_DIR"),
-                "/",
-                #spec
-            ));
+            const SPEC: &'static str = ::core::include_str!(#embedded);
+            const SPEC_FILE: &'static str = #file;
             const FIELDS: &'static [::starmap::Field] = &[#(#described),*];
 
             // rustc does not report an unfulfilled expectation in an external
@@ -77,6 +90,16 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
             }
         }
     })
+}
+
+/// Returns the path expression that `include_str!` reads for `file`, which
+/// is relative to the crate root unless it is absolute.
+fn included(file: &str) -> TokenStream {
+    if std::path::Path::new(file).is_absolute() {
+        quote!(#file)
+    } else {
+        quote!(::core::concat!(::core::env!("CARGO_MANIFEST_DIR"), "/", #file))
+    }
 }
 
 /// The error for a type that is not a struct with named fields.

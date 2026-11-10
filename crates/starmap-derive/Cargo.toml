@@ -23,6 +23,9 @@ syn = { workspace = true, features = ["parsing", "printing", "derive", "proc-mac
 quote = { workspace = true, features = ["proc-macro"] }
 # proc-macro2 gives the token types that syn and quote use.
 proc-macro2 = { workspace = true, features = ["proc-macro"] }
+# toml_edit reads the struct's starmap.toml to learn whether it points to
+# another file, because the derive cannot depend on starmap's parser.
+toml_edit.workspace = true
 
 [lints]
 workspace = true

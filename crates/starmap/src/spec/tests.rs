@@ -9,7 +9,7 @@ use proptest::prelude::*;
 use snapbox::assert::DEFAULT_ACTION_ENV;
 use snapbox::{Assert, Data};
 
-use super::{Show, Source, Spec, SpecError, SpecProblemKind, Unset};
+use super::{Pointer, Show, Source, Spec, SpecError, SpecProblemKind, Unset};
 use crate::{
     Cache, Choice, IntegerRange, Mode, Name, Placeholder, SecretBytes, SecretRef, Type, Value,
 };
@@ -25,7 +25,7 @@ const CANONICAL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/example/cano
 
 /// Every problem kind. A kind added to `SpecProblemKind` belongs here too,
 /// with a fixture or a test of its own that writes its golden.
-const KINDS: [SpecProblemKind; 18] = [
+const KINDS: [SpecProblemKind; 20] = [
     SpecProblemKind::TooLarge,
     SpecProblemKind::Syntax,
     SpecProblemKind::UnknownField,
@@ -44,6 +44,8 @@ const KINDS: [SpecProblemKind; 18] = [
     SpecProblemKind::UnknownPlaceholder,
     SpecProblemKind::ModeUndeclared,
     SpecProblemKind::ModeSource,
+    SpecProblemKind::PointerDeclares,
+    SpecProblemKind::PointerChain,
 ];
 
 /// Returns the path of each `.toml` fixture under `tests/spec`, in name
@@ -814,6 +816,107 @@ fn every_problem_kind_code_is_a_full_starmap_spec_code() {
             "{code}"
         );
     }
+}
+
+// Pointers
+
+/// Returns the kind of each problem of the pointer `text`.
+fn pointer_kinds(text: &str) -> Vec<SpecProblemKind> {
+    Pointer::parse(text)
+        .unwrap_err()
+        .problems()
+        .iter()
+        .map(|problem| problem.kind())
+        .collect()
+}
+
+#[test]
+fn a_file_without_spec_is_not_a_pointer() {
+    assert_eq!(Pointer::parse(EXAMPLE).unwrap(), None);
+}
+
+#[test]
+fn a_pointer_gives_its_paths_as_the_file_writes_them() {
+    let pointer = Pointer::parse(
+        "spec = \"config/environment.toml\"\nsrc = [\"src\", \"bin\"]\ndotenv = \"config/.env\"\n",
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(pointer.spec(), Path::new("config/environment.toml"));
+    assert_eq!(pointer.src(), [PathBuf::from("src"), PathBuf::from("bin")]);
+    assert_eq!(pointer.dotenv(), Path::new("config/.env"));
+}
+
+#[test]
+fn a_pointer_without_src_or_dotenv_scans_src_and_reads_dot_env() {
+    let pointer = Pointer::parse("spec = \"config/environment.toml\"\n")
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(pointer.src(), [PathBuf::from("src")]);
+    assert_eq!(pointer.dotenv(), Path::new(".env"));
+}
+
+#[test]
+fn a_pointer_that_declares_variables_is_refused() {
+    let text = fs::read_to_string(Path::new(PROBLEMS).join("pointer_declares.toml")).unwrap();
+
+    assert_eq!(pointer_kinds(&text), [SpecProblemKind::PointerDeclares]);
+}
+
+#[test]
+fn a_pointer_with_a_mode_table_is_refused_as_declaring() {
+    let text = "spec = \"config/environment.toml\"\n[mode]\nvariable = \"SHELF_ENV\"\nproduction = [\"prod\"]\n";
+
+    assert_eq!(pointer_kinds(text), [SpecProblemKind::PointerDeclares]);
+}
+
+#[test]
+fn a_pointer_with_an_unknown_key_is_refused() {
+    let text = "spec = \"config/environment.toml\"\ncolour = \"blue\"\n";
+
+    assert_eq!(pointer_kinds(text), [SpecProblemKind::UnknownField]);
+}
+
+#[test]
+fn a_pointer_whose_paths_are_not_text_or_are_empty_is_refused() {
+    let text = "spec = 1\nsrc = [\"src\", \"\"]\ndotenv = \"\"\n";
+
+    assert_eq!(
+        pointer_kinds(text),
+        [
+            SpecProblemKind::BadValue,
+            SpecProblemKind::BadValue,
+            SpecProblemKind::BadValue
+        ]
+    );
+}
+
+#[test]
+fn a_pointer_whose_src_is_not_a_list_is_refused() {
+    let text = "spec = \"config/environment.toml\"\nsrc = \"src\"\n";
+
+    assert_eq!(pointer_kinds(text), [SpecProblemKind::BadValue]);
+}
+
+#[test]
+fn a_pointer_whose_src_lists_no_directory_is_refused() {
+    let text = "spec = \"config/environment.toml\"\nsrc = []\n";
+
+    assert_eq!(pointer_kinds(text), [SpecProblemKind::BadValue]);
+}
+
+#[test]
+fn a_pointer_that_is_not_toml_fails_as_syntax() {
+    assert_eq!(pointer_kinds("spec = "), [SpecProblemKind::Syntax]);
+}
+
+#[test]
+fn the_spec_parser_refuses_a_pointer_as_a_chain() {
+    let error = Spec::parse("spec = \"config/environment.toml\"\n").unwrap_err();
+
+    assert_eq!(error.problems()[0].kind(), SpecProblemKind::PointerChain);
 }
 
 // Properties
