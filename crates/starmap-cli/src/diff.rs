@@ -8,12 +8,11 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
-use crumbkit::{Code, Document, Failure, Field, Listing, Recovery, Row};
+use crumbkit::{Document, Failure, Listing, Row};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{Name, Source, Spec, Type, Variable};
 
-use crate::Failed;
 use crate::cli::DiffArgs;
 use crate::codes;
 use crate::explain::{bind_text, cache_text, source_text, type_text, unset_text};
@@ -65,20 +64,35 @@ enum Kind {
 }
 
 /// A revision that `starmap diff` cannot read.
-#[derive(Debug)]
+#[derive(Debug, Failure)]
 pub(crate) enum RevisionFailure {
     /// The spec's directory is not in a git repository.
+    #[failure(
+        code = codes::REVISION_NO_REPOSITORY,
+        hint = "run starmap diff in the app's checkout",
+        field(dir = dir.as_str()),
+    )]
     NoRepository {
         /// The spec's directory, or an empty string for the current
         /// directory.
         dir: String,
     },
     /// The revision names no commit.
+    #[failure(
+        code = codes::REVISION_NOT_FOUND,
+        hint = "run `git log` and pick a revision",
+        field(revision = revision.as_str()),
+    )]
     NotFound {
         /// The revision, as the caller gave it.
         revision: String,
     },
     /// git cannot start or cannot read the revision.
+    #[failure(
+        code = codes::REVISION_UNREADABLE,
+        hint = "check that git is installed and can read the repository",
+        field(revision = revision.as_str()),
+    )]
     Unreadable {
         /// The revision, as the caller gave it.
         revision: String,
@@ -111,38 +125,6 @@ impl std::error::Error for RevisionFailure {
     }
 }
 
-impl Failure for RevisionFailure {
-    fn code(&self) -> &'static Code {
-        match self {
-            Self::NoRepository { .. } => &codes::REVISION_NO_REPOSITORY,
-            Self::NotFound { .. } => &codes::REVISION_NOT_FOUND,
-            Self::Unreadable { .. } => &codes::REVISION_UNREADABLE,
-        }
-    }
-
-    fn recovery(&self) -> Recovery {
-        Recovery::Hint(
-            match self {
-                Self::NoRepository { .. } => "run starmap diff in the app's checkout",
-                Self::NotFound { .. } => "run `git log` and pick a revision",
-                Self::Unreadable { .. } => {
-                    "check that git is installed and can read the repository"
-                }
-            }
-            .to_owned(),
-        )
-    }
-
-    fn fields(&self) -> Vec<Field<'_>> {
-        match self {
-            Self::NoRepository { dir } => vec![Field::new("dir", dir)],
-            Self::NotFound { revision } | Self::Unreadable { revision, .. } => {
-                vec![Field::new("revision", revision)]
-            }
-        }
-    }
-}
-
 /// Reads the spec that `--spec` names and the spec that the revision holds
 /// at the same path, and returns one change for each variable that was
 /// added or removed and for each field that changed, in name order. A
@@ -151,9 +133,9 @@ impl Failure for RevisionFailure {
 ///
 /// # Errors
 ///
-/// Returns [`Failed`] when either spec cannot be read or parsed, and when
+/// Returns a [`crumbkit::Error`] when either spec cannot be read or parsed, and when
 /// git cannot read the revision.
-pub(crate) fn diff(args: &DiffArgs) -> Result<Listing<Change>, Failed> {
+pub(crate) fn diff(args: &DiffArgs) -> Result<Listing<Change>, crumbkit::Error> {
     let path = &args.file.spec;
     let file = path.display().to_string();
     let now = spec::load(path)?;

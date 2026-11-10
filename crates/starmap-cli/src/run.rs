@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use crumbkit::{Failure, Run, Sink};
+use crumbkit::{Failure, Recovery, Run, Sink};
 use starmap::{
     Bindings, Bound, Environment, Mode, Name, NoPlace, Placeholder, Problem, ProviderKind, Source,
     Spec, Verdict,
@@ -29,7 +29,7 @@ use starmap_resolve::{
     Slot, WorkspaceName, resolve,
 };
 
-use crate::cli::{Assignment, RunArgs};
+use crate::cli::{Assignment, RunArgs, SpecFile};
 use crate::codes::{
     BIND_NO_PLACE, BIND_NO_PROVIDER, SECRET_UNBOUND, SECRET_UNREADABLE, VARIABLE_INVALID,
     VARIABLE_MISSING, VARIABLE_SECRET, VARIABLE_UNKNOWN,
@@ -188,6 +188,9 @@ impl Refused {
 #[derive(Debug)]
 pub(crate) struct Gathered {
     spec: Spec,
+    /// The spec file, as the caller gave it, which a recovery passes to
+    /// `starmap explain`.
+    file: String,
     caller: Bindings,
     mode: Mode,
     places: Places,
@@ -249,6 +252,7 @@ pub(crate) fn gather(args: &RunArgs, vars: Vec<(OsString, OsString)>) -> Result<
     }
     Ok(Gathered {
         spec,
+        file: path.display().to_string(),
         caller,
         mode,
         places,
@@ -272,6 +276,7 @@ pub(crate) fn settle(
 ) -> Result<Ready, Refused> {
     let Gathered {
         spec,
+        file,
         caller,
         mode,
         places,
@@ -309,7 +314,7 @@ pub(crate) fn settle(
             refusals
                 .iter()
                 .filter(|finding| !unbound.iter().any(|failure| failure.name == finding.name))
-                .map(|finding| RunFailure::check(finding.name.clone(), &finding.problem)),
+                .map(|finding| RunFailure::check(finding.name.clone(), &finding.problem, &file)),
         );
     }
     let can_start = failures.is_empty();
@@ -332,13 +337,14 @@ pub(crate) fn settle(
     if !failures.is_empty() {
         return Err(Refused::new(failures, notes));
     }
-    checked(&spec, &bindings, mode, notes)
+    checked(&spec, &file, &bindings, mode, notes)
 }
 
 /// Checks `bindings` in `mode`, and returns the environment or each
 /// variable that stops the check.
 fn checked(
     spec: &Spec,
+    file: &str,
     bindings: &Bindings,
     mode: Mode,
     notes: Vec<String>,
@@ -348,7 +354,7 @@ fn checked(
         Verdict::Refused(refusals) => {
             let failures = refusals
                 .iter()
-                .map(|finding| RunFailure::check(finding.name.clone(), &finding.problem))
+                .map(|finding| RunFailure::check(finding.name.clone(), &finding.problem, file))
                 .collect();
             Err(Refused::new(failures, notes))
         }
@@ -461,7 +467,8 @@ pub(crate) enum RunFailure {
     /// `--set` names a variable the spec does not declare.
     #[failure(
         code = VARIABLE_UNKNOWN,
-        hint = "declare {name} in starmap.toml, or remove --set {name}",
+        hint = "declare {name} in starmap.toml",
+        alternative = Recovery::Hint(format!("remove --set {name}")),
         field(key = name.as_str()),
     )]
     Unknown {
@@ -471,7 +478,10 @@ pub(crate) enum RunFailure {
     /// `--set` gives a secret or generated variable a value.
     #[failure(
         code = VARIABLE_SECRET,
-        hint = "remove --set {name}, and give {name} a bind in starmap.toml, or let starmap run ask for it at a terminal",
+        hint = "remove --set {name}, and give {name} a bind in starmap.toml",
+        alternative = Recovery::Hint(format!(
+            "remove --set {name}, and let starmap run ask for it at a terminal"
+        )),
         field(key = name.as_str()),
     )]
     SetSecret {
@@ -493,7 +503,7 @@ pub(crate) enum RunFailure {
     /// A variable's value does not fit its type.
     #[failure(
         code = VARIABLE_INVALID,
-        hint = "give {name} a value that its type accepts, as starmap explain {name} describes",
+        recovery = Recovery::Run(SpecFile::call(&["explain"], file).value("names", name.as_str())),
         field(key = name.as_str()),
     )]
     Invalid {
@@ -501,11 +511,14 @@ pub(crate) enum RunFailure {
         name: Name,
         /// What is wrong with the value.
         problem: String,
+        /// The spec file, as the caller gave it.
+        file: String,
     },
     /// No provider of the variable's kind is present.
     #[failure(
         code = BIND_NO_PROVIDER,
-        hint = "set {name} in this shell, in .env or with --set {name}=VALUE, or start the app under a host that provides {kind}",
+        hint = "set {name} in this shell, in .env or with --set {name}=VALUE",
+        alternative = Recovery::Hint(format!("start the app under a host that provides {kind}")),
         field(key = name.as_str()),
     )]
     NoProvider {
@@ -517,7 +530,8 @@ pub(crate) enum RunFailure {
     /// A path bind names a place that run has no directory for.
     #[failure(
         code = BIND_NO_PLACE,
-        hint = "set HOME in this shell, or set {name} with --set {name}=VALUE",
+        hint = "set HOME in this shell",
+        alternative = Recovery::Hint(format!("set {name} with --set {name}=VALUE")),
         field(key = name.as_str()),
     )]
     NoPlace {
@@ -530,7 +544,10 @@ pub(crate) enum RunFailure {
     /// one.
     #[failure(
         code = SECRET_UNBOUND,
-        hint = "run starmap run at a terminal without --no-input, type {name} and save it to the Keychain, or give {name} a bind in starmap.toml, such as {{ one-password = \"op://vault/item/field\" }}",
+        hint = "run starmap run at a terminal without --no-input, type {name} and save it to the Keychain",
+        alternative = Recovery::Hint(format!(
+            "give {name} a bind in starmap.toml, such as {{ one-password = \"op://vault/item/field\" }}"
+        )),
         field(key = name.as_str()),
     )]
     Unbound {
@@ -590,29 +607,34 @@ impl RunFailure {
         }
     }
 
-    /// Returns the failure of the variable `name` that the check refused
-    /// because of `problem`.
-    fn check(name: Name, problem: &Problem) -> Self {
+    /// Returns the failure of the variable `name` that the check of the
+    /// spec `file` refused because of `problem`.
+    fn check(name: Name, problem: &Problem, file: &str) -> Self {
+        let file = file.to_owned();
         match problem {
             Problem::Missing { mode } => Self::Missing { name, mode: *mode },
             Problem::Invalid(error) => Self::Invalid {
                 name,
                 problem: error.to_string(),
+                file,
             },
             Problem::ShowMismatch { .. } => Self::Invalid {
                 name,
                 problem: "the value is held as a secret where starmap.toml shows it, or the other way round"
                     .to_owned(),
+                file,
             },
             Problem::ModeMismatch { decided } => Self::Invalid {
                 name,
                 problem: format!("the resolved value decides {decided} mode"),
+                file,
             },
             // A problem that a later starmap adds reads as an invalid
             // value, until this command learns it.
             _ => Self::Invalid {
                 name,
                 problem: "the value does not fit the variable".to_owned(),
+                file,
             },
         }
     }
@@ -639,7 +661,7 @@ impl fmt::Display for RunFailure {
                     "{name} is required in {mode} mode and has no value"
                 )
             }
-            Self::Invalid { name, problem } => write!(formatter, "{name}: {problem}"),
+            Self::Invalid { name, problem, .. } => write!(formatter, "{name}: {problem}"),
             Self::NoProvider { name, kind } => write!(
                 formatter,
                 "{name} needs a value from the provider {kind}, and starmap run has no provider of that kind"

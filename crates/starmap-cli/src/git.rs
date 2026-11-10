@@ -19,25 +19,42 @@
 //!   fetches a missing object from the remote, and `GIT_TERMINAL_PROMPT=0`,
 //!   so git never asks for a password on the terminal.
 //! - Streams and deadline: standard input is empty, so git cannot wait for
-//!   typed input. Standard output and standard error are captured whole.
-//!   Each run prints at most one object id or one tree entry, except
+//!   typed input. `crumbkit_process::run` keeps at most [`SMALL`] bytes of
+//!   standard output from a run that prints one object id, one path or one
+//!   tree entry, and at most [`Spec::MAX_BYTES`] from
 //!   `git cat-file blob`, which runs only after `git ls-tree` reports that
-//!   the blob is at most [`Spec::MAX_BYTES`]. A run has no deadline: with
-//!   lazy fetching off, git reads only the local repository, and starmap
-//!   waits for it to exit. An object that a partial clone has not fetched
-//!   makes git fail, and starmap reports that git cannot read the revision.
-//! - End: `Command::output` waits for git to exit and reaps it, and the
-//!   exit status decides the result. The commands only read the
+//!   the blob is at most that size. It keeps the last [`SMALL`] bytes of
+//!   standard error. A run that prints more standard output than its limit
+//!   is stopped, and starmap reports that git cannot read the revision.
+//!   All the runs of one [`read_at`] share a deadline [`DEADLINE`] after
+//!   it starts. With lazy fetching off, git reads only the local
+//!   repository, so the deadline passes only when git hangs, and starmap
+//!   then stops git and reports that git cannot read the revision. An
+//!   object that a partial clone has not fetched makes git fail, and
+//!   starmap reports the same.
+//! - End: `crumbkit_process::run` starts git in a process group of its
+//!   own, kills the group when it stops git, and reaps git on every path.
+//!   The exit status decides the result. The commands only read the
 //!   repository, so a run that stops early leaves nothing behind.
 
 use std::io;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::Command;
+use std::time::{Duration, Instant};
 
+use crumbkit_process::{Capture, Outcome, OverLimit, RunOptions, Status};
 use starmap::Spec;
 
 #[cfg(test)]
 mod tests;
+
+/// The most bytes that starmap keeps of a git run's standard error, and of
+/// the standard output of a run that prints one object id, one path or one
+/// tree entry. A path is at most a few KiB on every platform git runs on.
+const SMALL: usize = 64 * 1024;
+
+/// How long all the git runs of one [`read_at`] may take together.
+const DEADLINE: Duration = Duration::from_secs(30);
 
 /// What a revision holds at a path.
 #[derive(Debug, PartialEq, Eq)]
@@ -87,21 +104,22 @@ pub(crate) fn read_at(dir: &Path, revision: &str, name: &str) -> Result<At, GitE
     if revision.starts_with('-') {
         return Err(GitError::NotFound);
     }
-    let found = git(dir, &["rev-parse", "--git-dir"]).map_err(GitError::Failed)?;
-    if !found.status.success() {
+    let deadline = Instant::now() + DEADLINE;
+    let run = |args: &[&str], limit: usize| git(dir, args, limit, deadline);
+    let found = run(&["rev-parse", "--git-dir"], SMALL).map_err(GitError::Failed)?;
+    if !found.success {
         return Err(GitError::NoRepository);
     }
     let commit = format!("{revision}^{{commit}}");
     let verified =
-        git(dir, &["rev-parse", "--verify", "--quiet", &commit]).map_err(GitError::Failed)?;
-    if !verified.status.success() {
+        run(&["rev-parse", "--verify", "--quiet", &commit], SMALL).map_err(GitError::Failed)?;
+    if !verified.success {
         return Err(GitError::NotFound);
     }
     let commit = String::from_utf8_lossy(&verified.stdout).trim().to_owned();
     let listed = checked(
         "git ls-tree",
-        git(
-            dir,
+        run(
             &[
                 "--literal-pathspecs",
                 "ls-tree",
@@ -111,6 +129,7 @@ pub(crate) fn read_at(dir: &Path, revision: &str, name: &str) -> Result<At, GitE
                 "--",
                 name,
             ],
+            SMALL,
         ),
     )?;
     let entry = match tree_entry(&listed.stdout) {
@@ -120,36 +139,84 @@ pub(crate) fn read_at(dir: &Path, revision: &str, name: &str) -> Result<At, GitE
         Some(entry) if !matches!(entry.mode, "100644" | "100755") => Entry::NotFile,
         Some(entry) if entry.size.is_none_or(|size| size > Spec::MAX_BYTES) => Entry::TooLarge,
         Some(entry) => {
-            let read = checked("git cat-file", git(dir, &["cat-file", "blob", entry.id]))?;
+            let read = checked(
+                "git cat-file",
+                run(&["cat-file", "blob", entry.id], Spec::MAX_BYTES),
+            )?;
             Entry::File(read.stdout)
         }
     };
     Ok(At { commit, entry })
 }
 
+/// What a git run printed, and whether it exited with success.
+#[derive(Debug)]
+struct Ran {
+    /// git exited with status 0.
+    success: bool,
+    /// Standard output, at most the run's limit.
+    stdout: Vec<u8>,
+    /// The last [`SMALL`] bytes of standard error.
+    stderr: Vec<u8>,
+}
+
 /// Runs git with `args` in `dir`, with empty standard input, and returns
-/// what it printed and its exit status.
-fn git(dir: &Path, args: &[&str]) -> io::Result<Output> {
+/// what it printed and whether it succeeded. It keeps at most `limit`
+/// bytes of standard output and stops git at `deadline`.
+///
+/// # Errors
+///
+/// Returns an error when git cannot start, prints more than `limit` bytes,
+/// is still running at `deadline`, or is ended by a signal.
+fn git(dir: &Path, args: &[&str], limit: usize, deadline: Instant) -> io::Result<Ran> {
     #[expect(
         clippy::disallowed_methods,
         reason = "crates/starmap-cli/src/git.rs is the module that starts git"
     )]
-    let output = Command::new("git")
+    let mut command = Command::new("git");
+    command
         .args(args)
         .current_dir(dir)
         .env("GIT_NO_LAZY_FETCH", "1")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null())
-        .output();
-    output
+        .env("GIT_TERMINAL_PROMPT", "0");
+    let options = RunOptions::new()
+        .stdout(Capture::Whole {
+            limit,
+            over: OverLimit::Stop,
+        })
+        .stderr(Capture::Tail { limit: SMALL })
+        .deadline(deadline);
+    let finished = crumbkit_process::run(command, &options).map_err(io::Error::other)?;
+    let success = match finished.outcome() {
+        Outcome::Ended(Status::Code(code)) => code == 0,
+        Outcome::TimedOut => {
+            return Err(io::Error::other(format!(
+                "git did not finish within {} seconds",
+                DEADLINE.as_secs()
+            )));
+        }
+        Outcome::Stopped(_) => {
+            return Err(io::Error::other(format!(
+                "git printed more than {limit} bytes"
+            )));
+        }
+        // A signal, or an end that a later crumbkit-process adds.
+        _ => return Err(io::Error::other("git was ended by a signal")),
+    };
+    let (stdout, stderr) = finished.into_output();
+    Ok(Ran {
+        success,
+        stdout: stdout.into_bytes(),
+        stderr: stderr.into_bytes(),
+    })
 }
 
 /// Returns the output of the git run `command` when it exited with
 /// success, and otherwise its failure with what it printed on standard
 /// error.
-fn checked(command: &str, run: io::Result<Output>) -> Result<Output, GitError> {
+fn checked(command: &str, run: io::Result<Ran>) -> Result<Ran, GitError> {
     let output = run.map_err(GitError::Failed)?;
-    if output.status.success() {
+    if output.success {
         return Ok(output);
     }
     let printed = String::from_utf8_lossy(&output.stderr);

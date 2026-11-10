@@ -23,17 +23,11 @@ mod scan;
 mod spec;
 
 use std::ffi::OsString;
-use std::fmt;
 use std::process::ExitCode;
-
-use crumbkit::Failure;
 
 #[doc(hidden)]
 pub use crate::cli::{Cli, TOOL};
 use crate::cli::{CommandsCommand, SchemasCommand, SelfCommand, Verb};
-use crate::diff::RevisionFailure;
-use crate::scan::SourceFailure;
-use crate::spec::SpecFailure;
 
 /// Parses `args`, runs the command and returns the process's exit code. The
 /// first argument is the program's name. `vars` is the process environment,
@@ -99,58 +93,5 @@ where
                 Ok::<_, crumbkit::Error>(crumbkit_usage::findings(&mut output, &TOOL, &args));
             crumbkit::finish(output, crumbkit_usage::SELF_USAGE, result)
         }
-    }
-}
-
-/// A failure of `init`, `check` or `diff`, which read or write the spec,
-/// scan the source or read a git revision.
-#[derive(Debug, Failure)]
-pub(crate) enum Failed {
-    /// The spec cannot be read, parsed or written.
-    #[failure(forward, diagnostic)]
-    Spec(SpecFailure),
-    /// A file under src cannot be read.
-    #[failure(forward)]
-    Source(SourceFailure),
-    /// git cannot read the revision that `diff` names.
-    #[failure(forward)]
-    Revision(RevisionFailure),
-}
-
-impl fmt::Display for Failed {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Spec(failure) => failure.fmt(formatter),
-            Self::Source(failure) => failure.fmt(formatter),
-            Self::Revision(failure) => failure.fmt(formatter),
-        }
-    }
-}
-
-impl std::error::Error for Failed {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Spec(failure) => failure.source(),
-            Self::Source(failure) => failure.source(),
-            Self::Revision(failure) => failure.source(),
-        }
-    }
-}
-
-impl From<SpecFailure> for Failed {
-    fn from(failure: SpecFailure) -> Self {
-        Self::Spec(failure)
-    }
-}
-
-impl From<SourceFailure> for Failed {
-    fn from(failure: SourceFailure) -> Self {
-        Self::Source(failure)
-    }
-}
-
-impl From<RevisionFailure> for Failed {
-    fn from(failure: RevisionFailure) -> Self {
-        Self::Revision(failure)
     }
 }

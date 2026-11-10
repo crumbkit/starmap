@@ -8,6 +8,16 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A `starmap` failure that offers two different repairs prints each one on
+  its own `help:` line, and its JSON lists the second one under
+  `alternatives`. This covers `--set` of an undeclared or secret variable, a
+  missing provider or place, an unbound secret, an unreadable or secret
+  `.env`, an undeclared variable that src reads, a spec file that cannot be
+  read or written, and a source file that does not build. A value that does
+  not fit its type now recovers with the `starmap explain NAME` command,
+  which `--json` gives as a call. `starmap diff` stops a git run that prints
+  more output than it expects or takes longer than 30 seconds, and reports
+  that git cannot read the revision.
 - `starmap-cli` uses crumbkit 0.2. `starmap init --json` and `starmap init
   --dry-run --json` now print a `next` list of next steps. `starmap commands
   list --json --full` gives the root row a `goals` field. The JSON Schemas

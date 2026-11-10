@@ -94,6 +94,11 @@ crumbkit-child = "0.2"
 # terminal with echo turned off, so the value never shows on screen.
 rpassword = "7.5.4"
 
+# crumbkit-process runs git for `starmap diff` with a byte limit on each
+# output stream and a deadline, and kills git's process group when it stops
+# it.
+crumbkit-process = "0.2"
+
 # crumbkit-usage keeps the `starmap` command's local usage log and adds
 # `self usage` (CLI-7).
 crumbkit-usage = "0.2"

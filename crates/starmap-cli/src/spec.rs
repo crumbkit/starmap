@@ -254,17 +254,28 @@ impl Failure for SpecFailure {
         let hint = match self {
             Self::NotFound { file } => return Recovery::Run(SpecFile::call(&["init"], file)),
             Self::Exists { file } => return Recovery::Run(SpecFile::call(&["check"], file)),
-            Self::Unwritable { file, .. } => {
-                format!("make the directory of {file} writable, or pass --spec another file")
-            }
-            Self::Unreadable { file, .. } => {
-                format!("make {file} readable, or pass --spec another file")
-            }
+            Self::Unwritable { file, .. } => format!("make the directory of {file} writable"),
+            Self::Unreadable { file, .. } => format!("make {file} readable"),
             Self::TooLarge { .. } => hint(SpecProblemKind::TooLarge).to_owned(),
             Self::NotUtf8 { file, .. } => format!("save {file} as UTF-8 text"),
             Self::Invalid { .. } => self.first_kind().map_or("", hint).to_owned(),
         };
         Recovery::Hint(hint)
+    }
+
+    /// Returns the second repair of a spec file that cannot be written or
+    /// read, which is to pass another file with `--spec`.
+    fn alternatives(&self) -> Vec<Recovery> {
+        match self {
+            Self::Unwritable { .. } | Self::Unreadable { .. } => {
+                vec![Recovery::hint("pass --spec another file")]
+            }
+            Self::NotFound { .. }
+            | Self::Exists { .. }
+            | Self::TooLarge { .. }
+            | Self::NotUtf8 { .. }
+            | Self::Invalid { .. } => Vec::new(),
+        }
     }
 
     fn fields(&self) -> Vec<Field<'_>> {

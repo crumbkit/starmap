@@ -1,3 +1,4 @@
 error: unreadable/src/broken.rs is not valid Rust at line 3
-  help:  fix unreadable/src/broken.rs so that cargo builds it, or move it out of src
+  help:  fix unreadable/src/broken.rs so that cargo builds it
+  help:  move unreadable/src/broken.rs out of src
   code:  starmap::source::unreadable

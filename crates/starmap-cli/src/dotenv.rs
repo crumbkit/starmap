@@ -14,7 +14,7 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
-use crumbkit::Failure;
+use crumbkit::{Failure, Recovery};
 use starmap::{Name, Source, Spec};
 use zeroize::Zeroizing;
 
@@ -43,7 +43,8 @@ pub(crate) enum DotEnvFailure {
     /// The file exists and cannot be read, or is over [`MAX_BYTES`].
     #[failure(
         code = DOTENV_UNREADABLE,
-        hint = "make {file} a readable text file of at most 256 KiB, or remove it",
+        hint = "make {file} a readable text file of at most 256 KiB",
+        alternative = Recovery::Hint(format!("remove {file}")),
         field(at = file.as_str()),
     )]
     Unreadable {
@@ -66,7 +67,10 @@ pub(crate) enum DotEnvFailure {
     /// the shell or the Keychain supplies.
     #[failure(
         code = DOTENV_SECRET,
-        hint = "remove {name} from {file}, and give it a bind in starmap.toml, such as {{ one-password = \"op://vault/item/field\" }}, or let starmap run ask for it and save it to the Keychain",
+        hint = "remove {name} from {file}, and give it a bind in starmap.toml, such as {{ one-password = \"op://vault/item/field\" }}",
+        alternative = Recovery::Hint(format!(
+            "remove {name} from {file}, and let starmap run ask for it and save it to the Keychain"
+        )),
         field(key = name.as_str()),
         field(at = file.as_str()),
     )]

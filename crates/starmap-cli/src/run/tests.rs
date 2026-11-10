@@ -8,13 +8,14 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crumbkit::Code;
+use crumbkit::{Code, Failure, Recovery};
 use starmap::{Name, Secret};
 use starmap_resolve::{Lookup, ResolveProblem, Resolver, SecretError};
 
 use super::{Ask, Ready, Refused, RunFailure, gather, run_with, settle};
 use crate::cli::{Assignment, RunArgs, SpecFile, Verb};
 use crate::codes;
+use crate::dotenv::DotEnvFailure;
 use crate::{Cli, TOOL};
 
 /// A spec with a setting that has a default, a bound secret, a secret
@@ -508,6 +509,133 @@ fn a_value_that_does_not_fit_its_type_is_refused_as_invalid() {
     );
 }
 
+/// Returns the recovery and the alternatives of each failure of `refused`.
+fn repairs(refused: &Refused) -> Vec<(Recovery, Vec<Recovery>)> {
+    refused
+        .failures
+        .iter()
+        .map(|failure| (failure.recovery(), failure.alternatives()))
+        .collect()
+}
+
+/// Returns a hint with `text`.
+fn hint(text: &str) -> Recovery {
+    Recovery::hint(text)
+}
+
+#[test]
+fn a_value_that_does_not_fit_its_type_recovers_with_starmap_explain_of_the_variable() {
+    let checkout = Checkout::new(None);
+    let args = checkout.args(&[("SHELF_PAGE_SIZE", "1000")]);
+    let refused = prepared(
+        &args,
+        &[TOKEN],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+    let file = args.file.spec.display().to_string();
+    assert_eq!(
+        repairs(&refused),
+        [(
+            Recovery::Run(SpecFile::call(&["explain"], &file).value("names", "SHELF_PAGE_SIZE")),
+            Vec::new()
+        )]
+    );
+}
+
+#[test]
+fn set_of_an_undeclared_variable_offers_to_declare_it_or_to_remove_the_set() {
+    let checkout = Checkout::new(None);
+    let refused = prepared(
+        &checkout.args(&[("SHELF_THEME", "dark")]),
+        &[TOKEN],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        repairs(&refused),
+        [(
+            hint("declare SHELF_THEME in starmap.toml"),
+            vec![hint("remove --set SHELF_THEME")]
+        )]
+    );
+}
+
+#[test]
+fn set_of_a_secret_offers_a_bind_or_a_typed_value_as_two_repairs() {
+    let checkout = Checkout::new(None);
+    let refused = prepared(
+        &checkout.args(&[("SHELF_UPSTREAM_TOKEN", "typed-on-the-command-line")]),
+        &[TOKEN],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        repairs(&refused),
+        [(
+            hint(
+                "remove --set SHELF_UPSTREAM_TOKEN, and give SHELF_UPSTREAM_TOKEN a bind in starmap.toml"
+            ),
+            vec![hint(
+                "remove --set SHELF_UPSTREAM_TOKEN, and let starmap run ask for it at a terminal"
+            )]
+        )]
+    );
+}
+
+#[test]
+fn a_secret_in_dotenv_offers_a_bind_or_a_typed_value_as_two_repairs() {
+    let checkout = Checkout::new(Some("SHELF_UPSTREAM_TOKEN=pasted-test-value\n"));
+    let refused = prepared(
+        &checkout.args(&[]),
+        &[TOKEN],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+    let [RunFailure::DotEnv(DotEnvFailure::Secret { file, .. })] = refused.failures.as_slice()
+    else {
+        panic!("{:?}", refused.failures);
+    };
+    assert_eq!(
+        repairs(&refused),
+        [(
+            hint(&format!(
+                "remove SHELF_UPSTREAM_TOKEN from {file}, and give it a bind in starmap.toml, such as {{ one-password = \"op://vault/item/field\" }}"
+            )),
+            vec![hint(&format!(
+                "remove SHELF_UPSTREAM_TOKEN from {file}, and let starmap run ask for it and save it to the Keychain"
+            ))]
+        )]
+    );
+}
+
+#[test]
+fn an_unbound_secret_offers_a_typed_value_or_a_bind_as_two_repairs() {
+    let checkout = Checkout::new(None);
+    let refused = prepared(
+        &checkout.args(&[]),
+        &[],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        repairs(&refused),
+        [(
+            hint(
+                "run starmap run at a terminal without --no-input, type SHELF_UPSTREAM_TOKEN and save it to the Keychain"
+            ),
+            vec![hint(
+                "give SHELF_UPSTREAM_TOKEN a bind in starmap.toml, such as { one-password = \"op://vault/item/field\" }"
+            )]
+        )]
+    );
+}
+
 /// A spec with a required setting, a required provided variable and a
 /// required setting whose path bind is under the home directory.
 const REQUIRED: &str = r#"
@@ -545,6 +673,21 @@ fn each_required_variable_without_a_value_is_refused_and_each_is_admitted_with_o
     assert_eq!(
         codes(&refused),
         [&codes::BIND_NO_PROVIDER, &codes::BIND_NO_PLACE]
+    );
+    assert_eq!(
+        repairs(&refused),
+        [
+            (
+                hint("set SHELF_PORT in this shell, in .env or with --set SHELF_PORT=VALUE"),
+                vec![hint(
+                    "start the app under a host that provides multiverse/port"
+                )]
+            ),
+            (
+                hint("set HOME in this shell"),
+                vec![hint("set SHELF_DATA with --set SHELF_DATA=VALUE")]
+            ),
+        ]
     );
 
     let vars = [("SHELF_PORT", "8080"), ("HOME", "/home/test")];

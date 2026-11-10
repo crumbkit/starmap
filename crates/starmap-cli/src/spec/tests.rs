@@ -78,3 +78,27 @@ fn each_problem_fixture_fails_with_the_code_its_first_problem_kind_names() {
     }
     assert!(checked > 10, "{checked}");
 }
+
+#[test]
+fn a_spec_that_cannot_be_written_or_read_offers_another_file_as_a_second_repair() {
+    let error = || std::io::Error::other("refused");
+    let unwritable = SpecFailure::Unwritable {
+        file: "app/starmap.toml".to_owned(),
+        error: error(),
+    };
+    let unreadable = SpecFailure::Unreadable {
+        file: "app/starmap.toml".to_owned(),
+        error: error(),
+    };
+    let another = vec![crumbkit::Recovery::hint("pass --spec another file")];
+    assert_eq!(
+        unwritable.recovery(),
+        crumbkit::Recovery::hint("make the directory of app/starmap.toml writable")
+    );
+    assert_eq!(unwritable.alternatives(), another);
+    assert_eq!(
+        unreadable.recovery(),
+        crumbkit::Recovery::hint("make app/starmap.toml readable")
+    );
+    assert_eq!(unreadable.alternatives(), another);
+}
