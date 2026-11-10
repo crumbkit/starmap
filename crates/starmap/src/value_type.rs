@@ -1,6 +1,6 @@
 //! The type a variable's value has, the checking types that back it
-//! ([`Port`], [`IntegerRange`], [`Choices`] and [`Choice`]), and the value a
-//! type reads.
+//! ([`Port`], [`IntegerRange`], [`Choices`], [`Choice`], [`Schemes`] and
+//! [`Scheme`]), and the value a type reads.
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -12,8 +12,11 @@ use std::str::FromStr;
 
 use url::Url;
 
+mod scheme;
 #[cfg(test)]
 mod tests;
+
+pub use scheme::{Scheme, SchemeError, Schemes, SchemesError};
 
 /// The words the boolean type reads as `true`.
 const TRUE_WORDS: [&str; 4] = ["1", "true", "yes", "on"];
@@ -33,8 +36,11 @@ pub enum Type {
     },
     /// A TCP or UDP port from 1 to 65535.
     Port,
-    /// An absolute URL.
-    Url,
+    /// An absolute URL. With `schemes`, its scheme must be one of them.
+    Url {
+        /// The schemes the URL may have, or `None` for any scheme.
+        schemes: Option<Schemes>,
+    },
     /// An IP socket address, such as `0.0.0.0:8080` or `[::1]:8080`, as
     /// [`SocketAddr`]'s `FromStr` reads it. It accepts port 0 and a numeric
     /// IPv6 zone id, such as `[fe80::1%1]:80`. A host name such as
@@ -80,7 +86,16 @@ impl Type {
             }
             Self::String => Value::String(raw.to_os_string()),
             Self::Port => Value::Port(text(raw)?.parse().map_err(|_| TypeError::NotPort)?),
-            Self::Url => Value::Url(Url::parse(text(raw)?).map_err(TypeError::NotUrl)?),
+            Self::Url { schemes } => {
+                let url = Url::parse(text(raw)?).map_err(TypeError::NotUrl)?;
+                // The url crate writes every scheme it parses in lower case.
+                if let Some(schemes) = schemes
+                    && !schemes.contains(url.scheme())
+                {
+                    return Err(TypeError::SchemeNotAllowed(schemes.clone()));
+                }
+                Value::Url(url)
+            }
             Self::SocketAddress => Value::SocketAddress(
                 text(raw)?
                     .parse()
@@ -111,7 +126,10 @@ impl fmt::Display for Type {
             Self::Path { absolute: false } => formatter.write_str("a path"),
             Self::Path { absolute: true } => formatter.write_str("an absolute path"),
             Self::Port => formatter.write_str("a port"),
-            Self::Url => formatter.write_str("a url"),
+            Self::Url { schemes: None } => formatter.write_str("a url"),
+            Self::Url {
+                schemes: Some(schemes),
+            } => write!(formatter, "a url whose scheme is one of {schemes}"),
             Self::SocketAddress => formatter.write_str("an ip socket address"),
             Self::Boolean => formatter.write_str("a boolean"),
             Self::Integer(range) => write!(
@@ -200,6 +218,8 @@ pub enum TypeError {
     NotPort,
     /// The value is not a URL, for the reason the parse error gives.
     NotUrl(url::ParseError),
+    /// The value is a URL whose scheme is not one of these.
+    SchemeNotAllowed(Schemes),
     /// The value is not an IP socket address.
     NotSocketAddress,
     /// The value is not one of the eight boolean words.
@@ -225,6 +245,10 @@ impl fmt::Display for TypeError {
             Self::NotUnicode => formatter.write_str("the value is not unicode text"),
             Self::NotPort => formatter.write_str("the value is not a port from 1 to 65535"),
             Self::NotUrl(_) => formatter.write_str("the value is not a url"),
+            Self::SchemeNotAllowed(schemes) => write!(
+                formatter,
+                "the value is a url, and its scheme is not one of {schemes}"
+            ),
             Self::NotSocketAddress => formatter.write_str(
                 "the value is not an ip socket address, such as 127.0.0.1:8080 or [::1]:8080",
             ),
@@ -498,13 +522,7 @@ impl Choices {
     ///
     /// Returns [`ChoicesError`] when there is no choice or one repeats.
     pub fn new(choices: impl IntoIterator<Item = Choice>) -> Result<Self, ChoicesError> {
-        let mut kept: Vec<Choice> = Vec::new();
-        for choice in choices {
-            if kept.contains(&choice) {
-                return Err(ChoicesError::Repeated(choice));
-            }
-            kept.push(choice);
-        }
+        let kept = distinct(choices).map_err(ChoicesError::Repeated)?;
         if kept.is_empty() {
             return Err(ChoicesError::Empty);
         }
@@ -524,14 +542,32 @@ impl Choices {
 
 impl fmt::Display for Choices {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (index, choice) in self.0.iter().enumerate() {
-            if index > 0 {
-                formatter.write_str(", ")?;
-            }
-            formatter.write_str(choice.as_str())?;
-        }
-        Ok(())
+        write_list(formatter, &self.0)
     }
+}
+
+/// Returns `items` in their order, or the first item that repeats an
+/// earlier one.
+fn distinct<T: PartialEq>(items: impl IntoIterator<Item = T>) -> Result<Vec<T>, T> {
+    let mut kept: Vec<T> = Vec::new();
+    for item in items {
+        if kept.contains(&item) {
+            return Err(item);
+        }
+        kept.push(item);
+    }
+    Ok(kept)
+}
+
+/// Writes `items` separated by a comma and a space.
+fn write_list<T: fmt::Display>(formatter: &mut fmt::Formatter<'_>, items: &[T]) -> fmt::Result {
+    for (index, item) in items.iter().enumerate() {
+        if index > 0 {
+            formatter.write_str(", ")?;
+        }
+        item.fmt(formatter)?;
+    }
+    Ok(())
 }
 
 /// The reason a list of values is not [`Choices`].

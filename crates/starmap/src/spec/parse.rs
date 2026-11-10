@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::ops::Range;
+use std::str::FromStr;
 
 use toml_edit::{Document, Item, Key, TableLike};
 
@@ -19,6 +20,7 @@ use crate::{
     PathTemplate, PathTemplateError, ProvidedRef, ProviderKind, SecretBind, SecretBytes, SecretRef,
     Type, Value,
 };
+use crate::{Scheme, Schemes, SchemesError};
 
 mod pointer;
 mod tool;
@@ -34,7 +36,7 @@ const VARIABLE_FIELDS: &[&str] = &[
     "purpose", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
 /// The keys of a type table.
-const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration"];
+const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "url"];
 /// The keys of an unset table.
 const UNSET_FIELDS: &[&str] = &["local", "default", "production"];
 
@@ -456,11 +458,13 @@ impl Parser {
                 let enumeration = field.child(table, "enumeration")?;
                 self.choices(&enumeration).map(Type::Enumeration)
             }
+            ["url"] => self.url_type(&field.child(table, "url")?),
             // Each unknown key was reported above.
             [] if !table.is_empty() => None,
             [] => {
                 let message = format!(
-                    "`{}` is an empty table, and it takes one of path, integer and enumeration",
+                    "`{}` is an empty table, and it takes one of path, integer, enumeration and \
+                     url",
                     field.path
                 );
                 self.report(field.span(), Kind::MissingField, message);
@@ -518,13 +522,45 @@ impl Parser {
         range.map(Type::Integer)
     }
 
+    /// Parses `{ url = { schemes = [..] } }`, whose schemes are optional.
+    fn url_type(&mut self, field: &Field<'_>) -> Option<Type> {
+        let table = self.table(field)?;
+        self.known(table, &field.path, &["schemes"]);
+        let Some(list) = field.child(table, "schemes") else {
+            return Some(Type::Url { schemes: None });
+        };
+        let schemes = match Schemes::new(self.texts::<Scheme>(&list)?) {
+            Ok(schemes) => schemes,
+            Err(SchemesError::Repeated(scheme)) => {
+                return self.not_distinct(&list, Some(scheme.as_str()));
+            }
+            Err(_) => return self.not_distinct(&list, None),
+        };
+        Some(Type::Url {
+            schemes: Some(schemes),
+        })
+    }
+
     /// Parses an array of choices, which has at least one and repeats none.
     fn choices(&mut self, field: &Field<'_>) -> Option<Choices> {
+        match Choices::new(self.texts::<Choice>(field)?) {
+            Ok(choices) => Some(choices),
+            Err(ChoicesError::Repeated(choice)) => self.not_distinct(field, Some(choice.as_str())),
+            Err(_) => self.not_distinct(field, None),
+        }
+    }
+
+    /// Parses each element of the field's array as a `T`, or reports each
+    /// element that is not text or that `T` refuses.
+    fn texts<T: FromStr>(&mut self, field: &Field<'_>) -> Option<Vec<T>>
+    where
+        T::Err: Display,
+    {
         let Some(array) = field.item.as_array() else {
             self.wrong_type(field, "an array of text");
             return None;
         };
-        let mut choices = Vec::new();
+        let mut parsed = Vec::new();
         for (index, value) in array.iter().enumerate() {
             let path = format!("{}[{index}]", field.path);
             let at = span(value.span());
@@ -536,31 +572,37 @@ impl Parser {
                 self.report(at, Kind::BadValue, message);
                 continue;
             };
-            let choice = text.parse::<Choice>();
-            if let Some(choice) = self.checked(at, &path, text, Kind::BadValue, choice) {
-                choices.push(choice);
+            let item = text.parse::<T>();
+            if let Some(item) = self.checked(at, &path, text, Kind::BadValue, item) {
+                parsed.push(item);
             }
         }
-        if choices.len() < array.len() {
-            return None;
-        }
-        let (at, message) = match Choices::new(choices) {
-            Ok(choices) => return Some(choices),
-            Err(ChoicesError::Repeated(choice)) => {
-                // The second element that holds the choice is the repeat.
-                let repeat = array
-                    .iter()
-                    .filter(|value| value.as_str() == Some(choice.as_str()))
-                    .nth(1)
+        (parsed.len() == array.len()).then_some(parsed)
+    }
+
+    /// Reports that the field's array lists `repeat` twice, or has no
+    /// values when `repeat` is `None`.
+    fn not_distinct<T>(&mut self, field: &Field<'_>, repeat: Option<&str>) -> Option<T> {
+        let (at, message) = match repeat {
+            Some(repeat) => {
+                // The second element that holds the value is the repeat.
+                let second = field
+                    .item
+                    .as_array()
+                    .and_then(|array| {
+                        array
+                            .iter()
+                            .filter(|value| value.as_str() == Some(repeat))
+                            .nth(1)
+                    })
                     .and_then(toml_edit::Value::span);
                 let message = format!(
-                    "`{}` lists {:?} twice, and it lists each value once",
-                    field.path,
-                    choice.as_str()
+                    "`{}` lists {repeat:?} twice, and it lists each value once",
+                    field.path
                 );
-                (span(repeat.or_else(|| field.item.span())), message)
+                (span(second.or_else(|| field.item.span())), message)
             }
-            Err(_) => {
+            None => {
                 let message = format!("`{}` has no values, and it lists at least one", field.path);
                 (field.span(), message)
             }

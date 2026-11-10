@@ -519,8 +519,8 @@ pub enum SpecProblemKind {
     BadDefault,
     /// An integer type's minimum is above its maximum.
     BadRange,
-    /// An enumeration, or the mode's production list, has no values or
-    /// repeats one.
+    /// An enumeration, a url type's scheme list, or the mode's production
+    /// list has no values or repeats one.
     EmptyEnumeration,
     /// A secret or generated variable is shown.
     ShownSecret,
@@ -594,7 +594,7 @@ enum SourceKind {
 const TYPE_WORDS: &[(&str, Type)] = &[
     ("path", Type::Path { absolute: false }),
     ("port", Type::Port),
-    ("url", Type::Url),
+    ("url", Type::Url { schemes: None }),
     ("socket-address", Type::SocketAddress),
     ("boolean", Type::Boolean),
     ("string", Type::String),

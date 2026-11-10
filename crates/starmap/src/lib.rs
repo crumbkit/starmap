@@ -67,8 +67,8 @@ pub use spec::{
 };
 pub use url;
 pub use value_type::{
-    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Port, PortError, RangeError, Type,
-    TypeError, Value,
+    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Port, PortError, RangeError, Scheme,
+    SchemeError, Schemes, SchemesError, Type, TypeError, Value,
 };
 
 /// Derives [`Enumeration`] for an enum of unit variants. A variant reads as

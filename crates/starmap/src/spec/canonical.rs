@@ -69,6 +69,12 @@ fn value_type(value_type: &Type) -> Toml {
             let values: Array = choices.iter().map(|choice| choice.as_str()).collect();
             inline([("enumeration", Toml::Array(values))])
         }
+        Type::Url {
+            schemes: Some(schemes),
+        } => {
+            let values: Array = schemes.iter().map(|scheme| scheme.as_str()).collect();
+            inline([("url", inline([("schemes", Toml::Array(values))]))])
+        }
         word => word_of(TYPE_WORDS, word).into(),
     }
 }

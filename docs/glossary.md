@@ -17,6 +17,10 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
 - `{ integer = { min = 1, max = 100 } }` is a whole number from `min` to
   `max`, both included.
 - `{ enumeration = ["dev", "prod"] }` is one of the listed values.
+- `{ url = { schemes = ["postgres", "postgresql"] } }` is a URL whose scheme
+  is one of the listed schemes. Each scheme is written in lower case, and a
+  value's scheme matches in any case. `{ url = {} }` means the same as
+  `url`.
 
 `Type::parse` reads a raw value in the type and returns a `Value`, nothing
 when the value counts as unset, or a `TypeError` when the value does not fit

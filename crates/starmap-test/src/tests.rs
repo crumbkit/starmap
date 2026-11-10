@@ -238,3 +238,22 @@ fn a_port_field_disagrees_with_a_socket_address_variable() {
         "{actual}"
     );
 }
+
+#[test]
+fn a_url_field_agrees_with_a_url_that_has_schemes() {
+    let spec = r#"
+[variables.SHELF_DATABASE_URL]
+purpose = "The database shelf keeps its catalogue in."
+type = { url = { schemes = ["postgres", "postgresql"] } }
+unset = "required"
+show = "shown"
+source = "setting"
+"#;
+    let fields = [starmap::Field::new::<url::Url>(
+        "SHELF_DATABASE_URL",
+        "url::Url",
+        starmap::Presence::Always,
+    )];
+
+    assert_eq!(compare("Shelf", "starmap.toml", &fields, spec, &[]), Ok(()));
+}

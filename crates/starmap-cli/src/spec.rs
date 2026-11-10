@@ -498,7 +498,7 @@ fn hint(kind: SpecProblemKind) -> &'static str {
         SpecProblemKind::Guess => "confirm or correct each guess and delete its ?",
         SpecProblemKind::BadDefault => "set a default the type accepts",
         SpecProblemKind::BadRange => "swap or correct the bounds",
-        SpecProblemKind::EmptyEnumeration => "list each value once",
+        SpecProblemKind::EmptyEnumeration => "list at least one value, and each value once",
         SpecProblemKind::ShownSecret => "set show = \"withheld\"",
         SpecProblemKind::WithheldType => "set type = \"string\"",
         SpecProblemKind::WithheldDefault => {
