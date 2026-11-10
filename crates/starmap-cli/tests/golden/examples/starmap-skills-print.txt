@@ -68,8 +68,10 @@ secret or write one to a file.
   refuses to replace it. Edit the existing file, or pass `--spec FILE` with a
   path that is free.
 - `starmap::secret::unreadable` means 1Password or the Keychain could not
-  return a secret, because it is locked or the item is missing. Ask the person
-  to unlock it or add the item, then run `starmap run` again.
+  return a secret: it is locked, the item is missing, `op` is missing or
+  signed out, the bind is wrong, or there is no login keychain. Check the bind
+  and that `op` is signed in, ask the person to unlock it or add the item,
+  then run `starmap run` again.
 - `starmap::revision::not_found` means the revision given to `starmap diff` is
   not in the repository. Fetch it, or pass a branch or commit that exists.
 
