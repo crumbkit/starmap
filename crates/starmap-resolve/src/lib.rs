@@ -7,7 +7,10 @@
 //! fill a path template, each [`Provider`] of a provided kind, and each
 //! [`Resolver`] of secrets. It returns a [`Resolution`] whose bindings
 //! [`starmap::check`] then checks, with a [`ResolveFailure`] for each
-//! variable that could not be resolved. [`expand`] fills one path template.
+//! variable that could not be resolved. [`check_binds`] asks each
+//! [`Provider`] to check the binds of its kind without resolving a value,
+//! and returns a [`BindFailure`] for each bind a provider refuses.
+//! [`expand`] fills one path template.
 //!
 //! The `one-password` feature adds `OnePassword`, which reads secrets
 //! through the 1Password CLI, and the `keychain` feature adds `Keychain`,
@@ -36,5 +39,7 @@ pub use keychain::Keychain;
 pub use one_password::OnePassword;
 
 pub use places::{AppName, LabelError, Places, WorkspaceName, expand};
-pub use resolve::{Context, Resolution, ResolveFailure, ResolveProblem, resolve};
+pub use resolve::{
+    BindFailure, Context, Resolution, ResolveFailure, ResolveProblem, check_binds, resolve,
+};
 pub use traits::{Cacheable, Lookup, Provider, ProviderError, Resolver, SecretError, Slot};

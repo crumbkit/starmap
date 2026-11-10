@@ -11,7 +11,9 @@ use starmap::{
     Verdict,
 };
 
-use super::{Context, Resolution, ResolveFailure, ResolveProblem, resolve};
+use super::{
+    BindFailure, Context, Resolution, ResolveFailure, ResolveProblem, check_binds, resolve,
+};
 use crate::{Lookup, Places, Provider, ProviderError, Resolver, SecretError, Slot};
 
 /// A spec with every source kind: a mode setting, a required and an
@@ -153,18 +155,25 @@ fn problem<'r>(resolution: &'r Resolution, variable: &str) -> Option<&'r Resolve
 }
 
 /// A provider that answers every request with one value or one error, and
-/// records each request with its qualifiers and deadline.
+/// records each request with its qualifiers and deadline. Its check refuses
+/// every bind with `refusal` when it has one, and records each bind it
+/// checks.
 struct FakeProvider {
     kind: ProviderKind,
     answer: Result<&'static str, ProviderError>,
+    refusal: Option<ProviderError>,
     waits_out_deadline: bool,
     asked: RefCell<Vec<Request>>,
+    checked: RefCell<Vec<(String, Qualifiers)>>,
 }
+
+/// A bind's qualifiers as owned name and value pairs, in name order.
+type Qualifiers = Vec<(String, String)>;
 
 /// A request a fake provider received.
 struct Request {
     name: String,
-    qualifiers: Vec<(String, String)>,
+    qualifiers: Qualifiers,
     deadline: Instant,
 }
 
@@ -183,15 +192,43 @@ impl FakeProvider {
         }
     }
 
+    /// Returns a provider of `kind` whose check refuses every bind with
+    /// `message`.
+    fn refusing(kind: &str, message: &str) -> Self {
+        Self {
+            refusal: Some(ProviderError::new(message)),
+            ..Self::answering(kind, "unused")
+        }
+    }
+
     /// Returns a provider of `kind` with `answer`.
     fn new(kind: &str, answer: Result<&'static str, ProviderError>) -> Self {
         Self {
             kind: kind.parse().unwrap(),
             answer,
+            refusal: None,
             waits_out_deadline: false,
             asked: RefCell::new(Vec::new()),
+            checked: RefCell::new(Vec::new()),
         }
     }
+
+    /// Returns the name of each variable whose bind the provider checked.
+    fn checked_names(&self) -> Vec<String> {
+        self.checked
+            .borrow()
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+}
+
+/// Returns the qualifiers of `reference` as owned text.
+fn owned_qualifiers(reference: &ProvidedRef) -> Qualifiers {
+    reference
+        .qualifiers()
+        .map(|(key, value)| (key.to_owned(), value.to_owned()))
+        .collect()
 }
 
 impl Provider for FakeProvider {
@@ -205,19 +242,43 @@ impl Provider for FakeProvider {
         reference: &ProvidedRef,
         deadline: Instant,
     ) -> Result<OsString, ProviderError> {
-        let qualifiers = reference
-            .qualifiers()
-            .map(|(key, value)| (key.to_owned(), value.to_owned()))
-            .collect();
         self.asked.borrow_mut().push(Request {
             name: name.as_str().to_owned(),
-            qualifiers,
+            qualifiers: owned_qualifiers(reference),
             deadline,
         });
         if self.waits_out_deadline {
             wait_out(deadline);
         }
         self.answer.clone().map(OsString::from)
+    }
+
+    fn check(&self, name: &Name, reference: &ProvidedRef) -> Result<(), ProviderError> {
+        self.checked
+            .borrow_mut()
+            .push((name.as_str().to_owned(), owned_qualifiers(reference)));
+        self.refusal.clone().map_or(Ok(()), Err)
+    }
+}
+
+/// A provider that implements only what a provider must, so its check is
+/// the trait's default.
+struct PlainProvider {
+    kind: ProviderKind,
+}
+
+impl Provider for PlainProvider {
+    fn kind(&self) -> &ProviderKind {
+        &self.kind
+    }
+
+    fn provide(
+        &self,
+        _name: &Name,
+        _reference: &ProvidedRef,
+        _deadline: Instant,
+    ) -> Result<OsString, ProviderError> {
+        Err(ProviderError::new("a plain provider has no value"))
     }
 }
 
@@ -1077,4 +1138,96 @@ fn a_lookup_that_a_host_builds_is_never_marked_cacheable() {
     let reference =
         starmap::SecretRef::OnePassword("op://Personal/shelf mirror/token".parse().unwrap());
     assert!(!marked(&Lookup::reference(&reference)));
+}
+
+/// Returns the name of each variable in `failures`, in order.
+fn refused(failures: &[BindFailure]) -> Vec<&str> {
+    failures
+        .iter()
+        .map(|failure| failure.name.as_str())
+        .collect()
+}
+
+#[test]
+fn a_provider_without_a_check_accepts_every_bind() {
+    let ports = PlainProvider {
+        kind: "multiverse/port".parse().unwrap(),
+    };
+    let urls = PlainProvider {
+        kind: "multiverse/url".parse().unwrap(),
+    };
+    assert!(check_binds(&spec(), &[&ports, &urls]).is_empty());
+}
+
+#[test]
+fn a_refused_bind_names_the_variable_and_the_provider_and_quotes_its_message() {
+    let ports = FakeProvider::refusing("multiverse/port", "the host runs no process api");
+    let failures = check_binds(&spec(), &[&ports]);
+
+    assert_eq!(refused(&failures), ["SHELF_PORT"]);
+    let failure = &failures[0];
+    assert_eq!(failure.kind.as_str(), "multiverse/port");
+    assert_eq!(
+        failure.error,
+        ProviderError::new("the host runs no process api")
+    );
+    assert_eq!(
+        failure.to_string(),
+        "SHELF_PORT: the provider multiverse/port refuses the bind: \
+         the host runs no process api"
+    );
+}
+
+#[test]
+fn the_check_receives_the_variable_and_its_bind() {
+    let ports = FakeProvider::answering("multiverse/port", "9090");
+    assert!(check_binds(&spec(), &[&ports]).is_empty());
+    assert_eq!(
+        ports.checked.take(),
+        [(
+            "SHELF_PORT".to_owned(),
+            vec![("process".to_owned(), "api".to_owned())]
+        )]
+    );
+}
+
+#[test]
+fn a_variable_whose_kind_has_no_registered_provider_is_not_checked() {
+    let ports = FakeProvider::refusing("multiverse/port", "the host runs no process api");
+    let failures = check_binds(&spec(), &[&ports]);
+    assert_eq!(refused(&failures), ["SHELF_PORT"]);
+    assert_eq!(ports.checked_names(), ["SHELF_PORT"]);
+}
+
+#[test]
+fn the_first_registered_provider_of_a_kind_is_the_one_asked() {
+    let first = FakeProvider::answering("multiverse/port", "9090");
+    let second = FakeProvider::refusing("multiverse/port", "the host runs no process api");
+    assert!(check_binds(&spec(), &[&first, &second]).is_empty());
+    assert_eq!(first.checked_names(), ["SHELF_PORT"]);
+    assert!(second.checked.borrow().is_empty());
+}
+
+#[test]
+fn one_call_reports_every_refusal_in_the_order_of_the_spec() {
+    let urls = FakeProvider::refusing("multiverse/url", "the host runs no app shelf");
+    let ports = FakeProvider::refusing("multiverse/port", "the host runs no process api");
+    let failures = check_binds(&spec(), &[&urls, &ports]);
+    assert_eq!(refused(&failures), ["SHELF_PORT", "SHELF_CATALOGUE_URL"]);
+}
+
+#[test]
+fn an_optional_provided_variable_is_checked_too() {
+    let urls = FakeProvider::refusing("multiverse/url", "the host runs no app shelf");
+    let failures = check_binds(&spec(), &[&urls]);
+    assert_eq!(refused(&failures), ["SHELF_CATALOGUE_URL"]);
+}
+
+#[test]
+fn checking_binds_never_asks_a_provider_for_a_value() {
+    let ports = FakeProvider::answering("multiverse/port", "9090");
+    let urls = FakeProvider::refusing("multiverse/url", "the host runs no app shelf");
+    let _ = check_binds(&spec(), &[&ports, &urls]);
+    assert!(ports.asked.borrow().is_empty());
+    assert!(urls.asked.borrow().is_empty());
 }
