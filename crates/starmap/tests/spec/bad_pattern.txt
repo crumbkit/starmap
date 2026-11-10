@@ -1,0 +1,4 @@
+starmap::spec::bad_pattern: `variables.SHELF_REVISION.type.string.pattern` is "[0-9a-f{40}", and the pattern does not compile: unclosed character class
+  at: 4:31 to 4:44, bytes 159..172
+   4 | type = { string = { pattern = "[0-9a-f{40}" } }
+     |                               ^^^^^^^^^^^^^

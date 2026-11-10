@@ -39,3 +39,14 @@ fn a_duplicate_holds_the_value_of_the_secret_it_copies() {
 
     assert_eq!(secret.duplicate().expose(), "hunter2");
 }
+
+#[test]
+fn a_secret_that_does_not_match_a_pattern_is_refused_by_the_pattern_alone() {
+    let pattern: crate::Pattern = "sk-[a-z]+".parse().unwrap();
+
+    assert_eq!(Secret::new("sk-abc".to_owned()).check(&pattern), Ok(()));
+    assert_eq!(
+        Secret::new("pk-hidden".to_owned()).check(&pattern),
+        Err(crate::TypeError::NoMatch(pattern))
+    );
+}

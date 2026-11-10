@@ -8,8 +8,10 @@ use std::path::PathBuf;
 
 use proptest::prelude::*;
 
+use crate::Secret;
+
 use super::{
-    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Port, Type, TypeError, Value,
+    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Pattern, Port, Type, TypeError, Value,
 };
 
 /// The eight words the boolean type accepts, each with the value it reads as.
@@ -23,6 +25,13 @@ const BOOLEAN_WORDS: [(&str, bool); 8] = [
     ("on", true),
     ("off", false),
 ];
+
+/// Returns the string type whose pattern is `text`.
+fn matching(text: &str) -> Type {
+    Type::String {
+        pattern: Some(text.parse().unwrap()),
+    }
+}
 
 /// Parses `raw` as `ty`.
 fn parse(ty: &Type, raw: &str) -> Result<Option<Value>, TypeError> {
@@ -400,12 +409,146 @@ proptest! {
 #[test]
 fn a_string_type_reads_any_text_including_an_empty_one() {
     assert_eq!(
-        parse(&Type::String, ""),
+        parse(&Type::String { pattern: None }, ""),
         Ok(Some(Value::String(OsString::new())))
     );
     assert_eq!(
-        parse(&Type::String, "two words"),
+        parse(&Type::String { pattern: None }, "two words"),
         Ok(Some(Value::String(OsString::from("two words"))))
+    );
+}
+
+#[test]
+fn a_string_type_with_a_pattern_accepts_a_value_that_matches() {
+    let revision = "0123456789abcdef0123456789abcdef01234567";
+
+    assert_eq!(
+        parse(&matching("[0-9a-f]{40}"), revision),
+        Ok(Some(Value::String(OsString::from(revision))))
+    );
+}
+
+#[test]
+fn a_string_type_with_a_pattern_refuses_extra_text_before_or_after_a_match() {
+    let ty = matching("[0-9a-f]{4}");
+    let refused = Err(TypeError::NoMatch("[0-9a-f]{4}".parse().unwrap()));
+
+    assert_eq!(parse(&ty, "x0abc"), refused);
+    assert_eq!(parse(&ty, "0abcx"), refused);
+    assert_eq!(parse(&ty, "0abc\n"), refused);
+}
+
+#[test]
+fn a_pattern_with_an_alternation_matches_only_a_whole_value() {
+    let ty = matching("ab|cd");
+
+    assert!(parse(&ty, "cd").is_ok());
+    assert!(parse(&ty, "abcd").is_err());
+}
+
+#[test]
+fn a_pattern_that_would_close_the_anchoring_group_is_refused() {
+    assert!("a)|(b".parse::<Pattern>().is_err());
+}
+
+#[test]
+fn a_refused_match_names_the_pattern_and_not_the_value() {
+    let error = parse(&matching("sk-[a-z]+"), "pk-hidden-value").unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "the value does not match the pattern sk-[a-z]+"
+    );
+}
+
+#[test]
+fn a_string_type_with_a_pattern_needs_unicode_text() {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let raw = OsStr::from_bytes(b"ab\xff");
+
+        assert_eq!(matching(".*").parse(raw), Err(TypeError::NotUnicode));
+    }
+}
+
+#[test]
+fn a_type_checks_a_secret_against_its_pattern_and_names_only_the_pattern() {
+    let pattern: Pattern = "sk-[a-z]+".parse().unwrap();
+    let ty = Type::String {
+        pattern: Some(pattern.clone()),
+    };
+
+    assert_eq!(ty.check_secret(&Secret::new("sk-abc".to_owned())), Ok(()));
+    assert_eq!(
+        ty.check_secret(&Secret::new("pk-hidden".to_owned())),
+        Err(TypeError::NoMatch(pattern))
+    );
+    assert_eq!(
+        Type::String { pattern: None }.check_secret(&Secret::new("any".to_owned())),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_verbose_pattern_whose_comment_runs_to_its_end_is_refused_with_the_reason() {
+    let error = "(?x) [a-z]+ # letters".parse::<Pattern>().unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "the pattern does not compile: it ends inside a comment, which would hide the end \
+         of the value, so end the comment with a newline"
+    );
+    let ty = matching("(?x) [a-z]+ # letters\n");
+    assert!(parse(&ty, "abc").is_ok());
+    assert!(parse(&ty, "abc1").is_err());
+}
+
+#[test]
+fn a_pattern_keeps_its_text_and_compares_by_it() {
+    let pattern: Pattern = "^[a-z]+$".parse().unwrap();
+
+    assert_eq!(pattern.as_str(), "^[a-z]+$");
+    assert_eq!(pattern.to_string(), "^[a-z]+$");
+    assert_eq!(pattern, "^[a-z]+$".parse().unwrap());
+    assert_ne!(pattern, "[a-z]+".parse().unwrap());
+}
+
+#[test]
+fn a_pattern_that_does_not_compile_is_refused() {
+    let error = "[0-9".parse::<Pattern>().unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .starts_with("the pattern does not compile"),
+        "{error}"
+    );
+    assert!(!error.to_string().contains('\n'), "{error}");
+}
+
+#[test]
+fn a_pattern_over_1024_bytes_is_refused() {
+    let longest = "a".repeat(Pattern::MAX_BYTES);
+    let over = "a".repeat(Pattern::MAX_BYTES + 1);
+
+    assert!(longest.parse::<Pattern>().is_ok());
+    assert_eq!(
+        over.parse::<Pattern>().unwrap_err().to_string(),
+        "the pattern is 1025 bytes, and a pattern holds at most 1024"
+    );
+}
+
+#[test]
+fn a_pattern_that_compiles_past_the_size_limit_is_refused() {
+    let error = "\\w{1000}".parse::<Pattern>().unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .starts_with("the pattern does not compile"),
+        "{error}"
     );
 }
 
@@ -670,7 +813,7 @@ fn the_string_and_path_types_read_a_value_that_is_not_unicode() {
     let raw = OsStr::from_bytes(b"/state/\xff");
 
     assert_eq!(
-        Type::String.parse(raw),
+        Type::String { pattern: None }.parse(raw),
         Ok(Some(Value::String(raw.to_os_string())))
     );
     assert_eq!(
@@ -698,7 +841,8 @@ fn each_type_describes_its_values_for_help_text() {
             Type::Enumeration(choices(&["dev", "prod"])),
             "one of dev, prod",
         ),
-        (Type::String, "a string"),
+        (Type::String { pattern: None }, "a string"),
+        (matching("[0-9a-f]{40}"), "a string matching [0-9a-f]{40}"),
     ];
 
     for (ty, text) in described {
