@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use url::Url;
 
-use crate::{Enumeration, Environment, Name, Port, Secret, Show, Value};
+use crate::{Enumeration, Environment, Name, Port, Secret, SecretBytes, Show, Value};
 
 #[cfg(test)]
 mod tests;
@@ -137,6 +137,9 @@ pub enum Shape {
     /// Text that need not be Unicode, from a string or a path variable,
     /// held as an `OsString`.
     OsString,
+    /// The decoded bytes of a bytes variable, held as a `Vec<u8>`, or as a
+    /// [`SecretBytes`] when it is withheld.
+    Bytes,
 }
 
 /// Whether a field's type holds an unset variable.
@@ -155,7 +158,7 @@ pub enum Presence {
 #[diagnostic::on_unimplemented(
     message = "starmap cannot read a variable into `{Self}`",
     label = "this field type is not one that starmap reads",
-    note = "a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, starmap::Secret or a type that derives starmap::Enumeration, and each may be inside an Option"
+    note = "a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, Vec<u8>, starmap::Secret, starmap::SecretBytes or a type that derives starmap::Enumeration, and each may be inside an Option"
 )]
 pub trait FieldType: Sized {
     /// The kind of value the type holds.
@@ -209,6 +212,10 @@ shown!(SocketAddr, Shape::SocketAddress, |value| match value {
 });
 shown!(bool, Shape::Boolean, |value| match value {
     Value::Boolean(boolean) => Some(*boolean),
+    _ => None,
+});
+shown!(Vec<u8>, Shape::Bytes, |value| match value {
+    Value::Bytes { bytes, .. } => Some(bytes.clone()),
     _ => None,
 });
 shown!(OsString, Shape::OsString, |value| match value {
@@ -290,6 +297,18 @@ impl FieldType for Secret {
         environment
             .secret(name)
             .map(Secret::duplicate)
+            .ok_or(FieldProblem::Disagreement)
+    }
+}
+
+impl FieldType for SecretBytes {
+    const SHAPE: Shape = Shape::Bytes;
+    const SHOW: Show = Show::Withheld;
+
+    fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
+        environment
+            .secret_bytes(name)
+            .map(SecretBytes::duplicate)
             .ok_or(FieldProblem::Disagreement)
     }
 }

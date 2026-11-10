@@ -23,7 +23,7 @@ use security_framework::item::{ItemAddOptions, ItemAddValue, ItemClass, ItemSear
 use security_framework::passwords::{delete_generic_password, generic_password};
 use security_framework::passwords_options::PasswordOptions;
 use security_framework::random::SecRandom;
-use starmap::{Secret, SecretBytes};
+use starmap::{ByteCount, Secret};
 use zeroize::Zeroizing;
 
 use crate::SecretError;
@@ -46,7 +46,7 @@ const NO_DEFAULT_KEYCHAIN: i32 = -25307;
 pub(super) fn generated(
     service: &str,
     account: &str,
-    bytes: SecretBytes,
+    bytes: ByteCount,
     deadline: Instant,
 ) -> Result<Secret, SecretError> {
     if let Some(value) = read(service, account, deadline)? {
@@ -154,7 +154,7 @@ fn read(service: &str, account: &str, deadline: Instant) -> Result<Option<Secret
 
 /// Returns `bytes` cryptographically secure random bytes, written as
 /// base64url without padding.
-fn create(bytes: SecretBytes) -> Result<Zeroizing<String>, SecretError> {
+fn create(bytes: ByteCount) -> Result<Zeroizing<String>, SecretError> {
     let mut random = Zeroizing::new(vec![0; usize::from(bytes.get())]);
     SecRandom::default()
         .copy_bytes(&mut random)

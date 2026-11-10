@@ -1,4 +1,4 @@
-starmap::spec::withheld_type: `variables.SHELF_MIRROR_URL.type` is not "string", and a withheld variable has the type string
+starmap::spec::withheld_type: `variables.SHELF_MIRROR_URL.type` is not "string" or a bytes type, and a withheld variable has the type string or bytes
   at: 4:8 to 4:13, bytes 137..142
    4 | type = "url"
      |        ^^^^^

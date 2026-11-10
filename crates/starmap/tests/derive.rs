@@ -329,6 +329,36 @@ fn a_socket_address_field_reads_its_value_or_its_default() {
     assert_eq!(defaulted.address, SocketAddr::from(([0, 0, 0, 0], 8080)));
 }
 
+/// A struct over a spec of bytes variables.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/keys.toml")]
+struct Keys {
+    #[starmap("SHELF_COOKIE_KEY")]
+    cookie_key: starmap::SecretBytes,
+    #[starmap("SHELF_SALT")]
+    salt: Vec<u8>,
+}
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test checks the bytes that the withheld field holds"
+)]
+fn the_derive_gives_a_shown_bytes_field_vec_u8_and_a_withheld_one_the_decoded_bytes() {
+    let keys = Keys::from_vars(vars(&[("SHELF_COOKIE_KEY", "3q2+7w==")]))
+        .expect("the variables fit the spec");
+
+    assert_eq!(keys.cookie_key.expose(), [0xde, 0xad, 0xbe, 0xef]);
+    assert_eq!(keys.salt, [0xbe, 0xef]);
+    assert_eq!(
+        Keys::FIELDS
+            .iter()
+            .map(|field| (field.shape, field.show))
+            .collect::<Vec<_>>(),
+        [(Shape::Bytes, Show::Withheld), (Shape::Bytes, Show::Shown)]
+    );
+}
+
 #[test]
 fn without_a_mode_table_a_refusal_names_no_mode_and_no_file() {
     let missing = Listen::from_vars(vars(&[])).expect_err("the stage is required");

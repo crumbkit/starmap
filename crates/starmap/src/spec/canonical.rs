@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Table, Value as Toml, value};
 
 use super::{
-    SHOW_WORDS, SOURCE_WORDS, Source, SourceKind, Spec, TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule,
-    Variable, word_of,
+    ENCODING_WORDS, SHOW_WORDS, SOURCE_WORDS, Source, SourceKind, Spec, TYPE_WORDS, UNSET_WORDS,
+    Unset, UnsetRule, Variable, word_of,
 };
-use crate::{Cache, Mode, SecretBind, SecretRef, Type, Value};
+use crate::{ByteLength, Cache, Mode, SecretBind, SecretRef, Type, Value};
 
 /// Writes `spec` as TOML: the `[mode]` table, then one table per variable
 /// in the spec's order, each with its fields in the order of the field
@@ -68,6 +68,19 @@ fn value_type(value_type: &Type) -> Toml {
         Type::Enumeration(choices) => {
             let values: Array = choices.iter().map(|choice| choice.as_str()).collect();
             inline([("enumeration", Toml::Array(values))])
+        }
+        Type::Bytes(rule) => {
+            let (key, count) = match rule.length() {
+                ByteLength::Exactly(count) => ("length", count),
+                ByteLength::AtLeast(count) => ("min-length", count),
+            };
+            inline([(
+                "bytes",
+                inline([
+                    ("encoding", word_of(ENCODING_WORDS, &rule.encoding()).into()),
+                    (key, i64::from(count.get()).into()),
+                ]),
+            )])
         }
         word => word_of(TYPE_WORDS, word).into(),
     }

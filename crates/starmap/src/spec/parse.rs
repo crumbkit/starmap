@@ -10,14 +10,15 @@ use std::ops::Range;
 use toml_edit::{Document, Item, Key, TableLike};
 
 use super::{
-    SHOW_WORDS, SOURCE_WORDS, Show, Source, SourceKind, Spec, SpecError, SpecProblem,
-    SpecProblemKind as Kind, TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule, Variable, word_of,
+    ENCODING_WORDS, SHOW_WORDS, SOURCE_WORDS, Show, Source, SourceKind, Spec, SpecError,
+    SpecProblem, SpecProblemKind as Kind, TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule, Variable,
+    word_of,
 };
 use crate::bind::BIND_KINDS;
 use crate::{
-    Cache, Choice, Choices, ChoicesError, IntegerRange, ModeRule, Name, OnePasswordRef,
-    PathTemplate, PathTemplateError, ProvidedRef, ProviderKind, SecretBind, SecretBytes, SecretRef,
-    Type, Value,
+    ByteCount, ByteLength, ByteRule, BytesError, Cache, Choice, Choices, ChoicesError,
+    IntegerRange, ModeRule, Name, OnePasswordRef, PathTemplate, PathTemplateError, ProvidedRef,
+    ProviderKind, SecretBind, SecretRef, Type, Value,
 };
 
 mod pointer;
@@ -34,7 +35,7 @@ const VARIABLE_FIELDS: &[&str] = &[
     "purpose", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
 /// The keys of a type table.
-const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration"];
+const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "bytes"];
 /// The keys of an unset table.
 const UNSET_FIELDS: &[&str] = &["local", "default", "production"];
 
@@ -384,13 +385,24 @@ impl Parser {
             self.report(show.span(), Kind::ShownSecret, message);
         }
         if let (Some((Show::Withheld, _)), Some((ty, type_field))) = (&show, &ty)
-            && *ty != Type::String
+            && !matches!(ty, Type::String | Type::Bytes(_))
         {
             let message = format!(
-                "`{}` is not \"string\", and a withheld variable has the type string",
+                "`{}` is not \"string\" or a bytes type, and a withheld variable has the type \
+                 string or bytes",
                 type_field.path
             );
             self.report(type_field.span(), Kind::WithheldType, message);
+        }
+        if let (Some((SourceKind::Generated, _)), Some((Type::Bytes(_), type_field))) = (&kind, &ty)
+        {
+            // A generated value is written as base64url text, which no
+            // bytes type's encoding and length describe yet.
+            let message = format!(
+                "`{}` is a bytes type, and a generated variable has the type string",
+                type_field.path
+            );
+            self.report(type_field.span(), Kind::BadBytes, message);
         }
         let source = kind
             .as_ref()
@@ -456,11 +468,13 @@ impl Parser {
                 let enumeration = field.child(table, "enumeration")?;
                 self.choices(&enumeration).map(Type::Enumeration)
             }
+            ["bytes"] => self.bytes_type(&field.child(table, "bytes")?),
             // Each unknown key was reported above.
             [] if !table.is_empty() => None,
             [] => {
                 let message = format!(
-                    "`{}` is an empty table, and it takes one of path, integer and enumeration",
+                    "`{}` is an empty table, and it takes one of path, integer, enumeration and \
+                     bytes",
                     field.path
                 );
                 self.report(field.span(), Kind::MissingField, message);
@@ -516,6 +530,36 @@ impl Parser {
             self.report(field.span(), Kind::BadRange, message);
         }
         range.map(Type::Integer)
+    }
+
+    /// Parses `{ bytes = { encoding = .., length = .. } }`, which takes
+    /// exactly one of `length` and `min-length`.
+    fn bytes_type(&mut self, field: &Field<'_>) -> Option<Type> {
+        let table = self.table(field)?;
+        self.known(table, &field.path, &["encoding", "length", "min-length"]);
+        let encoding = self
+            .required(field, table, "encoding")
+            .and_then(|encoding| self.word(&encoding, ENCODING_WORDS));
+        let length = match (
+            field.child(table, "length"),
+            field.child(table, "min-length"),
+        ) {
+            (Some(length), None) => self.count(&length, ByteCount::new).map(ByteLength::Exactly),
+            (None, Some(length)) => self.count(&length, ByteCount::new).map(ByteLength::AtLeast),
+            (length, _) => {
+                let (kind, count) = match length {
+                    Some(_) => (Kind::BadValue, "both"),
+                    None => (Kind::MissingField, "neither"),
+                };
+                let message = format!(
+                    "`{}` sets {count} length and min-length, and it takes one of them",
+                    field.path
+                );
+                self.report(field.span(), kind, message);
+                None
+            }
+        };
+        Some(Type::Bytes(ByteRule::new(encoding?, length?)))
     }
 
     /// Parses an array of choices, which has at least one and repeats none.
@@ -816,7 +860,7 @@ impl Parser {
         variable: &Field<'_>,
         kind: SourceKind,
         field: Option<Field<'_>>,
-    ) -> Option<Option<SecretBytes>> {
+    ) -> Option<Option<ByteCount>> {
         let Some(field) = field else {
             return Some(None);
         };
@@ -828,18 +872,27 @@ impl Parser {
             self.report(field.key_span(), Kind::BadBytes, message);
             return None;
         }
+        self.count(&field, ByteCount::generated).map(Some)
+    }
+
+    /// Parses a whole number of bytes through `build`, which refuses a
+    /// number outside its range.
+    fn count(
+        &mut self,
+        field: &Field<'_>,
+        build: fn(u16) -> Result<ByteCount, BytesError>,
+    ) -> Option<ByteCount> {
         let Some(number) = field.item.as_integer() else {
-            self.wrong_type(&field, "a whole number");
+            self.wrong_type(field, "a whole number");
             return None;
         };
-        // A number beyond u16 is above SecretBytes::MAX too, so u16::MAX
-        // stands in for it and SecretBytes::new refuses it. The clamp only
-        // serves that refusal: it never admits a bad value, and the report
-        // still names the BadBytes problem with the number as written.
-        let bytes = SecretBytes::new(u16::try_from(number).unwrap_or(u16::MAX));
+        // A number beyond u16 is above ByteCount::MAX too, so u16::MAX
+        // stands in for it and `build` refuses it. The clamp only serves
+        // that refusal: it never admits a bad value, and the report still
+        // names the BadBytes problem with the number as written.
+        let count = build(u16::try_from(number).unwrap_or(u16::MAX));
         let text = number.to_string();
-        self.checked(field.span(), &field.path, &text, Kind::BadBytes, bytes)
-            .map(Some)
+        self.checked(field.span(), &field.path, &text, Kind::BadBytes, count)
     }
 
     /// Parses the `[mode]` table and checks its variable against the

@@ -230,7 +230,7 @@ fn a_generated_lookup_is_left_to_another_resolver() {
     let key: Name = "SHELF_SESSION_KEY".parse().unwrap();
     let lookup = Lookup::Generated {
         slot: Slot::new(&workspace, &app, &key),
-        bytes: starmap::SecretBytes::new(32).unwrap(),
+        bytes: starmap::ByteCount::generated(32).unwrap(),
     };
     let error = OnePassword::new(program.clone())
         .resolve(lookup, Instant::now() + PATIENT)

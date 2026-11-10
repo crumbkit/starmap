@@ -119,7 +119,7 @@ fn account(slot: Slot<'_>) -> String {
 mod platform {
     use std::time::Instant;
 
-    use starmap::{Secret, SecretBytes};
+    use starmap::{ByteCount, Secret};
     use zeroize::Zeroizing;
 
     use crate::SecretError;
@@ -127,7 +127,7 @@ mod platform {
     pub(super) fn generated(
         _service: &str,
         _account: &str,
-        _bytes: SecretBytes,
+        _bytes: ByteCount,
         _deadline: Instant,
     ) -> Result<Secret, SecretError> {
         Err(SecretError::Unsupported)

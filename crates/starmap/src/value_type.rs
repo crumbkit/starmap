@@ -1,6 +1,6 @@
 //! The type a variable's value has, the checking types that back it
-//! ([`Port`], [`IntegerRange`], [`Choices`] and [`Choice`]), and the value a
-//! type reads.
+//! ([`Port`], [`IntegerRange`], [`Choices`], [`Choice`] and [`ByteRule`]),
+//! and the value a type reads.
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -10,7 +10,13 @@ use std::num::{IntErrorKind, NonZeroU16};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use base64::Engine as _;
+use base64::engine::DecodePaddingMode;
+use base64::engine::general_purpose::{GeneralPurpose, GeneralPurposeConfig, STANDARD};
 use url::Url;
+use zeroize::Zeroize as _;
+
+use crate::ByteCount;
 
 #[cfg(test)]
 mod tests;
@@ -50,6 +56,9 @@ pub enum Type {
     Enumeration(Choices),
     /// Any text, which need not be Unicode.
     String,
+    /// Bytes written as text in an encoding, whose decoded length fits a
+    /// rule.
+    Bytes(ByteRule),
 }
 
 impl Type {
@@ -68,7 +77,9 @@ impl Type {
     ///
     /// # Errors
     ///
-    /// Returns [`TypeError`] when the value does not fit the type.
+    /// Returns [`TypeError`] when the value does not fit the type. A bytes
+    /// value that does not decode fails with [`TypeError::NotEncoded`], and
+    /// one of the wrong size with [`TypeError::WrongLength`].
     pub fn parse(&self, raw: &OsStr) -> Result<Option<Value>, TypeError> {
         let value = match self {
             Self::Path { absolute } => {
@@ -98,6 +109,10 @@ impl Type {
                     .ok_or_else(|| TypeError::NotChoice(choices.clone()))?;
                 Value::Choice(choice.clone())
             }
+            Self::Bytes(rule) => Value::Bytes {
+                bytes: rule.decode(text(raw)?)?,
+                encoding: rule.encoding(),
+            },
         };
         Ok(Some(value))
     }
@@ -121,6 +136,7 @@ impl fmt::Display for Type {
             ),
             Self::Enumeration(choices) => write!(formatter, "one of {choices}"),
             Self::String => formatter.write_str("a string"),
+            Self::Bytes(rule) => rule.fmt(formatter),
         }
     }
 }
@@ -162,6 +178,14 @@ pub enum Value {
     Choice(Choice),
     /// The value of the string type.
     String(OsString),
+    /// The value of a bytes type of a shown variable, decoded from its
+    /// encoding.
+    Bytes {
+        /// The decoded bytes.
+        bytes: Vec<u8>,
+        /// The encoding the value is written in.
+        encoding: Encoding,
+    },
 }
 
 impl Value {
@@ -177,6 +201,7 @@ impl Value {
             Self::Boolean(boolean) => boolean.to_string().into(),
             Self::Integer(number) => number.to_string().into(),
             Self::Choice(choice) => choice.as_str().into(),
+            Self::Bytes { bytes, encoding } => encoding.encode(bytes).into(),
         }
     }
 }
@@ -217,6 +242,10 @@ pub enum TypeError {
     NotChoice(Choices),
     /// The value is empty, and the type takes one of these choices.
     EmptyChoice(Choices),
+    /// The value is not text in this encoding.
+    NotEncoded(Encoding),
+    /// The value decodes to a number of bytes that this length refuses.
+    WrongLength(ByteLength),
 }
 
 impl fmt::Display for TypeError {
@@ -242,6 +271,10 @@ impl fmt::Display for TypeError {
                     formatter,
                     "the value is empty, and it must be one of {choices}"
                 )
+            }
+            Self::NotEncoded(encoding) => write!(formatter, "the value is not {encoding}"),
+            Self::WrongLength(length) => {
+                write!(formatter, "the value does not decode to {length}")
             }
         }
     }
@@ -556,3 +589,176 @@ impl fmt::Display for ChoicesError {
 }
 
 impl Error for ChoicesError {}
+
+/// The encoding of a bytes type's text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Encoding {
+    /// Two hexadecimal digits per byte, in upper or lower case. It is
+    /// written in lower case.
+    Hex,
+    /// Base64 as RFC 4648 section 4 defines it, with its padding required.
+    Base64,
+    /// Base64 with the URL and file name alphabet, as RFC 4648 section 5
+    /// defines it, with its padding optional. It is written without
+    /// padding.
+    Base64Url,
+}
+
+/// The base64url engine, which reads text with or without padding and
+/// writes it without.
+const BASE64_URL: GeneralPurpose = GeneralPurpose::new(
+    &base64::alphabet::URL_SAFE,
+    GeneralPurposeConfig::new()
+        .with_encode_padding(false)
+        .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+);
+
+impl Encoding {
+    /// Returns the bytes that `text` decodes to, or `None` when it is not
+    /// text in the encoding. Whitespace is refused in each encoding. The
+    /// buffer is zeroed before it is dropped on a refusal, because the
+    /// text may be a secret.
+    fn decode(self, text: &str) -> Option<Vec<u8>> {
+        let engine = match self {
+            Self::Hex => return hex(text),
+            Self::Base64 => &STANDARD,
+            Self::Base64Url => &BASE64_URL,
+        };
+        // The buffer is allocated once at its largest size, so decoding
+        // into it never moves the bytes and leaves an unzeroed copy.
+        let mut bytes = vec![0; base64::decoded_len_estimate(text.len())];
+        match engine.decode_slice(text, &mut bytes) {
+            Ok(length) => {
+                bytes[length..].fill(0);
+                bytes.truncate(length);
+                Some(bytes)
+            }
+            Err(_) => {
+                bytes.zeroize();
+                None
+            }
+        }
+    }
+
+    /// Writes `bytes` in the encoding's one spelling: lower case hex, padded
+    /// base64 or unpadded base64url.
+    pub(crate) fn encode(self, bytes: &[u8]) -> String {
+        match self {
+            Self::Hex => bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
+            Self::Base64 => STANDARD.encode(bytes),
+            Self::Base64Url => BASE64_URL.encode(bytes),
+        }
+    }
+}
+
+/// Reads hexadecimal digits in pairs, in either case.
+fn hex(text: &str) -> Option<Vec<u8>> {
+    if text.len() % 2 != 0 {
+        return None;
+    }
+    let digit = |byte: u8| char::from(byte).to_digit(16);
+    // The capacity is the final length, so pushing never moves the bytes.
+    let mut bytes = Vec::with_capacity(text.len() / 2);
+    for pair in text.as_bytes().chunks_exact(2) {
+        let (Some(high), Some(low)) = (digit(pair[0]), digit(pair[1])) else {
+            bytes.zeroize();
+            return None;
+        };
+        // Two hex digits make a number below 256.
+        bytes.push(u8::try_from(high * 16 + low).unwrap_or_default());
+    }
+    Some(bytes)
+}
+
+impl fmt::Display for Encoding {
+    /// Writes the word a `starmap.toml` uses: `hex`, `base64` or
+    /// `base64url`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Hex => "hex",
+            Self::Base64 => "base64",
+            Self::Base64Url => "base64url",
+        })
+    }
+}
+
+/// The length a bytes type allows after decoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ByteLength {
+    /// Exactly this many bytes.
+    Exactly(ByteCount),
+    /// This many bytes or more.
+    AtLeast(ByteCount),
+}
+
+impl ByteLength {
+    /// Returns whether `length` bytes fit.
+    fn fits(self, length: usize) -> bool {
+        match self {
+            Self::Exactly(count) => length == usize::from(count.get()),
+            Self::AtLeast(count) => length >= usize::from(count.get()),
+        }
+    }
+}
+
+impl fmt::Display for ByteLength {
+    /// Writes the length, such as `32 bytes` or `at least 16 bytes`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Exactly(count) => count.fmt(formatter),
+            Self::AtLeast(count) => write!(formatter, "at least {count}"),
+        }
+    }
+}
+
+/// The rule of a bytes type: the encoding its text is written in, and the
+/// length its bytes have after decoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ByteRule {
+    encoding: Encoding,
+    length: ByteLength,
+}
+
+impl ByteRule {
+    /// Builds the rule of `length` bytes written in `encoding`.
+    #[must_use]
+    pub fn new(encoding: Encoding, length: ByteLength) -> Self {
+        Self { encoding, length }
+    }
+
+    /// Returns the encoding.
+    #[must_use]
+    pub fn encoding(self) -> Encoding {
+        self.encoding
+    }
+
+    /// Returns the length after decoding.
+    #[must_use]
+    pub fn length(self) -> ByteLength {
+        self.length
+    }
+
+    /// Returns the bytes that `text` decodes to. On a refusal the decoded
+    /// bytes are zeroed before they are dropped, because the text may be a
+    /// secret.
+    pub(crate) fn decode(self, text: &str) -> Result<Vec<u8>, TypeError> {
+        let mut bytes = self
+            .encoding
+            .decode(text)
+            .ok_or(TypeError::NotEncoded(self.encoding))?;
+        if self.length.fits(bytes.len()) {
+            Ok(bytes)
+        } else {
+            bytes.zeroize();
+            Err(TypeError::WrongLength(self.length))
+        }
+    }
+}
+
+impl fmt::Display for ByteRule {
+    /// Writes the rule, such as `32 bytes as base64`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{} as {}", self.length, self.encoding)
+    }
+}

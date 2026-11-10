@@ -1,8 +1,11 @@
-//! The wrapper that holds a withheld value.
+//! The wrappers that hold a withheld value: its text, and the bytes a
+//! withheld bytes value decodes to.
 
 use std::fmt;
 
 use secrecy::{ExposeSecret as _, SecretBox};
+
+use crate::{ByteRule, TypeError};
 
 #[cfg(test)]
 mod tests;
@@ -84,10 +87,86 @@ impl Secret {
     }
 }
 
+impl Secret {
+    /// Decodes the value by `rule` into bytes held as a secret. The refusal
+    /// names only the rule's encoding or length, so the value stays inside
+    /// the secret.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "BASE-24: the value is decoded in place, and its bytes go straight into a SecretBytes"
+    )]
+    pub(crate) fn decode(&self, rule: ByteRule) -> Result<SecretBytes, TypeError> {
+        rule.decode(self.0.expose_secret()).map(SecretBytes::new)
+    }
+}
+
 impl fmt::Debug for Secret {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Eight dots whatever the value, so the text does not reveal the
         // value's length.
         formatter.write_str("Secret(••••••••)")
+    }
+}
+
+/// The bytes that a withheld bytes value decodes to, such as a signing key.
+/// Its `Debug` prints `SecretBytes(••••••••)` whatever the bytes, and its
+/// memory is zeroed when it is dropped.
+///
+/// Like [`Secret`], it has no `Display`, no `Serialize` and no `Clone`, so
+/// the bytes leave it only through [`SecretBytes::expose`].
+///
+/// ```
+/// let key = starmap::SecretBytes::new(vec![1, 2, 3]);
+/// assert_eq!(format!("{key:?}"), "SecretBytes(••••••••)");
+/// ```
+///
+/// ```compile_fail
+/// let key = starmap::SecretBytes::new(vec![1, 2, 3]);
+/// let copy = key.clone();
+/// ```
+pub struct SecretBytes(SecretBox<Vec<u8>>);
+
+impl SecretBytes {
+    /// Holds `bytes` as a secret.
+    #[must_use]
+    pub fn new(bytes: Vec<u8>) -> Self {
+        // The Vec moves into the box as it is, so its buffer is not copied.
+        Self(SecretBox::new(Box::new(bytes)))
+    }
+
+    /// Returns the bytes. Call it only where the bytes are used, such as
+    /// where a key signs or decrypts.
+    #[must_use]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "BASE-24: SecretBytes is the crate's wrapper of secrecy for decoded bytes"
+    )]
+    pub fn expose(&self) -> &[u8] {
+        self.0.expose_secret()
+    }
+
+    /// Returns a second holder of a copy of the bytes, without the bytes
+    /// passing through any other type.
+    ///
+    /// ```
+    /// let key = starmap::SecretBytes::new(vec![1, 2, 3]);
+    /// let copy = key.duplicate();
+    /// assert_eq!(format!("{copy:?}"), "SecretBytes(••••••••)");
+    /// ```
+    #[must_use]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "BASE-24: the copy goes straight into a new SecretBytes"
+    )]
+    pub fn duplicate(&self) -> Self {
+        Self::new(self.0.expose_secret().clone())
+    }
+}
+
+impl fmt::Debug for SecretBytes {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Eight dots whatever the bytes, so the text does not reveal their
+        // length.
+        formatter.write_str("SecretBytes(••••••••)")
     }
 }

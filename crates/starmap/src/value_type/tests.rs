@@ -9,8 +9,10 @@ use std::path::PathBuf;
 use proptest::prelude::*;
 
 use super::{
-    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Port, Type, TypeError, Value,
+    ByteLength, ByteRule, Choice, ChoiceError, Choices, ChoicesError, Encoding, IntegerRange, Port,
+    Type, TypeError, Value,
 };
+use crate::ByteCount;
 
 /// The eight words the boolean type accepts, each with the value it reads as.
 const BOOLEAN_WORDS: [(&str, bool); 8] = [
@@ -655,6 +657,7 @@ fn every_type_that_needs_text_refuses_a_value_that_is_not_unicode() {
         Type::Boolean,
         Type::Integer(IntegerRange::new(1, 100).unwrap()),
         Type::Enumeration(choices(&["dev"])),
+        exactly(Encoding::Hex, 1),
     ];
 
     for ty in types {
@@ -716,4 +719,184 @@ fn a_value_prints_as_the_text_an_environment_holds() {
     assert_eq!(address.to_string(), "[::1]:8080");
     assert_eq!(choice.to_string(), "dev");
     assert_eq!(Value::Boolean(true).to_string(), "true");
+}
+
+// Bytes
+
+/// Builds the bytes rule of `encoding` with the exact length `length`.
+fn exactly(encoding: Encoding, length: u16) -> Type {
+    Type::Bytes(ByteRule::new(
+        encoding,
+        ByteLength::Exactly(ByteCount::new(length).unwrap()),
+    ))
+}
+
+/// Builds the bytes rule of `encoding` with the smallest length `length`.
+fn at_least(encoding: Encoding, length: u16) -> Type {
+    Type::Bytes(ByteRule::new(
+        encoding,
+        ByteLength::AtLeast(ByteCount::new(length).unwrap()),
+    ))
+}
+
+/// Returns the bytes that `raw` decodes to in `ty`.
+fn decoded(ty: &Type, raw: &str) -> Vec<u8> {
+    match parse(ty, raw) {
+        Ok(Some(Value::Bytes { bytes, .. })) => bytes,
+        other => panic!("{raw:?} read as {other:?}"),
+    }
+}
+
+#[test]
+fn hex_accepts_digits_in_either_case() {
+    let ty = exactly(Encoding::Hex, 4);
+
+    assert_eq!(decoded(&ty, "deadBEEF"), [0xde, 0xad, 0xbe, 0xef]);
+    assert_eq!(decoded(&ty, "DEADBEEF"), [0xde, 0xad, 0xbe, 0xef]);
+}
+
+#[test]
+fn hex_refuses_an_odd_digit_a_letter_past_f_and_whitespace() {
+    let ty = at_least(Encoding::Hex, 1);
+
+    for raw in ["abc", "zz", "de ad", "dead\n"] {
+        assert_eq!(
+            parse(&ty, raw),
+            Err(TypeError::NotEncoded(Encoding::Hex)),
+            "{raw:?}"
+        );
+    }
+}
+
+#[test]
+fn base64_accepts_padded_text_and_refuses_unpadded_text() {
+    let ty = exactly(Encoding::Base64, 4);
+
+    assert_eq!(decoded(&ty, "3q2+7w=="), [0xde, 0xad, 0xbe, 0xef]);
+    assert_eq!(
+        parse(&ty, "3q2+7w"),
+        Err(TypeError::NotEncoded(Encoding::Base64))
+    );
+}
+
+#[test]
+fn base64_refuses_the_url_alphabet_and_whitespace() {
+    let ty = exactly(Encoding::Base64, 4);
+
+    for raw in ["3q2-7w==", "3q2+ 7w==", " 3q2+7w=="] {
+        assert_eq!(
+            parse(&ty, raw),
+            Err(TypeError::NotEncoded(Encoding::Base64)),
+            "{raw:?}"
+        );
+    }
+}
+
+#[test]
+fn base64url_accepts_text_with_or_without_padding() {
+    let ty = exactly(Encoding::Base64Url, 4);
+
+    assert_eq!(decoded(&ty, "3q2-7w"), [0xde, 0xad, 0xbe, 0xef]);
+    assert_eq!(decoded(&ty, "3q2-7w=="), [0xde, 0xad, 0xbe, 0xef]);
+}
+
+#[test]
+fn base64url_refuses_the_standard_alphabet_and_whitespace() {
+    let ty = exactly(Encoding::Base64Url, 4);
+
+    for raw in ["3q2+7w", "3q2-\t7w"] {
+        assert_eq!(
+            parse(&ty, raw),
+            Err(TypeError::NotEncoded(Encoding::Base64Url)),
+            "{raw:?}"
+        );
+    }
+}
+
+#[test]
+fn a_value_of_the_wrong_size_is_refused_for_an_exact_length() {
+    let ty = exactly(Encoding::Hex, 4);
+    let length = ByteLength::Exactly(ByteCount::new(4).unwrap());
+
+    assert_eq!(parse(&ty, "dead"), Err(TypeError::WrongLength(length)));
+    assert_eq!(
+        parse(&ty, "deadbeef00"),
+        Err(TypeError::WrongLength(length))
+    );
+}
+
+#[test]
+fn a_value_of_the_wrong_size_is_refused_for_a_smallest_length() {
+    let ty = at_least(Encoding::Hex, 4);
+    let length = ByteLength::AtLeast(ByteCount::new(4).unwrap());
+
+    assert_eq!(parse(&ty, "dead"), Err(TypeError::WrongLength(length)));
+    assert_eq!(decoded(&ty, "deadbeef00"), [0xde, 0xad, 0xbe, 0xef, 0]);
+}
+
+#[test]
+fn neither_bytes_refusal_holds_the_value_or_its_size() {
+    let raw = "c2VjcmV0LXNpemVk";
+    let not_encoded = parse(&exactly(Encoding::Hex, 32), raw).unwrap_err();
+    let wrong_length = parse(&exactly(Encoding::Base64, 32), raw).unwrap_err();
+
+    assert_eq!(not_encoded.to_string(), "the value is not hex");
+    assert_eq!(
+        wrong_length.to_string(),
+        "the value does not decode to 32 bytes"
+    );
+    assert_eq!(
+        parse(&at_least(Encoding::Base64, 16), "AAAA")
+            .unwrap_err()
+            .to_string(),
+        "the value does not decode to at least 16 bytes"
+    );
+    for text in [not_encoded.to_string(), wrong_length.to_string()] {
+        assert!(!text.contains(raw), "{text}");
+        assert!(!text.contains("12"), "{text}");
+    }
+}
+
+#[test]
+fn a_bytes_value_writes_its_encoding_back_in_one_spelling() {
+    let cases = [
+        (exactly(Encoding::Hex, 2), "BEEF", "beef"),
+        (exactly(Encoding::Base64, 1), "/w==", "/w=="),
+        (exactly(Encoding::Base64Url, 1), "_w==", "_w"),
+    ];
+    for (ty, raw, written) in cases {
+        let value = parse(&ty, raw).unwrap().unwrap();
+
+        assert_eq!(value.to_string(), written);
+        assert_eq!(parse(&ty, written).unwrap().unwrap(), value);
+    }
+}
+
+#[test]
+fn a_bytes_type_describes_its_length_and_encoding() {
+    assert_eq!(
+        exactly(Encoding::Base64, 32).to_string(),
+        "32 bytes as base64"
+    );
+    assert_eq!(
+        at_least(Encoding::Hex, 16).to_string(),
+        "at least 16 bytes as hex"
+    );
+    assert_eq!(
+        exactly(Encoding::Base64Url, 1).to_string(),
+        "1 byte as base64url"
+    );
+}
+
+proptest! {
+    #[test]
+    fn each_encoding_reads_back_the_bytes_it_writes(
+        bytes in proptest::collection::vec(any::<u8>(), 1..64),
+        encoding in prop_oneof![Just(Encoding::Hex), Just(Encoding::Base64), Just(Encoding::Base64Url)],
+    ) {
+        let ty = at_least(encoding, 1);
+        let written = Value::Bytes { bytes: bytes.clone(), encoding }.to_string();
+
+        prop_assert_eq!(decoded(&ty, &written), bytes);
+    }
 }

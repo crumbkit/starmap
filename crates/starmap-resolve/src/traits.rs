@@ -9,7 +9,7 @@ use std::io;
 use std::time::Instant;
 
 use starmap::{
-    Cache, Mode, Name, ProvidedRef, ProviderKind, Secret, SecretBind, SecretBytes, SecretRef,
+    ByteCount, Cache, Mode, Name, ProvidedRef, ProviderKind, Secret, SecretBind, SecretRef,
 };
 
 use crate::{AppName, WorkspaceName};
@@ -157,7 +157,7 @@ pub enum Lookup<'a> {
         /// The variable and the app and workspace it belongs to.
         slot: Slot<'a>,
         /// How many random bytes a new value has.
-        bytes: SecretBytes,
+        bytes: ByteCount,
     },
     /// The value that a person typed for the secret variable of `slot`,
     /// which has no bind, and that a host kept with [`Resolver::save`].

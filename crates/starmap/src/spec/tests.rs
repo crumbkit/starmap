@@ -11,7 +11,8 @@ use snapbox::{Assert, Data};
 
 use super::{Pointer, Show, Source, Spec, SpecError, SpecProblemKind, Unset};
 use crate::{
-    Cache, Choice, IntegerRange, Mode, Name, Placeholder, SecretBytes, SecretRef, Type, Value,
+    ByteCount, ByteLength, ByteRule, Cache, Choice, Encoding, IntegerRange, Mode, Name,
+    Placeholder, SecretRef, Type, Value,
 };
 
 /// The example spec in `crates/starmap/tests/example/starmap.toml`.
@@ -278,7 +279,7 @@ fn a_generated_variable_reads_its_bytes() {
     assert_eq!(
         spec.variable(&name("SHELF_SESSION_KEY")).unwrap().source(),
         &Source::Generated {
-            bytes: SecretBytes::new(48).unwrap()
+            bytes: ByteCount::generated(48).unwrap()
         }
     );
 }
@@ -293,7 +294,7 @@ fn a_generated_variable_without_bytes_has_32() {
     assert_eq!(
         spec.variable(&name("SHELF_X")).unwrap().source(),
         &Source::Generated {
-            bytes: SecretBytes::DEFAULT
+            bytes: ByteCount::DEFAULT
         }
     );
 }
@@ -1421,4 +1422,170 @@ fn cache_false_changes_the_digest_and_cache_true_does_not() {
 
     assert_eq!(plain.digest(), allowed.digest());
     assert_ne!(plain.digest(), never.digest());
+}
+
+// The bytes type
+
+/// Returns a shown setting whose type is `ty` and whose unset rule is
+/// `unset`.
+fn bytes_setting(ty: &str, unset: &str) -> String {
+    one(&format!(
+        "purpose = \"The salt of the catalogue's hashes.\"\ntype = {ty}\nunset = {unset}\n\
+         show = \"shown\"\nsource = \"setting\""
+    ))
+}
+
+/// Returns the message of each problem of `text`, which is not a valid
+/// spec.
+fn messages(text: &str) -> Vec<String> {
+    Spec::parse(text)
+        .unwrap_err()
+        .problems()
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
+
+#[test]
+fn a_bytes_type_reads_its_encoding_and_length() {
+    let cases = [
+        (
+            "{ bytes = { encoding = \"base64\", length = 32 } }",
+            Encoding::Base64,
+            ByteLength::Exactly(ByteCount::new(32).unwrap()),
+        ),
+        (
+            "{ bytes = { encoding = \"hex\", min-length = 16 } }",
+            Encoding::Hex,
+            ByteLength::AtLeast(ByteCount::new(16).unwrap()),
+        ),
+        (
+            "{ bytes = { encoding = \"base64url\", length = 1 } }",
+            Encoding::Base64Url,
+            ByteLength::Exactly(ByteCount::new(1).unwrap()),
+        ),
+    ];
+    for (ty, encoding, length) in cases {
+        let parsed = spec(&bytes_setting(ty, "\"required\""));
+
+        assert_eq!(
+            parsed.variable(&name("SHELF_X")).unwrap().value_type(),
+            &Type::Bytes(ByteRule::new(encoding, length)),
+            "{ty}"
+        );
+    }
+}
+
+#[test]
+fn a_bytes_type_without_an_encoding_or_with_an_unknown_one_is_refused() {
+    let missing = bytes_setting("{ bytes = { length = 32 } }", "\"required\"");
+    let unknown = bytes_setting(
+        "{ bytes = { encoding = \"base32\", length = 32 } }",
+        "\"required\"",
+    );
+
+    assert_eq!(kinds(&missing), [SpecProblemKind::MissingField]);
+    assert_eq!(kinds(&unknown), [SpecProblemKind::BadValue]);
+}
+
+#[test]
+fn a_bytes_type_takes_exactly_one_of_length_and_min_length() {
+    let both = bytes_setting(
+        "{ bytes = { encoding = \"hex\", length = 32, min-length = 16 } }",
+        "\"required\"",
+    );
+    let neither = bytes_setting("{ bytes = { encoding = \"hex\" } }", "\"required\"");
+
+    assert_eq!(kinds(&both), [SpecProblemKind::BadValue]);
+    assert_eq!(kinds(&neither), [SpecProblemKind::MissingField]);
+}
+
+#[test]
+fn a_bytes_length_outside_1_to_1024_is_bad_bytes() {
+    for length in ["0", "1025", "-1", "70000"] {
+        let text = bytes_setting(
+            &format!("{{ bytes = {{ encoding = \"hex\", length = {length} }} }}"),
+            "\"required\"",
+        );
+
+        assert_eq!(kinds(&text), [SpecProblemKind::BadBytes], "{length}");
+        assert_eq!(
+            messages(&text),
+            [format!(
+                "`variables.SHELF_X.type.bytes.length` is \"{length}\", and a byte length runs \
+                 from 1 to 1024 bytes"
+            )]
+        );
+    }
+}
+
+#[test]
+fn a_shown_bytes_default_must_decode_and_fit() {
+    let ty = "{ bytes = { encoding = \"hex\", length = 2 } }";
+
+    let fits = spec(&bytes_setting(ty, "{ default = \"BEEF\" }"));
+    assert_eq!(
+        fits.variable(&name("SHELF_X"))
+            .unwrap()
+            .unset()
+            .in_mode(Mode::Local),
+        &Unset::Default(Value::Bytes {
+            bytes: vec![0xbe, 0xef],
+            encoding: Encoding::Hex,
+        })
+    );
+    for default in ["\"zz\"", "\"beef00\""] {
+        let text = bytes_setting(ty, &format!("{{ default = {default} }}"));
+        assert_eq!(kinds(&text), [SpecProblemKind::BadDefault], "{default}");
+    }
+}
+
+#[test]
+fn a_withheld_variable_may_have_a_bytes_type() {
+    let text = one("purpose = \"The key that signs session cookies.\"\n\
+         type = { bytes = { encoding = \"base64\", length = 32 } }\nunset = \"required\"\n\
+         show = \"withheld\"\nsource = \"secret\"");
+
+    spec(&text);
+}
+
+#[test]
+fn a_generated_variable_with_a_bytes_type_is_bad_bytes() {
+    let text = one("purpose = \"The key that signs session cookies.\"\n\
+         type = { bytes = { encoding = \"base64\", length = 32 } }\nunset = \"required\"\n\
+         show = \"withheld\"\nsource = \"generated\"");
+
+    assert_eq!(kinds(&text), [SpecProblemKind::BadBytes]);
+    assert_eq!(
+        messages(&text),
+        ["`variables.SHELF_X.type` is a bytes type, and a generated variable has the type string"]
+    );
+}
+
+#[test]
+fn the_canonical_form_round_trips_each_bytes_rule() {
+    let text = "[variables.SHELF_A]\npurpose = \"A.\"\n\
+                type = { bytes = { encoding = \"hex\", length = 2 } }\n\
+                unset = { default = \"BEEF\" }\nshow = \"shown\"\nsource = \"setting\"\n\n\
+                [variables.SHELF_B]\npurpose = \"B.\"\n\
+                type = { bytes = { min-length = 16, encoding = \"base64url\" } }\n\
+                unset = \"required\"\nshow = \"withheld\"\nsource = \"secret\"\n";
+    let parsed = spec(text);
+    let canonical = parsed.to_toml();
+
+    assert!(
+        canonical.contains("type = { bytes = { encoding = \"hex\", length = 2 } }"),
+        "{canonical}"
+    );
+    assert!(
+        canonical.contains("unset = { default = \"beef\" }"),
+        "{canonical}"
+    );
+    assert!(
+        canonical.contains("type = { bytes = { encoding = \"base64url\", min-length = 16 } }"),
+        "{canonical}"
+    );
+    let reparsed = spec(&canonical);
+    assert_eq!(reparsed, parsed);
+    assert_eq!(reparsed.digest(), parsed.digest());
 }

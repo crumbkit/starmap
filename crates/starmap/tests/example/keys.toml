@@ -1,0 +1,15 @@
+# A spec of bytes variables, for the struct tests of a shown and a
+# withheld bytes value.
+[variables.SHELF_COOKIE_KEY]
+purpose = "The key that signs session cookies."
+type = { bytes = { encoding = "base64", length = 4 } }
+unset = "required"
+show = "withheld"
+source = "secret"
+
+[variables.SHELF_SALT]
+purpose = "The salt of the catalogue's hashes."
+type = { bytes = { encoding = "hex", min-length = 2 } }
+unset = { default = "beef" }
+show = "shown"
+source = "setting"
