@@ -107,6 +107,45 @@ fn check_fails_for_a_variable_that_the_listed_source_reads_and_the_spec_does_not
 }
 
 #[test]
+fn check_through_a_pointer_with_an_empty_src_scans_nothing() {
+    let dir = checkout();
+    write(
+        dir.path(),
+        "starmap.toml",
+        "spec = \"config/environment.toml\"\nsrc = []\n",
+    );
+
+    starmap(dir.path(), &["check"]).code(0).stdout_eq(
+        "config/environment.toml declares 3 variables, and no source directory is scanned.\n",
+    );
+}
+
+#[test]
+fn run_through_a_pointer_takes_the_pointer_directory_as_the_checkout() {
+    let dir = checkout();
+    write(
+        dir.path(),
+        "config/environment.toml",
+        "[variables.SHELF_DATA]\npurpose = \"The data directory.\"\ntype = \"path\"\nunset = \"required\"\nshow = \"shown\"\nsource = \"setting\"\nbind = { path = \"{checkout}/data\" }\n",
+    );
+    let root = dir.path().canonicalize().unwrap();
+
+    starmap(
+        dir.path(),
+        &[
+            "run",
+            "--no-input",
+            "--",
+            "sh",
+            "-c",
+            r#"printf '%s' "$SHELF_DATA""#,
+        ],
+    )
+    .code(0)
+    .stdout_eq(format!("{}/data", root.display()));
+}
+
+#[test]
 fn run_follows_the_pointer_and_reads_the_dotenv_it_names() {
     let dir = checkout();
     write(dir.path(), "config/.env", "SHELF_PAGE_SIZE=30\n");

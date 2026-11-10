@@ -117,7 +117,8 @@ impl Spec {
 ///
 /// Each path is as the file writes it, relative to the directory of the
 /// pointer file, and the host joins it to that directory. `src` lists the
-/// directories whose source `starmap check` and `starmap init` scan, and
+/// directories whose source `starmap check` and `starmap init` scan, where
+/// an empty list scans nothing, and
 /// `dotenv` names the file that `starmap run` reads values from.
 ///
 /// ```

@@ -87,12 +87,18 @@ pub(crate) fn scan_all(dirs: &[PathBuf]) -> Result<Reads, SourceFailure> {
     Ok(reads)
 }
 
-/// The source directories of a scan, which print as `src`, or as `src and
-/// bin` when there are several.
+/// The source directories of a scan, which print as `src`, as `src and
+/// bin` when there are several, and as `no source directory` when a
+/// pointer lists none.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Dirs<'a>(pub(crate) &'a [PathBuf]);
 
 impl Dirs<'_> {
+    /// Returns whether there is no directory, so the scan reads nothing.
+    pub(crate) fn is_empty(self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Returns `one` when there is one directory, and `several` otherwise,
     /// so a sentence agrees with the directories it names.
     pub(crate) fn verb(self, one: &'static str, several: &'static str) -> &'static str {
@@ -104,7 +110,7 @@ impl fmt::Display for Dirs<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let names: Vec<String> = self.0.iter().map(|dir| dir.display().to_string()).collect();
         match names.split_last() {
-            None => Ok(()),
+            None => formatter.write_str("no source directory"),
             Some((last, [])) => formatter.write_str(last),
             Some((last, rest)) => write!(formatter, "{} and {last}", rest.join(", ")),
         }

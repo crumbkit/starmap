@@ -122,11 +122,6 @@ impl Parser {
                 }
             }
         }
-        if paths.is_empty() {
-            let message = format!("`{}` is empty, and it takes at least one path", field.path);
-            self.report(field.span(), Kind::BadValue, message);
-            return None;
-        }
         Some(paths)
     }
 }

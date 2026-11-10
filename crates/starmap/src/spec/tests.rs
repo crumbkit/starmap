@@ -901,10 +901,12 @@ fn a_pointer_whose_src_is_not_a_list_is_refused() {
 }
 
 #[test]
-fn a_pointer_whose_src_lists_no_directory_is_refused() {
-    let text = "spec = \"config/environment.toml\"\nsrc = []\n";
+fn a_pointer_whose_src_lists_no_directory_scans_nothing() {
+    let pointer = Pointer::parse("spec = \"config/environment.toml\"\nsrc = []\n")
+        .unwrap()
+        .unwrap();
 
-    assert_eq!(pointer_kinds(text), [SpecProblemKind::BadValue]);
+    assert!(pointer.src().is_empty());
 }
 
 #[test]

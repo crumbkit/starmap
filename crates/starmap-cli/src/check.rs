@@ -44,6 +44,10 @@ pub(crate) struct Checked {
     /// The verb that agrees with `src`: `reads` or `read`.
     #[serde(skip)]
     src_verb: &'static str,
+    /// Whether the pointer lists no source directory, so check scanned
+    /// nothing.
+    #[serde(skip)]
+    scanned_nothing: bool,
     /// The mode that this shell's values decide.
     mode: ModeWord,
 }
@@ -77,6 +81,13 @@ impl fmt::Display for Checked {
         } else {
             "variables"
         };
+        if self.scanned_nothing {
+            return write!(
+                formatter,
+                "{} declares {declared} {noun}, and no source directory is scanned.",
+                self.spec
+            );
+        }
         let reads = match read {
             1 if declared == 1 => "it".to_owned(),
             0 => "none of them".to_owned(),
@@ -160,6 +171,7 @@ pub(crate) fn check(
         undeclared: undeclared.iter().map(|u| u.name.to_string()).collect(),
         src: Dirs(&located.src).to_string(),
         src_verb: Dirs(&located.src).verb("reads", "read"),
+        scanned_nothing: Dirs(&located.src).is_empty(),
         spec: file,
         mode: mode.into(),
     };

@@ -113,7 +113,8 @@ dotenv = ".env"
 
 Each path is relative to the directory of the pointer file. `spec` is the
 declaration file. `src` lists the directories whose source `starmap init`
-and `starmap check` scan, and is `["src"]` when the pointer leaves it out.
+and `starmap check` scan, is `["src"]` when the pointer leaves it out, and
+scans nothing when it is an empty list.
 `dotenv` is the file that `starmap run` reads values from, and is `.env`
 when the pointer leaves it out. `starmap init`, `check`, `explain`, `diff`
 and `run` follow a pointer as if `--spec` named the declaration file, and
