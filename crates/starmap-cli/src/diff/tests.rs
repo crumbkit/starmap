@@ -177,3 +177,20 @@ fn writing_cache_true_is_no_change() {
     );
     assert_eq!(changes(Some(&spec(TOKEN)), &spec(&now)), Vec::new());
 }
+
+#[test]
+fn a_changed_scheme_list_is_a_change_of_the_type() {
+    let https = LISTEN.replace("\"port\"", "{ url = { schemes = [\"https\"] } }");
+    let both = LISTEN.replace("\"port\"", "{ url = { schemes = [\"https\", \"http\"] } }");
+
+    assert_eq!(
+        changes(Some(&spec(&https)), &spec(&both)),
+        vec![Change {
+            change: Kind::Changed,
+            name: "SHELF_LISTEN".to_owned(),
+            field: Some("type".to_owned()),
+            was: Some("url (https)".to_owned()),
+            now: Some("url (https, http)".to_owned()),
+        }]
+    );
+}

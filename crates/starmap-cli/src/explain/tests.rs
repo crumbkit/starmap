@@ -347,3 +347,38 @@ fn the_effect_is_the_long_column_after_the_purpose() {
 
     assert_eq!(effect, purpose.map(|purpose| purpose + 1));
 }
+
+/// A database url setting that allows the schemes postgres and postgresql.
+const DATABASE: &str = r#"
+[variables.SHELF_DATABASE_URL]
+purpose = "The database shelf keeps its catalogue in."
+type = { url = { schemes = ["postgres", "postgresql"] } }
+unset = "required"
+show = "shown"
+source = "setting"
+"#;
+
+/// Returns the row of `SHELF_DATABASE_URL` in [`DATABASE`] when the shell
+/// holds `value`, as `starmap explain --json` prints it.
+fn database_row(value: &str) -> serde_json::Value {
+    let spec = Spec::parse(DATABASE).unwrap();
+    let vars = [(OsString::from("SHELF_DATABASE_URL"), OsString::from(value))];
+    let bindings = starmap::capture(&spec, vars);
+    let name: Name = "SHELF_DATABASE_URL".parse().unwrap();
+    serde_json::to_value(row(&spec, "starmap.toml", &bindings, name).unwrap()).unwrap()
+}
+
+#[test]
+fn a_url_with_schemes_shows_them_in_its_type() {
+    let row = database_row("postgres://localhost/shelf");
+
+    assert_eq!(row["type"], "url (postgres, postgresql)");
+    assert_eq!(row["value"]["state"], "set");
+}
+
+#[test]
+fn a_url_whose_scheme_is_not_listed_is_marked_invalid() {
+    let row = database_row("mysql://localhost/shelf");
+
+    assert_eq!(row["value"]["state"], "invalid");
+}

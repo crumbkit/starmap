@@ -1,4 +1,8 @@
 starmap::spec::empty_enumeration: `variables.SHELF_ENV.type.enumeration` lists "dev" twice, and it lists each value once
-  at: 4:40 to 4:45, bytes 146..151
+  at: 4:40 to 4:45, bytes 185..190
    4 | type = { enumeration = ["dev", "prod", "dev"] }
      |                                        ^^^^^
+starmap::spec::empty_enumeration: `variables.SHELF_DATABASE_URL.type.url.schemes` has no values, and it lists at least one
+  at: 11:28 to 11:30, bytes 361..363
+  11 | type = { url = { schemes = [] } }
+     |                            ^^

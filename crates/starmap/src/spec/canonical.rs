@@ -72,6 +72,12 @@ fn value_type(value_type: &Type) -> Toml {
             let values: Array = choices.iter().map(|choice| choice.as_str()).collect();
             inline([("enumeration", Toml::Array(values))])
         }
+        Type::Url {
+            schemes: Some(schemes),
+        } => {
+            let values: Array = schemes.iter().map(|scheme| scheme.as_str()).collect();
+            inline([("url", inline([("schemes", Toml::Array(values))]))])
+        }
         Type::String {
             pattern: Some(pattern),
         } => inline([("string", inline([("pattern", pattern.as_str().into())]))]),
