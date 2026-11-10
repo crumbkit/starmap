@@ -6,6 +6,7 @@ starmap check --spec missing.toml
 starmap check --spec .
   fails with starmap::spec::unreadable
   hint
+  hint
 
 starmap check --spec syntax.toml
   fails with starmap::spec::syntax
@@ -88,13 +89,16 @@ starmap init --spec starmap.toml
 starmap init --spec missing/starmap.toml
   fails with starmap::spec::unwritable
   hint
+  hint
 
 starmap check --spec undeclared/starmap.toml
   fails with starmap::variable::undeclared
   hint
+  hint
 
 starmap check --spec unreadable/starmap.toml
   fails with starmap::source::unreadable
+  hint
   hint
 
 starmap diff -- -x
@@ -104,6 +108,7 @@ starmap diff -- -x
 starmap run --no-input --spec dotenv-secret/starmap.toml -- /usr/bin/true
   fails with starmap::dotenv::secret
   hint
+  hint
 
 starmap run --no-input --spec dotenv-syntax/starmap.toml -- /usr/bin/true
   fails with starmap::dotenv::syntax
@@ -112,9 +117,11 @@ starmap run --no-input --spec dotenv-syntax/starmap.toml -- /usr/bin/true
 starmap run --no-input --spec dotenv-unreadable/starmap.toml -- /usr/bin/true
   fails with starmap::dotenv::unreadable
   hint
+  hint
 
 starmap run --no-input --set SHELF_UPSTREAM_TOKEN=x -- /usr/bin/true
   fails with starmap::variable::secret
+  hint
   hint
 
 codes that no start provokes:

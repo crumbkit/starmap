@@ -46,6 +46,8 @@ clap = { workspace = true, features = [
 ] }
 crumbkit-usage = { workspace = true }
 crumbkit-child = { workspace = true }
+# `diff` runs git with an output limit and a deadline.
+crumbkit-process = { workspace = true }
 # `run` resolves every variable, reads `op://` binds through the 1Password
 # CLI, and keeps generated and typed secrets in the macOS Keychain.
 starmap-resolve = { workspace = true, features = ["one-password", "keychain"] }

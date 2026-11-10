@@ -12,7 +12,6 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::Name;
 
-use crate::Failed;
 use crate::cli::{InitArgs, SpecFile};
 use crate::files;
 use crate::scan;
@@ -110,9 +109,9 @@ crumbkit::shown!(Places);
 ///
 /// # Errors
 ///
-/// Returns [`Failed`] when a file is at the spec path already, when the
+/// Returns a [`crumbkit::Error`] when a file is at the spec path already, when the
 /// spec cannot be written, and when src cannot be scanned.
-pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, Failed> {
+pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, crumbkit::Error> {
     let path = &args.spec;
     let file = path.display().to_string();
     if files::exists(path) {

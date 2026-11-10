@@ -6,12 +6,11 @@ use std::ffi::OsString;
 use std::fmt;
 use std::path::Path;
 
-use crumbkit::{Document, Failure, Prose};
+use crumbkit::{Document, Failure, Prose, Recovery};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{Mode, Name};
 
-use crate::Failed;
 use crate::cli::CheckArgs;
 use crate::codes::VARIABLE_UNDECLARED;
 use crate::mode;
@@ -93,7 +92,8 @@ impl fmt::Display for Checked {
 #[derive(Debug, Failure)]
 #[failure(
     code = VARIABLE_UNDECLARED,
-    hint = "declare {name} in {file}, or stop reading it",
+    hint = "declare {name} in {file}",
+    alternative = Recovery::Hint(format!("stop reading {name}")),
     field(name = name.as_str()),
     field(at = at.as_str()),
 )]
@@ -125,12 +125,12 @@ impl std::error::Error for Undeclared {}
 ///
 /// # Errors
 ///
-/// Returns [`Failed`] when the spec cannot be read or parsed, or src cannot
+/// Returns a [`crumbkit::Error`] when the spec cannot be read or parsed, or src cannot
 /// be scanned.
 pub(crate) fn check(
     args: &CheckArgs,
     vars: Vec<(OsString, OsString)>,
-) -> Result<Prose<Checked, Undeclared>, Failed> {
+) -> Result<Prose<Checked, Undeclared>, crumbkit::Error> {
     let path = &args.file.spec;
     let file = path.display().to_string();
     let spec = spec::load(path)?;

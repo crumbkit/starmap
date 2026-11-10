@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use crumbkit::{Failure as _, Recovery};
 use starmap::Spec;
 
 use super::{DotEnvFailure, MAX_BYTES, read};
@@ -76,6 +77,26 @@ fn a_file_over_the_limit_is_refused_as_unreadable() {
         failures.as_slice(),
         [DotEnvFailure::Unreadable { .. }]
     ));
+}
+
+#[test]
+fn an_unreadable_file_offers_to_make_it_readable_or_to_remove_it() {
+    let mut text = b"SHELF_DEBUG=".to_vec();
+    text.resize(MAX_BYTES + 1, b'x');
+    let failures = read_text(&text).unwrap_err();
+    let [failure @ DotEnvFailure::Unreadable { file, .. }] = failures.as_slice() else {
+        panic!("{failures:?}");
+    };
+    assert_eq!(
+        failure.recovery(),
+        Recovery::hint(format!(
+            "make {file} a readable text file of at most 256 KiB"
+        ))
+    );
+    assert_eq!(
+        failure.alternatives(),
+        [Recovery::hint(format!("remove {file}"))]
+    );
 }
 
 /// Returns the value that `.env` holding `line` gives `SHELF_DEBUG`.

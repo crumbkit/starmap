@@ -222,47 +222,61 @@ fn literal_name(tokens: TokenStream) -> Option<Name> {
 
 /// A source file or directory that the scan cannot read.
 #[derive(Debug, Failure)]
-#[failure(
-    code = SOURCE_UNREADABLE,
-    recovery = Recovery::Hint(next.clone()),
-    field(file = file.as_str()),
-)]
-pub(crate) struct SourceFailure {
-    /// The path, as the scan found it.
-    file: String,
-    /// What is wrong with it, such as `is not valid Rust at line 3`.
-    problem: String,
-    /// The next step.
-    next: String,
+pub(crate) enum SourceFailure {
+    /// The path cannot be read, or is not UTF-8 text or valid Rust.
+    #[failure(
+        code = SOURCE_UNREADABLE,
+        hint = "fix {file} so that cargo builds it",
+        alternative = Recovery::Hint(format!("move {file} out of src")),
+        field(file = file.as_str()),
+    )]
+    Unbuildable {
+        /// The path, as the scan found it.
+        file: String,
+        /// What is wrong with it, such as `is not valid Rust at line 3`.
+        problem: String,
+    },
+    /// The file is over 1 MiB. Such a file is usually generated and
+    /// builds, so its one repair is to move it.
+    #[failure(
+        code = SOURCE_UNREADABLE,
+        hint = "move generated code out of src",
+        field(file = file.as_str()),
+    )]
+    TooLarge {
+        /// The path, as the scan found it.
+        file: String,
+    },
 }
 
 impl SourceFailure {
     /// Returns the failure of the file at `path`, which `problem` states.
     fn new(path: &Path, problem: String) -> Self {
-        let file = path.display().to_string();
-        let next = format!("fix {file} so that cargo builds it, or move it out of src");
-        Self {
-            file,
+        Self::Unbuildable {
+            file: path.display().to_string(),
             problem,
-            next,
         }
     }
 
     /// Returns the failure of the file at `path`, which is over 1 MiB.
-    /// Such a file is usually generated and builds, so its next step is to
-    /// move it.
     fn too_large(path: &Path) -> Self {
-        Self {
+        Self::TooLarge {
             file: path.display().to_string(),
-            problem: "is over 1 MiB, so the scan does not read it".to_owned(),
-            next: "move generated code out of src".to_owned(),
         }
     }
 }
 
 impl fmt::Display for SourceFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{} {}", self.file, self.problem)
+        match self {
+            Self::Unbuildable { file, problem } => write!(formatter, "{file} {problem}"),
+            Self::TooLarge { file } => {
+                write!(
+                    formatter,
+                    "{file} is over 1 MiB, so the scan does not read it"
+                )
+            }
+        }
     }
 }
 

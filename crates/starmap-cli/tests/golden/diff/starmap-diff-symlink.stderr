@@ -1,4 +1,5 @@
 error: main:starmap.toml cannot be read
   cause: the revision holds a directory, a symlink or a submodule at this path
-  help:  make main:starmap.toml readable, or pass --spec another file
+  help:  make main:starmap.toml readable
+  help:  pass --spec another file
   code:  starmap::spec::unreadable

@@ -1,4 +1,5 @@
 Mode: local, because the spec has no [mode] table.
 error: undeclared/src/theme.rs:6 reads SHELF_THEME, which undeclared/starmap.toml does not declare
-  help:  declare SHELF_THEME in undeclared/starmap.toml, or stop reading it
+  help:  declare SHELF_THEME in undeclared/starmap.toml
+  help:  stop reading SHELF_THEME
   code:  starmap::variable::undeclared
