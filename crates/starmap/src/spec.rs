@@ -41,6 +41,8 @@ mod tests;
 pub struct Spec {
     mode: Option<ModeRule>,
     variables: Vec<(Name, Variable)>,
+    /// The file's top-level tool tables, in name order.
+    tools: Vec<ToolTable>,
 }
 
 impl Spec {
@@ -85,11 +87,23 @@ impl Spec {
             .map(|(name, variable)| (name, variable))
     }
 
+    /// Returns the file's top-level `[tool.<name>]` table called `name`, if
+    /// it has one.
+    #[must_use]
+    pub fn tool(&self, name: &str) -> Option<&ToolTable> {
+        find_tool(&self.tools, name)
+    }
+
+    /// Returns each top-level `[tool.<name>]` table, in name order.
+    pub fn tools(&self) -> impl Iterator<Item = &ToolTable> {
+        self.tools.iter()
+    }
+
     /// Returns the SHA-256 digest of the spec's canonical form, which
     /// [`Spec::to_toml`] returns. Two files that differ only in layout,
-    /// comments or the spelling of equal values have the same digest. The
-    /// canonical form keeps the file's order of variables, so reordering
-    /// them changes the digest.
+    /// comments, the spelling of equal values or their tool tables have
+    /// the same digest. The canonical form keeps the file's order of
+    /// variables, so reordering them changes the digest.
     #[must_use]
     pub fn digest(&self) -> Digest {
         Digest::of(self.to_toml().as_bytes())
@@ -97,8 +111,9 @@ impl Spec {
 
     /// Returns the spec's canonical form: TOML that lists the mode table and
     /// then each variable in order, with each field in a fixed order, each
-    /// value in one spelling, and no comments. Parsing it returns an equal
-    /// spec.
+    /// value in one spelling, and no comments. It leaves out every tool
+    /// table, so parsing it returns a spec equal to this one without its
+    /// tool tables.
     #[must_use]
     pub fn to_toml(&self) -> String {
         canonical::to_toml(self)
@@ -134,6 +149,8 @@ pub struct Pointer {
     spec: PathBuf,
     src: Vec<PathBuf>,
     dotenv: PathBuf,
+    /// The pointer's top-level tool tables, in name order.
+    tools: Vec<ToolTable>,
 }
 
 impl Pointer {
@@ -175,6 +192,71 @@ impl Pointer {
     pub fn dotenv(&self) -> &Path {
         &self.dotenv
     }
+
+    /// Returns the pointer's `[tool.<name>]` table called `name`, if it has
+    /// one. starmap never merges it into the tool tables of the file the
+    /// pointer names.
+    #[must_use]
+    pub fn tool(&self, name: &str) -> Option<&ToolTable> {
+        find_tool(&self.tools, name)
+    }
+
+    /// Returns each of the pointer's `[tool.<name>]` tables, in name order.
+    pub fn tools(&self) -> impl Iterator<Item = &ToolTable> {
+        self.tools.iter()
+    }
+}
+
+/// One `[tool.<name>]` table of a `starmap.toml`, where a tool such as a
+/// generator or a linter keeps its own settings. starmap checks only that
+/// the table is a table, and never reads its keys. The table's text is a
+/// TOML document that the tool parses with its own TOML crate.
+///
+/// ```
+/// let spec = starmap::Spec::parse(
+///     r#"
+/// [tool.codegen]
+/// module = "settings"
+///
+/// [variables.SHELF_PORT]
+/// purpose = "The port the api process listens on."
+/// type = "port"
+/// unset = "required"
+/// show = "shown"
+/// source = "setting"
+/// tool.codegen = { field = "port" }
+/// "#,
+/// )?;
+/// assert_eq!(spec.tool("codegen").map(starmap::ToolTable::as_toml), Some("module = \"settings\"\n"));
+/// let name: starmap::Name = "SHELF_PORT".parse()?;
+/// let variable = spec.variable(&name).ok_or("SHELF_PORT is declared")?;
+/// assert_eq!(variable.tool("codegen").map(starmap::ToolTable::as_toml), Some("field = \"port\"\n"));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolTable {
+    name: String,
+    toml: String,
+}
+
+impl ToolTable {
+    /// Returns the tool's name, which is the key after `tool.`.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the table's keys and values as the text of a TOML document,
+    /// in the file's order, without its comments or layout.
+    #[must_use]
+    pub fn as_toml(&self) -> &str {
+        &self.toml
+    }
+}
+
+/// Returns the tool table called `name` among `tools`.
+fn find_tool<'a>(tools: &'a [ToolTable], name: &str) -> Option<&'a ToolTable> {
+    tools.iter().find(|tool| tool.name == name)
 }
 
 /// One variable that a `starmap.toml` declares.
@@ -185,6 +267,8 @@ pub struct Variable {
     unset: UnsetRule,
     show: Show,
     source: Source,
+    /// The variable's tool tables, in name order.
+    tools: Vec<ToolTable>,
 }
 
 impl Variable {
@@ -217,6 +301,18 @@ impl Variable {
     #[must_use]
     pub fn source(&self) -> &Source {
         &self.source
+    }
+
+    /// Returns the variable's `[variables.X.tool.<name>]` table called
+    /// `name`, if it has one.
+    #[must_use]
+    pub fn tool(&self, name: &str) -> Option<&ToolTable> {
+        find_tool(&self.tools, name)
+    }
+
+    /// Returns each of the variable's tool tables, in name order.
+    pub fn tools(&self) -> impl Iterator<Item = &ToolTable> {
+        self.tools.iter()
     }
 }
 

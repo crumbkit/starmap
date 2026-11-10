@@ -137,3 +137,22 @@ a declaration file belongs, such as the file that another pointer names,
 fails with `starmap::spec::pointer_chain`, so starmap follows at most one
 pointer. A pointer has no digest of its own, and `starmap check` prints the
 digest of the declaration file.
+
+## tool table
+
+A tool table is a `[tool.<name>]` table, where a tool such as a generator,
+a linter or a host keeps settings of its own in the file that starmap reads.
+A file that declares variables may hold tool tables at its top level and in
+each variable, as `[tool.codegen]` and `[variables.SHELF_PORT.tool.codegen]`,
+and a pointer may hold them at its top level. The Rust API names one
+`starmap::ToolTable`, which holds its keys and values as the text of a TOML
+document. `Spec::tool`, `Variable::tool` and `Pointer::tool` return the
+table of one tool, and `tools` lists them in name order.
+
+starmap checks only that `tool` is a table whose values are tables, and
+refuses any other value with `starmap::spec::bad_value`. It never reads the
+keys inside a tool table. The canonical form and the digest leave tool
+tables out, so an edit to a tool table never changes a file's digest, and
+`starmap explain`, `check`, `diff` and `init` print the same output for a
+file with tool tables as for the same file without them. starmap never
+merges a pointer's tool tables into those of the file it names.

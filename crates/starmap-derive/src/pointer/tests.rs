@@ -109,3 +109,20 @@ fn a_pointer_to_a_parent_directory_names_the_file_without_dot_dot() {
 
     assert_eq!(followed.file, "tests/example/starmap.toml");
 }
+
+#[test]
+fn a_pointer_with_a_tool_table_embeds_the_file_it_names() {
+    let followed = follow_in(
+        "starmap.toml",
+        &[
+            (
+                "starmap.toml",
+                "spec = \"config/environment.toml\"\n\n[tool.codegen]\nmodule = \"settings\"\n",
+            ),
+            ("config/environment.toml", DECLARES),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(followed.file, "config/environment.toml");
+}

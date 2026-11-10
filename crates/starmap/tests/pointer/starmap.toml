@@ -1,2 +1,6 @@
-# A pointer to the example spec, which the derive follows.
+# A pointer to the example spec, which the derive follows. The derive
+# ignores its tool table.
 spec = "../example/starmap.toml"
+
+[tool.codegen]
+module = "settings"

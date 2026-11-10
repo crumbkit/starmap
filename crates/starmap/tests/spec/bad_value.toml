@@ -1,7 +1,8 @@
-# show takes "shown" or "withheld".
+# show takes "shown" or "withheld", and each tool table is a table.
 [variables.SHELF_PORT]
 purpose = "The port the api process listens on."
 type = "port"
 unset = "required"
 show = "visible"
 source = "setting"
+tool.codegen = "port"

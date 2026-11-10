@@ -5,12 +5,16 @@ use std::path::PathBuf;
 
 use toml_edit::TableLike;
 
-use super::{Field, Kind, Parser, ROOT_FIELDS, entries, list, root_field, span};
+use super::{Field, Kind, Parser, entries, list, root_field, span};
 use crate::spec::{Pointer, SpecError};
 
 /// The keys of a pointer file's top-level table. The key `spec` makes a
 /// file a pointer.
-const POINTER_FIELDS: &[&str] = &["spec", "src", "dotenv"];
+const POINTER_FIELDS: &[&str] = &["spec", "src", "dotenv", "tool"];
+/// The top-level keys of a file that declares variables. A pointer that
+/// holds one of them declares too, which starmap refuses. Both kinds of
+/// file take `tool`, so it is not among them.
+const DECLARING_FIELDS: &[&str] = &["mode", "variables"];
 /// Parses `text` into a pointer, returns `None` when the file has no `spec`
 /// key and so declares variables itself, or returns every problem of a
 /// pointer.
@@ -43,7 +47,7 @@ impl Parser {
     /// variables, and returns whether there was one.
     fn declares_too(&mut self, root: &dyn TableLike) -> bool {
         let mut found = false;
-        for (key, _) in entries(root).filter(|(key, _)| ROOT_FIELDS.contains(&key.get())) {
+        for (key, _) in entries(root).filter(|(key, _)| DECLARING_FIELDS.contains(&key.get())) {
             let message = format!(
                 "the file has `spec`, so it points to another file, and it has `{}` too, \
                  and a file either points or declares variables",
@@ -64,7 +68,7 @@ impl Parser {
         self.declares_too(root);
         for (key, _) in entries(root) {
             let name = key.get();
-            if !POINTER_FIELDS.contains(&name) && !ROOT_FIELDS.contains(&name) {
+            if !POINTER_FIELDS.contains(&name) && !DECLARING_FIELDS.contains(&name) {
                 let message = format!(
                     "the pointer has the field `{name}`, and it takes {}",
                     list(POINTER_FIELDS, "")
@@ -81,10 +85,15 @@ impl Parser {
             None => Some(PathBuf::from(Pointer::DOTENV)),
             Some(field) => self.path(&field),
         };
+        let tools = match root_field(root, "tool") {
+            None => Some(Vec::new()),
+            Some(field) => self.tools(&field),
+        };
         Some(Pointer {
             spec: target?,
             src: src?,
             dotenv: dotenv?,
+            tools: tools?,
         })
     }
 
