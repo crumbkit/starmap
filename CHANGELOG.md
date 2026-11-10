@@ -34,6 +34,21 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `starmap::Encoding`, `Value::Bytes`, `TypeError::NotEncoded` and
   `TypeError::WrongLength`. `Type::check_secret` checks a withheld bytes
   value too.
+- A url variable can list the schemes it allows, with
+  `type = { url = { schemes = ["postgres", "postgresql"] } }`. Each scheme
+  is a lower case ASCII letter followed by lower case letters, digits, `+`,
+  `-` and `.`, and starmap refuses another with `starmap::spec::bad_value`.
+  An empty list or a repeated scheme fails with
+  `starmap::spec::empty_enumeration`, and a default with another scheme
+  fails with `starmap::spec::bad_default`. `starmap run` refuses a value
+  whose scheme is not listed, naming the allowed schemes and never the
+  value, and `starmap explain` marks that value invalid. A value's scheme
+  matches in any case, so `HTTPS://` matches `https`. `starmap explain`
+  prints the type as `url (postgres, postgresql)`, and `starmap diff`
+  reports a changed list as a change of `type`. The digest of an existing
+  file does not change.
+- `starmap::Scheme`, `starmap::SchemeError`, `starmap::Schemes`,
+  `starmap::SchemesError` and `TypeError::SchemeNotAllowed`.
 - A string variable can require a pattern that its whole value matches,
   with `type = { string = { pattern = "[0-9a-f]{40}" } }`. The pattern uses
   the syntax of the Rust `regex` crate and holds at most 1024 bytes.
@@ -90,6 +105,10 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ByteCount::new` accepts 1 to 1024 bytes, and `ByteCount::generated`
   accepts the 16 to 1024 bytes of a generated value, as `SecretBytes::new`
   did.
+- **Breaking:** `Type::Url` has the field `schemes: Option<Schemes>`, as
+  `Type::Path` has `absolute`. Code that matches it writes
+  `Type::Url { .. }`, and code that builds it writes
+  `Type::Url { schemes: None }`.
 - **Breaking:** `Type::String` has the field `pattern: Option<Pattern>`, as
   `Type::Path` has `absolute`. Code that matches it writes
   `Type::String { .. }`, and code that builds it writes

@@ -12,7 +12,7 @@ use crate::Secret;
 
 use super::{
     ByteLength, ByteRule, Choice, ChoiceError, Choices, ChoicesError, Encoding, IntegerRange,
-    Pattern, Port, Type, TypeError, Value,
+    Pattern, Port, Schemes, Type, TypeError, Value,
 };
 use crate::ByteCount;
 
@@ -27,6 +27,17 @@ const BOOLEAN_WORDS: [(&str, bool); 8] = [
     ("on", true),
     ("off", false),
 ];
+
+/// The url type that allows any scheme.
+const URL: Type = Type::Url { schemes: None };
+
+/// Returns a url type that allows the schemes postgres and postgresql.
+fn postgres_url() -> Type {
+    let schemes = ["postgres", "postgresql"].map(|word| word.parse().unwrap());
+    Type::Url {
+        schemes: Some(Schemes::new(schemes).unwrap()),
+    }
+}
 
 /// Returns the string type whose pattern is `text`.
 fn matching(text: &str) -> Type {
@@ -316,7 +327,7 @@ fn a_port_type_reads_a_port() {
 
 #[test]
 fn a_url_type_reads_a_url() {
-    let read = parse(&Type::Url, "https://shelf.example/catalogue");
+    let read = parse(&URL, "https://shelf.example/catalogue");
 
     assert_eq!(
         read,
@@ -328,7 +339,7 @@ fn a_url_type_reads_a_url() {
 
 #[test]
 fn a_url_type_refuses_text_without_a_scheme_and_keeps_the_parse_error_as_its_source() {
-    let error = parse(&Type::Url, "shelf.example").unwrap_err();
+    let error = parse(&URL, "shelf.example").unwrap_err();
 
     assert_eq!(
         error,
@@ -336,6 +347,53 @@ fn a_url_type_refuses_text_without_a_scheme_and_keeps_the_parse_error_as_its_sou
     );
     assert_eq!(error.to_string(), "the value is not a url");
     assert!(error.source().is_some());
+}
+
+#[test]
+fn a_url_with_a_listed_scheme_is_accepted() {
+    let read = parse(&postgres_url(), "postgresql://shelf.example/catalogue");
+
+    assert_eq!(
+        read,
+        Ok(Some(Value::Url(
+            "postgresql://shelf.example/catalogue".parse().unwrap()
+        )))
+    );
+}
+
+#[test]
+fn a_url_with_another_scheme_is_refused_and_the_refusal_lists_the_allowed_schemes_and_not_the_value()
+ {
+    let error = parse(
+        &postgres_url(),
+        "mysql://user:hunter2@shelf.example/catalogue",
+    )
+    .unwrap_err();
+
+    let text = error.to_string();
+    assert_eq!(
+        text,
+        "the value is a url, and its scheme is not one of postgres, postgresql"
+    );
+    assert!(
+        !text.contains("mysql") && !text.contains("hunter2"),
+        "{text}"
+    );
+}
+
+#[test]
+fn an_upper_case_scheme_in_the_value_matches_a_listed_scheme() {
+    let read = parse(&postgres_url(), "POSTGRES://shelf.example/catalogue");
+
+    assert!(matches!(read, Ok(Some(Value::Url(_)))), "{read:?}");
+}
+
+#[test]
+fn a_url_type_with_schemes_still_refuses_text_that_is_not_a_url() {
+    assert_eq!(
+        parse(&postgres_url(), "shelf.example"),
+        Err(TypeError::NotUrl(url::ParseError::RelativeUrlWithoutBase))
+    );
 }
 
 // Type::parse for socket addresses
@@ -795,7 +853,7 @@ fn every_type_that_needs_text_refuses_a_value_that_is_not_unicode() {
     let raw = OsStr::from_bytes(b"\xff80");
     let types = [
         Type::Port,
-        Type::Url,
+        Type::Url { schemes: None },
         Type::SocketAddress,
         Type::Boolean,
         Type::Integer(IntegerRange::new(1, 100).unwrap()),
@@ -833,7 +891,11 @@ fn each_type_describes_its_values_for_help_text() {
         (Type::Path { absolute: false }, "a path"),
         (Type::Path { absolute: true }, "an absolute path"),
         (Type::Port, "a port"),
-        (Type::Url, "a url"),
+        (URL, "a url"),
+        (
+            postgres_url(),
+            "a url whose scheme is one of postgres, postgresql",
+        ),
         (Type::SocketAddress, "an ip socket address"),
         (Type::Boolean, "a boolean"),
         (

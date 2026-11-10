@@ -12,7 +12,7 @@ use snapbox::{Assert, Data};
 use super::{Pointer, Show, Source, Spec, SpecError, SpecProblemKind, Unset};
 use crate::{
     ByteCount, ByteLength, ByteRule, Cache, Choice, Encoding, IntegerRange, Mode, Name,
-    Placeholder, SecretRef, Type, Value,
+    Placeholder, Scheme, SecretRef, Type, Value,
 };
 
 /// The example spec in `crates/starmap/tests/example/starmap.toml`.
@@ -185,7 +185,7 @@ fn the_example_spec_reads_each_type() {
     let ty = |text: &str| spec.variable(&name(text)).unwrap().value_type().clone();
 
     assert_eq!(ty("SHELF_PORT"), Type::Port);
-    assert_eq!(ty("SHELF_CATALOGUE_URL"), Type::Url);
+    assert_eq!(ty("SHELF_CATALOGUE_URL"), Type::Url { schemes: None });
     assert_eq!(ty("SHELF_DATABASE"), Type::Path { absolute: false });
     assert_eq!(ty("XDG_STATE_HOME"), Type::Path { absolute: true });
     assert_eq!(ty("SHELF_DEBUG"), Type::Boolean);
@@ -1704,4 +1704,138 @@ fn the_canonical_form_round_trips_each_bytes_rule() {
     let reparsed = spec(&canonical);
     assert_eq!(reparsed, parsed);
     assert_eq!(reparsed.digest(), parsed.digest());
+}
+
+// url schemes
+
+/// Returns a spec with one shown url setting whose type is `ty` and whose
+/// unset rule is `unset`.
+fn url_setting(ty: &str, unset: &str) -> String {
+    one(&format!(
+        "purpose = \"The database shelf keeps its catalogue in.\"\ntype = {ty}\n\
+         unset = {unset}\nshow = \"shown\"\nsource = \"setting\""
+    ))
+}
+
+/// The type of the one variable `SHELF_X` in `text`, which is a valid spec.
+fn only_type(text: &str) -> Type {
+    spec(text)
+        .variable(&name("SHELF_X"))
+        .unwrap()
+        .value_type()
+        .clone()
+}
+
+#[test]
+fn a_url_type_table_reads_its_schemes_in_order() {
+    let ty = only_type(&url_setting(
+        "{ url = { schemes = [\"postgresql\", \"postgres\"] } }",
+        "\"required\"",
+    ));
+
+    let Type::Url {
+        schemes: Some(schemes),
+    } = ty
+    else {
+        panic!("{ty:?} has no schemes");
+    };
+    let words: Vec<&str> = schemes.iter().map(Scheme::as_str).collect();
+    assert_eq!(words, ["postgresql", "postgres"]);
+}
+
+#[test]
+fn an_empty_url_type_table_is_a_url_of_any_scheme_with_the_digest_of_the_word() {
+    let table = url_setting("{ url = {} }", "\"required\"");
+    let word = url_setting("\"url\"", "\"required\"");
+
+    assert_eq!(only_type(&table), Type::Url { schemes: None });
+    assert_eq!(spec(&table).digest(), spec(&word).digest());
+}
+
+#[test]
+fn an_upper_case_scheme_in_the_file_is_a_bad_value_that_names_it_and_the_rule() {
+    let text = url_setting("{ url = { schemes = [\"HTTPS\"] } }", "\"required\"");
+
+    let error = Spec::parse(&text).unwrap_err();
+    let problem = &error.problems()[0];
+    assert_eq!(problem.kind(), SpecProblemKind::BadValue);
+    assert_eq!(
+        problem.to_string(),
+        "`variables.SHELF_X.type.url.schemes[0]` is \"HTTPS\", and a scheme is a lower case \
+         ascii letter followed by lower case letters, digits, +, - and ."
+    );
+}
+
+#[test]
+fn an_empty_or_repeating_scheme_list_is_an_empty_enumeration() {
+    for list in ["[]", "[\"https\", \"http\", \"https\"]"] {
+        let ty = format!("{{ url = {{ schemes = {list} }} }}");
+
+        assert_eq!(
+            kinds(&url_setting(&ty, "\"required\"")),
+            [SpecProblemKind::EmptyEnumeration],
+            "{list}"
+        );
+    }
+}
+
+#[test]
+fn a_url_type_table_refuses_a_field_other_than_schemes() {
+    let text = url_setting("{ url = { hosts = [\"shelf.example\"] } }", "\"required\"");
+
+    assert_eq!(kinds(&text), [SpecProblemKind::UnknownField]);
+}
+
+#[test]
+fn a_default_with_a_scheme_that_is_not_listed_is_a_bad_default() {
+    let ty = "{ url = { schemes = [\"postgres\"] } }";
+
+    assert_eq!(
+        kinds(&url_setting(
+            ty,
+            "{ default = \"mysql://localhost/shelf\" }"
+        )),
+        [SpecProblemKind::BadDefault]
+    );
+    spec(&url_setting(
+        ty,
+        "{ default = \"postgres://localhost/shelf\" }",
+    ));
+}
+
+#[test]
+fn the_canonical_form_writes_a_url_without_schemes_as_its_word() {
+    let canonical = spec(&url_setting("{ url = {} }", "\"required\"")).to_toml();
+
+    assert!(canonical.contains("type = \"url\"\n"), "{canonical}");
+}
+
+#[test]
+fn the_canonical_form_keeps_the_order_of_the_schemes_and_parses_back_to_the_same_spec() {
+    let original = spec(&url_setting(
+        "{ url = { schemes = [\"postgresql\", \"postgres\"] } }",
+        "\"required\"",
+    ));
+
+    let canonical = original.to_toml();
+
+    assert!(
+        canonical.contains("type = { url = { schemes = [\"postgresql\", \"postgres\"] } }"),
+        "{canonical}"
+    );
+    assert_eq!(spec(&canonical), original);
+}
+
+#[test]
+fn a_changed_scheme_list_changes_the_digest() {
+    let one = spec(&url_setting(
+        "{ url = { schemes = [\"https\"] } }",
+        "\"required\"",
+    ));
+    let two = spec(&url_setting(
+        "{ url = { schemes = [\"https\", \"http\"] } }",
+        "\"required\"",
+    ));
+
+    assert_ne!(one.digest(), two.digest());
 }

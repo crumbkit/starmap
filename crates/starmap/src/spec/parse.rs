@@ -16,11 +16,12 @@ use super::{
 };
 use crate::bind::BIND_KINDS;
 use crate::{
-    ByteCount, ByteLength, ByteRule, BytesError, Cache, Choice, Choices, ChoicesError,
-    IntegerRange, ModeRule, Name, OnePasswordRef, PathTemplate, PathTemplateError, Pattern,
-    ProvidedRef, ProviderKind, SecretBind, SecretRef, Type, Value,
+    ByteCount, ByteLength, ByteRule, BytesError, Cache, IntegerRange, ModeRule, Name,
+    OnePasswordRef, PathTemplate, PathTemplateError, Pattern, ProvidedRef, ProviderKind,
+    SecretBind, SecretRef, Type, Value,
 };
 
+mod lists;
 mod pointer;
 mod tool;
 
@@ -35,7 +36,7 @@ const VARIABLE_FIELDS: &[&str] = &[
     "purpose", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
 /// The keys of a type table.
-const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "string", "bytes"];
+const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "string", "url", "bytes"];
 /// The keys of an unset table.
 const UNSET_FIELDS: &[&str] = &["local", "default", "production"];
 
@@ -470,12 +471,13 @@ impl Parser {
             }
             ["string"] => self.string_type(&field.child(table, "string")?),
             ["bytes"] => self.bytes_type(&field.child(table, "bytes")?),
+            ["url"] => self.url_type(&field.child(table, "url")?),
             // Each unknown key was reported above.
             [] if !table.is_empty() => None,
             [] => {
                 let message = format!(
                     "`{}` is an empty table, and it takes one of path, integer, enumeration, \
-                     string and bytes",
+                     string, url and bytes",
                     field.path
                 );
                 self.report(field.span(), Kind::MissingField, message);
@@ -582,57 +584,6 @@ impl Parser {
             }
         };
         Some(Type::Bytes(ByteRule::new(encoding?, length?)))
-    }
-
-    /// Parses an array of choices, which has at least one and repeats none.
-    fn choices(&mut self, field: &Field<'_>) -> Option<Choices> {
-        let Some(array) = field.item.as_array() else {
-            self.wrong_type(field, "an array of text");
-            return None;
-        };
-        let mut choices = Vec::new();
-        for (index, value) in array.iter().enumerate() {
-            let path = format!("{}[{index}]", field.path);
-            let at = span(value.span());
-            let Some(text) = value.as_str() else {
-                let message = format!(
-                    "`{path}` is a toml {}, and it takes text",
-                    value.type_name()
-                );
-                self.report(at, Kind::BadValue, message);
-                continue;
-            };
-            let choice = text.parse::<Choice>();
-            if let Some(choice) = self.checked(at, &path, text, Kind::BadValue, choice) {
-                choices.push(choice);
-            }
-        }
-        if choices.len() < array.len() {
-            return None;
-        }
-        let (at, message) = match Choices::new(choices) {
-            Ok(choices) => return Some(choices),
-            Err(ChoicesError::Repeated(choice)) => {
-                // The second element that holds the choice is the repeat.
-                let repeat = array
-                    .iter()
-                    .filter(|value| value.as_str() == Some(choice.as_str()))
-                    .nth(1)
-                    .and_then(toml_edit::Value::span);
-                let message = format!(
-                    "`{}` lists {:?} twice, and it lists each value once",
-                    field.path,
-                    choice.as_str()
-                );
-                (span(repeat.or_else(|| field.item.span())), message)
-            }
-            Err(_) => {
-                let message = format!("`{}` has no values, and it lists at least one", field.path);
-                (field.span(), message)
-            }
-        };
-        self.report(at, Kind::EmptyEnumeration, message);
-        None
     }
 
     /// Parses the `unset` field: a word, or a table with `local` or

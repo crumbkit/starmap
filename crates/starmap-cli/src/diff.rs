@@ -314,7 +314,7 @@ fn type_word(ty: &Type) -> &'static str {
     match ty {
         Type::Path { .. } => "path",
         Type::Port => "port",
-        Type::Url => "url",
+        Type::Url { .. } => "url",
         Type::SocketAddress => "ip socket address",
         Type::Boolean => "boolean",
         Type::Integer(_) => "integer",
