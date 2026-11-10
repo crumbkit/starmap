@@ -64,10 +64,17 @@ secret or write one to a file.
   run` found a required variable unset or a value of the wrong type. Run
   `starmap explain` to see each variable's rule, then pass the value with
   `--set NAME=VALUE`, or set it in the shell.
+- `starmap::spec::exists` means `starmap init` found a starmap.toml already and
+  refuses to replace it. Edit the existing file, or pass `--spec FILE` with a
+  path that is free.
+- `starmap::secret::unreadable` means 1Password or the Keychain could not
+  return a secret, because it is locked or the item is missing. Ask the person
+  to unlock it or add the item, then run `starmap run` again.
 - `starmap::revision::not_found` means the revision given to `starmap diff` is
   not in the repository. Fetch it, or pass a branch or commit that exists.
 
-Every other `starmap::spec::*` code names a rule that the file breaks. The
+Every `starmap::spec::*` code for a rule of the file, such as `bad_value` or
+`unknown_field`, names a rule that the file breaks. The
 failure's message gives the file, the line and the rule, so fix that line and
 run `starmap check` again.
 
