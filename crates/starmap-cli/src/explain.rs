@@ -267,7 +267,10 @@ pub(crate) fn type_text(ty: &Type) -> String {
         Type::Path { absolute: false } => "path".to_owned(),
         Type::Path { absolute: true } => "absolute path".to_owned(),
         Type::Port => "port".to_owned(),
-        Type::Url => "url".to_owned(),
+        Type::Url { schemes: None } => "url".to_owned(),
+        Type::Url {
+            schemes: Some(schemes),
+        } => format!("url ({schemes})"),
         Type::SocketAddress => "ip socket address".to_owned(),
         Type::Boolean => "boolean".to_owned(),
         Type::Integer(range) => format!("integer {}..={}", range.min(), range.max()),

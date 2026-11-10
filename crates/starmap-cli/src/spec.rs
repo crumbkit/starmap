@@ -501,7 +501,7 @@ fn hint(kind: SpecProblemKind) -> &'static str {
         SpecProblemKind::BadPattern => {
             "write a pattern of at most 1024 bytes in the syntax of the Rust regex crate"
         }
-        SpecProblemKind::EmptyEnumeration => "list each value once",
+        SpecProblemKind::EmptyEnumeration => "list at least one value, and each value once",
         SpecProblemKind::ShownSecret => "set show = \"withheld\"",
         SpecProblemKind::WithheldType => "set type = \"string\"",
         SpecProblemKind::WithheldDefault => {

@@ -32,7 +32,7 @@ pub const SPEC_BAD_DEFAULT: Code = Code::new("starmap", "spec", "bad_default");
 pub const SPEC_BAD_RANGE: Code = Code::new("starmap", "spec", "bad_range");
 /// A string's pattern is over 1024 bytes or does not compile.
 pub const SPEC_BAD_PATTERN: Code = Code::new("starmap", "spec", "bad_pattern");
-/// An enumeration has no values, or repeats one.
+/// An enumeration or a url type's scheme list has no values, or repeats one.
 pub const SPEC_EMPTY_ENUMERATION: Code = Code::new("starmap", "spec", "empty_enumeration");
 /// A secret or generated variable is shown.
 pub const SPEC_SHOWN_SECRET: Code = Code::new("starmap", "spec", "shown_secret");

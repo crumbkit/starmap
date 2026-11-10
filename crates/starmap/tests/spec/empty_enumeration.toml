@@ -1,7 +1,14 @@
-# An enumeration repeats a value.
+# An enumeration repeats a value, and a url type's scheme list is empty.
 [variables.SHELF_ENV]
 purpose = "Selects local or production behaviour."
 type = { enumeration = ["dev", "prod", "dev"] }
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_DATABASE_URL]
+purpose = "The database shelf keeps its catalogue in."
+type = { url = { schemes = [] } }
 unset = "required"
 show = "shown"
 source = "setting"

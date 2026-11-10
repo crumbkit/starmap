@@ -206,7 +206,7 @@ fn shape(file: &str, field: &Field, ty: &Type) -> Vec<String> {
     match (field.shape, ty) {
         (Shape::Path, Type::Path { .. })
         | (Shape::Port, Type::Port)
-        | (Shape::Url, Type::Url)
+        | (Shape::Url, Type::Url { .. })
         | (Shape::SocketAddress, Type::SocketAddress)
         | (Shape::Boolean, Type::Boolean)
         | (Shape::String | Shape::OsString, Type::String { .. })
