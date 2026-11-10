@@ -21,16 +21,17 @@ use crate::{
 };
 
 mod pointer;
+mod tool;
 
 pub(super) use pointer::parse_pointer;
 
 /// The keys of the file's top-level table.
-const ROOT_FIELDS: &[&str] = &["mode", "variables"];
+const ROOT_FIELDS: &[&str] = &["mode", "variables", "tool"];
 /// The keys of the `[mode]` table.
 const MODE_FIELDS: &[&str] = &["variable", "production"];
 /// The keys of a variable's table.
 const VARIABLE_FIELDS: &[&str] = &[
-    "purpose", "type", "unset", "show", "source", "bind", "bytes",
+    "purpose", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
 /// The keys of a type table.
 const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration"];
@@ -140,6 +141,7 @@ impl Parser {
         let mut spec = Spec {
             mode: None,
             variables: Vec::new(),
+            tools: Vec::new(),
         };
         let Some(document) = self.toml(text) else {
             return spec;
@@ -172,6 +174,9 @@ impl Parser {
         }
         if let Some(field) = root_field(root, "mode") {
             spec.mode = self.mode(&field, &declared, &spec.variables);
+        }
+        if let Some(field) = root_field(root, "tool") {
+            spec.tools = self.tools(&field).unwrap_or_default();
         }
         spec
     }
@@ -364,6 +369,10 @@ impl Parser {
             .and_then(|source| Some((self.word(&source, SOURCE_WORDS)?, source)));
         let bind = field.child(table, "bind").map(|bind| self.bind(&bind));
         let bytes = field.child(table, "bytes");
+        let tools = match field.child(table, "tool") {
+            None => Some(Vec::new()),
+            Some(tool) => self.tools(&tool),
+        };
 
         if let (Some((Show::Shown, show)), Some((kind, _))) = (&show, &kind)
             && matches!(kind, SourceKind::Secret | SourceKind::Generated)
@@ -386,16 +395,22 @@ impl Parser {
         let source = kind
             .as_ref()
             .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes));
-        let variable = match (purpose, ty, unset, show, source) {
-            (Some(purpose), Some((ty, _)), Some(unset), Some((show, _)), Some(source)) => {
-                Some(Variable {
-                    purpose,
-                    value_type: ty,
-                    unset,
-                    show,
-                    source,
-                })
-            }
+        let variable = match (purpose, ty, unset, show, source, tools) {
+            (
+                Some(purpose),
+                Some((ty, _)),
+                Some(unset),
+                Some((show, _)),
+                Some(source),
+                Some(tools),
+            ) => Some(Variable {
+                purpose,
+                value_type: ty,
+                unset,
+                show,
+                source,
+                tools,
+            }),
             _ => None,
         };
         (kind.map(|(kind, _)| kind), variable)

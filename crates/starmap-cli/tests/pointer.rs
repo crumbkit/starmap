@@ -91,6 +91,32 @@ fn check_through_the_pointer_gives_the_digest_of_the_file_it_names() {
 }
 
 #[test]
+fn check_follows_a_pointer_with_a_tool_table_and_ignores_the_tool_tables_of_both_files() {
+    let dir = checkout();
+    let digest = |dir: &Path| {
+        let run = starmap(dir, &["check", "--json"]).code(0);
+        let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+        document["data"]["digest"].as_str().unwrap().to_owned()
+    };
+    let before = digest(dir.path());
+    write(
+        dir.path(),
+        "starmap.toml",
+        &format!("{POINTER}\n[tool.codegen]\nmodule = \"settings\"\n"),
+    );
+    write(
+        dir.path(),
+        "config/environment.toml",
+        &format!("[tool.codegen]\nmodule = \"settings\"\n\n{SPEC}"),
+    );
+
+    starmap(dir.path(), &["check"])
+        .code(0)
+        .stdout_eq("config/environment.toml declares 3 variables, and app reads 2 of them.\n");
+    assert_eq!(digest(dir.path()), before);
+}
+
+#[test]
 fn check_fails_for_a_variable_that_the_listed_source_reads_and_the_spec_does_not_declare() {
     let dir = checkout();
     write(

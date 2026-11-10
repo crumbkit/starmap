@@ -8,6 +8,15 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A `starmap.toml` may hold `[tool.<name>]` tables at its top level and in
+  each variable, such as `[tool.codegen]` or
+  `[variables.SHELF_PORT.tool.codegen]`, where a tool keeps settings of its
+  own. A pointer may hold top-level tool tables too. starmap checks only
+  that each one is a table and refuses any other value with
+  `starmap::spec::bad_value`. `starmap::ToolTable` holds one table as TOML
+  text, which `Spec::tool`, `Variable::tool` and `Pointer::tool` return.
+  The canonical form and the digest leave tool tables out, so the digest
+  of an existing file does not change.
 - A `starmap.toml` can point to the file that declares the variables, with
   `spec = "config/environment.toml"` and the optional `src = ["src"]` and
   `dotenv = ".env"`, each relative to the pointer file. `starmap init`,

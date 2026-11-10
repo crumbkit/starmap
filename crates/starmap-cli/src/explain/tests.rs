@@ -232,3 +232,25 @@ fn a_field_named_like_the_cache_policy_is_shown_as_it_is_written() {
         )
     );
 }
+
+#[test]
+fn explain_prints_the_same_row_for_a_variable_with_and_without_tool_tables() {
+    let tools = format!(
+        "[tool.codegen]\nmodule = \"settings\"\n\n{}tool.codegen = {{ field = \"listen\" }}\n",
+        LISTEN.trim_start()
+    );
+    let json = |text: &str| {
+        let spec = Spec::parse(text).unwrap();
+        let bindings = starmap::capture(&spec, Vec::<(OsString, OsString)>::new());
+        let row = row(
+            &spec,
+            "starmap.toml",
+            &bindings,
+            "SHELF_LISTEN".parse().unwrap(),
+        )
+        .unwrap();
+        serde_json::to_value(row).unwrap()
+    };
+
+    assert_eq!(json(&tools), json(LISTEN));
+}
