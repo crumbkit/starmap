@@ -445,6 +445,85 @@ fn a_purpose_that_asks_a_question_is_not_a_guess() {
     ));
 }
 
+/// Returns a spec with one optional shown setting that adds `extra`
+/// after its purpose.
+fn with_effect(extra: &str) -> String {
+    one(&format!(
+        "purpose = \"The bucket that recordings are written to.\"\n{extra}\
+         type = \"string\"\nunset = \"optional\"\nshow = \"shown\"\nsource = \"setting\""
+    ))
+}
+
+#[test]
+fn a_variable_with_an_effect_parses_and_returns_it() {
+    let spec = spec(&with_effect("effect = \"Calls are not recorded.\"\n"));
+
+    let variable = spec.variable(&name("SHELF_X")).unwrap();
+    assert_eq!(variable.effect(), Some("Calls are not recorded."));
+}
+
+#[test]
+fn a_variable_without_an_effect_has_none() {
+    let spec = spec(&with_effect(""));
+
+    assert_eq!(spec.variable(&name("SHELF_X")).unwrap().effect(), None);
+}
+
+#[test]
+fn an_empty_effect_is_refused() {
+    for effect in ["\"\"", "\"  \""] {
+        let text = with_effect(&format!("effect = {effect}\n"));
+
+        assert_eq!(kinds(&text), [SpecProblemKind::BadValue], "{effect}");
+    }
+}
+
+#[test]
+fn an_effect_that_is_the_guess_of_init_is_refused() {
+    let text = with_effect("effect = \"?\"\n");
+
+    assert_eq!(kinds(&text), [SpecProblemKind::Guess]);
+}
+
+#[test]
+fn an_effect_that_is_not_text_is_refused() {
+    let text = with_effect("effect = 3\n");
+
+    assert_eq!(kinds(&text), [SpecProblemKind::BadValue]);
+}
+
+#[test]
+fn the_canonical_form_writes_an_effect_right_after_the_purpose() {
+    let canonical = spec(&with_effect("effect = \"Calls are not recorded.\"\n")).to_toml();
+
+    assert!(
+        canonical.contains(
+            "purpose = \"The bucket that recordings are written to.\"\n\
+             effect = \"Calls are not recorded.\"\ntype = "
+        ),
+        "{canonical}"
+    );
+    assert_eq!(
+        spec(&canonical),
+        spec(&with_effect("effect = \"Calls are not recorded.\"\n"))
+    );
+}
+
+#[test]
+fn the_canonical_form_leaves_out_an_effect_that_a_variable_does_not_have() {
+    let canonical = spec(&with_effect("")).to_toml();
+
+    assert!(!canonical.contains("effect"), "{canonical}");
+}
+
+#[test]
+fn adding_an_effect_changes_the_digest() {
+    let without = spec(&with_effect(""));
+    let with = spec(&with_effect("effect = \"Calls are not recorded.\"\n"));
+
+    assert_ne!(without.digest(), with.digest());
+}
+
 #[test]
 fn a_generated_variable_is_shown_secret_when_it_is_shown() {
     let text = one(
