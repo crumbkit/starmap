@@ -13,6 +13,8 @@ use std::str::FromStr;
 use regex::Regex;
 use url::Url;
 
+use crate::Secret;
+
 #[cfg(test)]
 mod tests;
 
@@ -63,8 +65,8 @@ impl Type {
     /// `Ok(None)` means the value counts as unset, which happens only for a
     /// relative path, including an empty one, where `absolute` is true. The
     /// path type and a string type without a pattern read a value that is
-    /// not Unicode; every other type needs Unicode text. A value is never trimmed, so a space around
-    /// a word makes it a different word.
+    /// not Unicode; every other type needs Unicode text. A value is never
+    /// trimmed, so a space around a word makes it a different word.
     ///
     /// [`check`](crate::check) treats an empty value as unset before any
     /// type reads it, so this method sees an empty value only when a caller
@@ -110,6 +112,26 @@ impl Type {
             }
         };
         Ok(Some(value))
+    }
+}
+
+impl Type {
+    /// Checks a withheld value against this type without its text leaving
+    /// the secret. A string type with a pattern refuses a value the pattern
+    /// does not match as a whole, and the refusal names only the pattern.
+    /// Every other type accepts the secret, because the spec parser gives a
+    /// withheld variable only the string type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TypeError::NoMatch`] when the pattern does not match.
+    pub fn check_secret(&self, secret: &Secret) -> Result<(), TypeError> {
+        match self {
+            Self::String {
+                pattern: Some(pattern),
+            } => secret.check(pattern),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -634,13 +656,21 @@ impl FromStr for Pattern {
         // The text compiles alone first, so a pattern such as `a)|(b` cannot
         // close the group that anchors it and match only part of a value.
         Regex::new(text).map_err(invalid)?;
-        let whole = Regex::new(&format!("\\A(?:{text})\\z")).map_err(invalid)?;
+        // The text compiled alone, so the anchored form fails only when the
+        // text ends inside a comment of the `x` flag, which then runs over
+        // the `)` and `\z` that starmap adds.
+        let whole = Regex::new(&format!("\\A(?:{text})\\z"))
+            .map_err(|_| PatternError::Invalid(ENDS_IN_COMMENT.to_owned()))?;
         Ok(Self {
             text: text.to_owned(),
             whole,
         })
     }
 }
+
+/// The reason a pattern that ends inside a comment is refused.
+const ENDS_IN_COMMENT: &str = "it ends inside a comment, which would hide the end of the value, so \
+                               end the comment with a newline";
 
 /// Returns the reason the `regex` crate gives for refusing a pattern, on one
 /// line.

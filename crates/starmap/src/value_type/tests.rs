@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 use proptest::prelude::*;
 
+use crate::Secret;
+
 use super::{
     Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Pattern, Port, Type, TypeError, Value,
 };
@@ -469,6 +471,38 @@ fn a_string_type_with_a_pattern_needs_unicode_text() {
 
         assert_eq!(matching(".*").parse(raw), Err(TypeError::NotUnicode));
     }
+}
+
+#[test]
+fn a_type_checks_a_secret_against_its_pattern_and_names_only_the_pattern() {
+    let pattern: Pattern = "sk-[a-z]+".parse().unwrap();
+    let ty = Type::String {
+        pattern: Some(pattern.clone()),
+    };
+
+    assert_eq!(ty.check_secret(&Secret::new("sk-abc".to_owned())), Ok(()));
+    assert_eq!(
+        ty.check_secret(&Secret::new("pk-hidden".to_owned())),
+        Err(TypeError::NoMatch(pattern))
+    );
+    assert_eq!(
+        Type::String { pattern: None }.check_secret(&Secret::new("any".to_owned())),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_verbose_pattern_whose_comment_runs_to_its_end_is_refused_with_the_reason() {
+    let error = "(?x) [a-z]+ # letters".parse::<Pattern>().unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "the pattern does not compile: it ends inside a comment, which would hide the end \
+         of the value, so end the comment with a newline"
+    );
+    let ty = matching("(?x) [a-z]+ # letters\n");
+    assert!(parse(&ty, "abc").is_ok());
+    assert!(parse(&ty, "abc1").is_err());
 }
 
 #[test]

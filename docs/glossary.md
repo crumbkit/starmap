@@ -31,7 +31,10 @@ most 1024 bytes. The parser refuses a longer pattern, and one that the
 `regex` crate does not compile within its default size limit, with
 `starmap::spec::bad_pattern`, which quotes the pattern. A value that does not
 match fails with the text `the value does not match the pattern <pattern>`,
-which never holds the value. The Rust API names the pattern
+which never holds the value. `starmap run` refuses such a value, and
+`starmap explain` marks it invalid. A pattern that sets the `x` flag and ends
+inside a `#` comment is refused, because the comment would hide the anchors;
+ending the comment with a newline fixes it. The Rust API names the pattern
 `starmap::Pattern`.
 
 `Type::parse` reads a raw value in the type and returns a `Value`, nothing
