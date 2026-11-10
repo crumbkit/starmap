@@ -1,6 +1,7 @@
 //! Resolving each variable of a spec from the caller's values, the path
 //! binds, the providers and the resolvers, under one deadline.
 
+use std::error::Error;
 use std::fmt;
 use std::time::Instant;
 
@@ -150,7 +151,9 @@ pub enum ResolveProblem {
     /// The variable is required, and no provider of its kind is registered
     /// and the caller gave no value.
     NoProvider(ProviderKind),
-    /// The provider of the variable's kind returned an error.
+    /// The provider of the variable's kind returned an error. A provider
+    /// that refuses a bind in [`Provider::check`] gives the same error
+    /// here when the bind is resolved.
     Provider(ProviderError),
     /// The variable is required, and no registered resolver handles its
     /// lookup: none is registered, or each one returned
@@ -241,6 +244,77 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
         failures,
         ignored,
     }
+}
+
+/// A provided variable whose bind a provider refused in
+/// [`Provider::check`]. Its text names the variable and the provider and
+/// quotes the provider's message, such as `SHELF_PORT: the provider
+/// shelf/port refuses the bind: no process is named web`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct BindFailure {
+    /// The variable.
+    pub name: Name,
+    /// The kind of the provider that refused the bind.
+    pub kind: ProviderKind,
+    /// The provider's reason, which states what is wrong and how to fix
+    /// the bind.
+    pub error: ProviderError,
+}
+
+impl BindFailure {
+    /// Returns the failure of the variable `name`, whose bind the provider
+    /// of `kind` refused with `error`, such as a fake that a host's own
+    /// tests build.
+    #[must_use]
+    pub fn new(name: Name, kind: ProviderKind, error: ProviderError) -> Self {
+        Self { name, kind, error }
+    }
+}
+
+impl fmt::Display for BindFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}: the provider {} refuses the bind: {}",
+            self.name.as_str(),
+            self.kind.as_str(),
+            self.error
+        )
+    }
+}
+
+impl Error for BindFailure {}
+
+/// Checks the bind of each provided variable of `spec` with
+/// [`Provider::check`], without resolving any value, and returns a
+/// [`BindFailure`] for each bind a provider refuses, in the spec's order.
+///
+/// Each bind asks the first provider in `providers` of its kind, as
+/// [`resolve`] chooses one. A variable whose kind has no provider in
+/// `providers` is not checked, because a host checks only the kinds it
+/// supplies, and [`resolve`] reports [`ResolveProblem::NoProvider`] when
+/// the value is needed. Every provided variable is checked whatever its
+/// unset rule, because a wrong bind is wrong in every mode.
+///
+/// [`resolve`] does not call it, so a host that wants both calls it
+/// first.
+#[must_use]
+pub fn check_binds(spec: &Spec, providers: &[&dyn Provider]) -> Vec<BindFailure> {
+    spec.variables()
+        .filter_map(|(name, variable)| match variable.source() {
+            Source::Provided(reference) => Some((name, reference)),
+            _ => None,
+        })
+        .filter_map(|(name, reference)| {
+            let kind = reference.kind();
+            let provider = providers.iter().find(|p| p.kind() == kind)?;
+            provider
+                .check(name, reference)
+                .err()
+                .map(|error| BindFailure::new(name.clone(), kind.clone(), error))
+        })
+        .collect()
 }
 
 /// Calls [`Resolver::finish`] on each resolver of a context when it is

@@ -33,6 +33,24 @@ pub trait Provider {
         reference: &ProvidedRef,
         deadline: Instant,
     ) -> Result<OsString, ProviderError>;
+
+    /// Checks the bind `reference` of the variable `name` without
+    /// resolving a value, so a host can report a wrong bind, such as a
+    /// qualifier that names a process the host does not run, before the
+    /// application starts. [`crate::check_binds`] calls it.
+    ///
+    /// A check reads only the variable's name and its bind. It resolves no
+    /// value and must not block on a service, so it takes no deadline.
+    /// The default accepts every bind.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProviderError`] when the provider refuses the bind. Its
+    /// message states what is wrong and how to fix the bind.
+    fn check(&self, name: &Name, reference: &ProvidedRef) -> Result<(), ProviderError> {
+        let _ = (name, reference);
+        Ok(())
+    }
 }
 
 /// The reason a [`Provider`] has no value. Its message states the problem

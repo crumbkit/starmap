@@ -13,8 +13,9 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the encoding of its text (`hex`, `base64` or `base64url`) and its length
   after decoding, exact with `length` or smallest with `min-length`, from 1
   to 1024 bytes. `hex` takes either case, `base64` needs its padding,
-  `base64url` takes it or not, and none takes whitespace. `starmap run`
-  refuses a value that does not decode or has the wrong size, naming the
+  `base64url` takes all of its padding or none, and no encoding takes
+  whitespace. `starmap run` refuses a value that does not decode or has the
+  wrong size, naming the
   variable, the encoding and the length and never the value or its size,
   and this covers a withheld value too. `starmap explain` marks such a value
   invalid and never prints a withheld one; `starmap check` reads only the
@@ -34,6 +35,13 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `starmap::Encoding`, `Value::Bytes`, `TypeError::NotEncoded` and
   `TypeError::WrongLength`. `Type::check_secret` checks a withheld bytes
   value too.
+- A starmap-resolve `Provider` can check a provided bind without resolving
+  a value, with `Provider::check`, whose default accepts every bind, so an
+  existing provider needs no change. `starmap_resolve::check_binds` runs
+  the first registered provider of each bind's kind over a spec and returns
+  a `BindFailure` for each refused bind, in the spec's order. A
+  `BindFailure` names the variable and the provider's kind and holds the
+  provider's message. The digest of an existing file does not change.
 - A url variable can list the schemes it allows, with
   `type = { url = { schemes = ["postgres", "postgresql"] } }`. Each scheme
   is a lower case ASCII letter followed by lower case letters, digits, `+`,
