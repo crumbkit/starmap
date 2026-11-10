@@ -689,18 +689,25 @@ pub enum Encoding {
     /// Base64 as RFC 4648 section 4 defines it, with its padding required.
     Base64,
     /// Base64 with the URL and file name alphabet, as RFC 4648 section 5
-    /// defines it, with its padding optional. It is written without
-    /// padding.
+    /// defines it, written either with all its padding or with none.
+    /// Partly padded text is refused. It is written without padding.
     Base64Url,
 }
 
-/// The base64url engine, which reads text with or without padding and
-/// writes it without.
+/// The base64url engine for unpadded text, which also writes text without
+/// padding.
 const BASE64_URL: GeneralPurpose = GeneralPurpose::new(
     &base64::alphabet::URL_SAFE,
     GeneralPurposeConfig::new()
         .with_encode_padding(false)
-        .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+        .with_decode_padding_mode(DecodePaddingMode::RequireNone),
+);
+
+/// The base64url engine for text that ends in `=`, which requires the full
+/// padding, so partly padded text is refused.
+const BASE64_URL_PADDED: GeneralPurpose = GeneralPurpose::new(
+    &base64::alphabet::URL_SAFE,
+    GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::RequireCanonical),
 );
 
 impl Encoding {
@@ -712,6 +719,7 @@ impl Encoding {
         let engine = match self {
             Self::Hex => return hex(text),
             Self::Base64 => &STANDARD,
+            Self::Base64Url if text.ends_with('=') => &BASE64_URL_PADDED,
             Self::Base64Url => &BASE64_URL,
         };
         // The buffer is allocated once at its largest size, so decoding

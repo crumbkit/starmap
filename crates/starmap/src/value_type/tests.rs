@@ -1007,6 +1007,44 @@ fn base64url_accepts_text_with_or_without_padding() {
 }
 
 #[test]
+fn base64url_refuses_partial_padding() {
+    let ty = exactly(Encoding::Base64Url, 4);
+
+    for raw in ["3q2-7w=", "3q2-7w==="] {
+        assert_eq!(
+            parse(&ty, raw),
+            Err(TypeError::NotEncoded(Encoding::Base64Url)),
+            "{raw:?}"
+        );
+    }
+}
+
+#[test]
+fn base64_refuses_partial_padding() {
+    let ty = exactly(Encoding::Base64, 4);
+
+    assert_eq!(
+        parse(&ty, "3q2+7w="),
+        Err(TypeError::NotEncoded(Encoding::Base64))
+    );
+}
+
+#[test]
+fn base64_and_base64url_refuse_non_canonical_trailing_bits() {
+    assert_eq!(
+        parse(&exactly(Encoding::Base64, 4), "3q2+7x=="),
+        Err(TypeError::NotEncoded(Encoding::Base64))
+    );
+    for raw in ["3q2-7x", "3q2-7x=="] {
+        assert_eq!(
+            parse(&exactly(Encoding::Base64Url, 4), raw),
+            Err(TypeError::NotEncoded(Encoding::Base64Url)),
+            "{raw:?}"
+        );
+    }
+}
+
+#[test]
 fn base64url_refuses_the_standard_alphabet_and_whitespace() {
     let ty = exactly(Encoding::Base64Url, 4);
 

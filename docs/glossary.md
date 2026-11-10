@@ -32,16 +32,19 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
 
 A bytes type's `encoding` is `hex`, `base64` or `base64url`. `hex` takes two
 digits per byte in upper or lower case. `base64` is RFC 4648 section 4 with
-its padding required, and `base64url` is RFC 4648 section 5 with its padding
-optional. Each encoding refuses whitespace. A length runs from 1 to 1024
-bytes, and the parser refuses one outside that range with
-`starmap::spec::bad_bytes`. A value that does not decode fails with the text
+its padding required, and `base64url` is RFC 4648 section 5 with all its
+padding or none, and partly padded text is refused. Each encoding
+refuses whitespace. A length runs from 1 to 1024 bytes, and the parser
+refuses one outside that range with `starmap::spec::bad_bytes`. A value that does not decode fails with the text
 `the value is not base64`, and one of the wrong size with
 `the value does not decode to 32 bytes` or
 `the value does not decode to at least 16 bytes`. Neither text holds the
 value or its decoded size. A shown value is held decoded, as
 `Value::Bytes`, and is written back in its encoding's one spelling: lower
-case hex, padded base64 or unpadded base64url. A generated variable cannot
+case hex, padded base64 or unpadded base64url. A shown value therefore
+reaches the child process in that spelling, so a value written in upper
+case hex arrives in lower case, and padded base64url arrives without its
+padding. A generated variable cannot
 have a bytes type yet, and the parser refuses one with
 `starmap::spec::bad_bytes`. The Rust API names the rule `starmap::ByteRule`,
 its encoding `starmap::Encoding`, its length `starmap::ByteLength` and the
