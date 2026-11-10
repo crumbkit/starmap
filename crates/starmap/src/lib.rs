@@ -62,8 +62,8 @@ pub use mode::{Mode, ModeRule};
 pub use name::{Name, NameError};
 pub use secret::Secret;
 pub use spec::{
-    Digest, Pointer, Show, Source, Spec, SpecError, SpecProblem, SpecProblemKind, Unset, UnsetRule,
-    Variable,
+    Digest, Pointer, Show, Source, Spec, SpecError, SpecProblem, SpecProblemKind, ToolTable, Unset,
+    UnsetRule, Variable,
 };
 pub use url;
 pub use value_type::{

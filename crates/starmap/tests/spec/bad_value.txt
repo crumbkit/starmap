@@ -1,4 +1,8 @@
 starmap::spec::bad_value: `variables.SHELF_PORT.show` is "visible", and it takes one of "shown" and "withheld"
-  at: 6:8 to 6:17, bytes 148..157
+  at: 6:8 to 6:17, bytes 180..189
    6 | show = "visible"
      |        ^^^^^^^^^
+starmap::spec::bad_value: `variables.SHELF_PORT.tool.codegen` is a toml string, and it takes a table
+  at: 8:16 to 8:22, bytes 224..230
+   8 | tool.codegen = "port"
+     |                ^^^^^^

@@ -934,6 +934,131 @@ fn every_problem_kind_code_is_a_full_starmap_spec_code() {
     }
 }
 
+// Tool tables
+
+/// A spec with one variable and tool tables at the top level and in the
+/// variable.
+const WITH_TOOLS: &str = r#"
+[tool.lint]
+strict = true
+
+[tool.codegen]
+module = "settings"
+targets = ["server", "worker"]
+nested = { depth = 2 }
+
+[tool.codegen.output]
+dir = "generated"
+
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+tool.codegen = { field = "port" }
+"#;
+
+/// The spec of [`WITH_TOOLS`] without its tool tables.
+const WITHOUT_TOOLS: &str = r#"
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+"#;
+
+#[test]
+fn a_file_with_top_level_and_variable_tool_tables_parses() {
+    let spec = spec(WITH_TOOLS);
+    let name: Name = "SHELF_PORT".parse().unwrap();
+    let variable = spec.variable(&name).unwrap();
+
+    let names: Vec<&str> = spec.tools().map(super::ToolTable::name).collect();
+    assert_eq!(names, ["codegen", "lint"]);
+    assert_eq!(spec.tool("lint").unwrap().as_toml(), "strict = true\n");
+    assert_eq!(spec.tool("absent"), None);
+    let names: Vec<&str> = variable.tools().map(super::ToolTable::name).collect();
+    assert_eq!(names, ["codegen"]);
+    assert_eq!(
+        variable.tool("codegen").unwrap().as_toml(),
+        "field = \"port\"\n"
+    );
+}
+
+#[test]
+fn a_tool_table_round_trips_its_keys_and_values_as_toml_text() {
+    let spec = spec(WITH_TOOLS);
+
+    let text = spec.tool("codegen").unwrap().as_toml();
+    let reparsed: toml_edit::DocumentMut = text.parse().unwrap();
+
+    assert_eq!(reparsed["module"].as_str(), Some("settings"));
+    assert_eq!(reparsed["targets"][1].as_str(), Some("worker"));
+    assert_eq!(reparsed["nested"]["depth"].as_integer(), Some(2));
+    assert_eq!(reparsed["output"]["dir"].as_str(), Some("generated"));
+    assert_eq!(
+        text,
+        "module = \"settings\"\ntargets = [\"server\", \"worker\"]\n\n[nested]\ndepth = 2\n\n\
+         [output]\ndir = \"generated\"\n"
+    );
+}
+
+#[test]
+fn a_key_outside_tool_is_still_refused_and_the_message_lists_tool() {
+    let error = Spec::parse(&format!("colour = \"blue\"\n{WITHOUT_TOOLS}")).unwrap_err();
+
+    assert_eq!(error.problems()[0].kind(), SpecProblemKind::UnknownField);
+    assert_eq!(
+        error.to_string(),
+        "the file has the field `colour`, and it takes mode, variables and tool"
+    );
+}
+
+#[test]
+fn a_tool_value_that_is_not_a_table_of_tables_is_refused() {
+    let variable =
+        WITHOUT_TOOLS.replace("source = \"setting\"", "source = \"setting\"\ntool = [1]");
+    for (text, message) in [
+        (
+            format!("tool = 3\n{WITHOUT_TOOLS}"),
+            "`tool` is a toml integer, and it takes a table",
+        ),
+        (
+            format!("tool.x = 3\n{WITHOUT_TOOLS}"),
+            "`tool.x` is a toml integer, and it takes a table",
+        ),
+        (
+            format!("[[tool.x]]\nkey = 1\n{WITHOUT_TOOLS}"),
+            "`tool.x` is a toml array of tables, and it takes a table",
+        ),
+        (
+            format!("tool.\"\" = {{}}\n{WITHOUT_TOOLS}"),
+            "`tool` has an empty key, and a tool's name is not empty",
+        ),
+        (
+            variable,
+            "`variables.SHELF_PORT.tool` is a toml array, and it takes a table",
+        ),
+    ] {
+        let error = Spec::parse(&text).unwrap_err();
+        assert_eq!(error.problems().len(), 1, "{text}");
+        assert_eq!(error.problems()[0].kind(), SpecProblemKind::BadValue);
+        assert_eq!(error.to_string(), message);
+    }
+}
+
+#[test]
+fn files_that_differ_only_in_tool_tables_have_the_same_canonical_form_and_digest() {
+    let with = spec(WITH_TOOLS);
+    let without = spec(WITHOUT_TOOLS);
+
+    assert_eq!(with.to_toml(), without.to_toml());
+    assert_eq!(with.digest(), without.digest());
+    assert_eq!(spec(&with.to_toml()), without);
+}
+
 // Pointers
 
 /// Returns the kind of each problem of the pointer `text`.
@@ -1006,6 +1131,24 @@ fn a_pointer_whose_paths_are_not_text_or_are_empty_is_refused() {
             SpecProblemKind::BadValue,
             SpecProblemKind::BadValue
         ]
+    );
+}
+
+#[test]
+fn a_pointer_keeps_its_tool_tables_and_refuses_one_that_is_not_a_table() {
+    let pointer = Pointer::parse(
+        "spec = \"config/environment.toml\"\n[tool.codegen]\nmodule = \"settings\"\n",
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(
+        pointer.tool("codegen").unwrap().as_toml(),
+        "module = \"settings\"\n"
+    );
+    assert_eq!(
+        pointer_kinds("spec = \"config/environment.toml\"\ntool = \"codegen\"\n"),
+        [SpecProblemKind::BadValue]
     );
 }
 

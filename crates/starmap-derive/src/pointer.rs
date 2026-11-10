@@ -4,11 +4,12 @@
 //! refusals. starmap's `Pointer::parse` is the full parser, and the
 //! derive's embedded spec still goes through `Spec::parse` at run time.
 //!
-//! The derive therefore accepts a pointer that the CLI refuses: one with a
-//! key other than `spec`, `src` and `dotenv`, or with a `src` or `dotenv`
-//! that is not a path. The derive reads neither `src` nor `dotenv`, so such
-//! a pointer still embeds the right file, and `starmap check` reports its
-//! problem.
+//! The derive ignores every key other than `spec`, `mode` and `variables`,
+//! so it accepts a pointer's `src`, `dotenv` and `tool`. It therefore also
+//! accepts a pointer that the CLI refuses: one with a key other than
+//! `spec`, `src`, `dotenv` and `tool`, or with a `src`, `dotenv` or `tool`
+//! of the wrong type. The derive reads none of them, so such a pointer
+//! still embeds the right file, and `starmap check` reports its problem.
 
 use std::fs::File;
 use std::io::Read as _;
