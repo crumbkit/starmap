@@ -114,7 +114,7 @@ const EXAMPLES: Examples<'_> =
         .allow(ALLOW);
 
 #[test]
-fn the_root_help_lists_the_commands_under_four_goal_headings_in_order() {
+fn the_root_help_lists_the_commands_under_six_goal_headings_in_order() {
     let goals: Vec<(&str, &[&str])> = TOOL
         .get_help()
         .get_groups()
@@ -130,6 +130,8 @@ fn the_root_help_lists_the_commands_under_four_goal_headings_in_order() {
             ("Run a program with its environment", &["run"][..]),
             ("Read the variables", &["explain", "diff"][..]),
             ("Explore commands", &["commands", "schemas", "self"][..]),
+            ("Install starmap's skill", &["skills"][..]),
+            ("Set up shell completion", &["completion"][..]),
         ]
     );
 }
@@ -379,10 +381,11 @@ const TWINS: Twins<'_> = Twins::new(EXAMPLES, &[codes::ALL])
 
 /// Everything the checks read, which `conventions!` expands to one test for
 /// each check. `Suite::verbs` sets the verbs accepted under a resource, and
-/// `usage` is the one that `self usage` adds. The budgets of the `-h` pages are crumbkit's defaults.
+/// `usage`, `install`, `check` and `print` are the verbs that `self usage`,
+/// `skills` and `completion` add. The budgets of the `-h` pages are crumbkit's defaults.
 const SUITE: Suite<'_> = Suite::new(|| (Cli::command(), TOOL))
     .allow(ALLOW)
-    .verbs(&["usage"])
+    .verbs(&["usage", "install", "check", "print"])
     .path_budgets(PATH_BUDGETS)
     .examples(EXAMPLES)
     .recoveries(RECOVERIES)
