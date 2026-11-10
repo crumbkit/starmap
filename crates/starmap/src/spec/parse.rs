@@ -31,7 +31,7 @@ const ROOT_FIELDS: &[&str] = &["mode", "variables", "tool"];
 const MODE_FIELDS: &[&str] = &["variable", "production"];
 /// The keys of a variable's table.
 const VARIABLE_FIELDS: &[&str] = &[
-    "purpose", "type", "unset", "show", "source", "bind", "bytes", "tool",
+    "purpose", "effect", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
 /// The keys of a type table.
 const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "string", "url"];
@@ -354,6 +354,10 @@ impl Parser {
         let purpose = self
             .required(field, table, "purpose")
             .and_then(|purpose| self.purpose(&purpose));
+        let effect = match field.child(table, "effect") {
+            None => Some(None),
+            Some(effect) => self.effect(&effect).map(Some),
+        };
         let ty = self
             .required(field, table, "type")
             .and_then(|type_field| Some((self.value_type(&type_field)?, type_field)));
@@ -396,9 +400,10 @@ impl Parser {
         let source = kind
             .as_ref()
             .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes));
-        let variable = match (purpose, ty, unset, show, source, tools) {
+        let variable = match (purpose, effect, ty, unset, show, source, tools) {
             (
                 Some(purpose),
+                Some(effect),
                 Some((ty, _)),
                 Some(unset),
                 Some((show, _)),
@@ -406,6 +411,7 @@ impl Parser {
                 Some(tools),
             ) => Some(Variable {
                 purpose,
+                effect,
                 value_type: ty,
                 unset,
                 show,
@@ -419,19 +425,35 @@ impl Parser {
 
     /// Parses the purpose sentence.
     fn purpose(&mut self, field: &Field<'_>) -> Option<String> {
+        self.sentence(field, "a purpose", "what the variable is for")
+    }
+
+    /// Parses the effect sentence, which follows the rules of the purpose.
+    fn effect(&mut self, field: &Field<'_>) -> Option<String> {
+        self.sentence(
+            field,
+            "an effect",
+            "what the application does when the variable is unset",
+        )
+    }
+
+    /// Parses a sentence field, which is text that is neither blank nor
+    /// the `?` that `starmap init` writes. `noun` names the field, such as
+    /// "a purpose", and `says` what its sentence says.
+    fn sentence(&mut self, field: &Field<'_>, noun: &str, says: &str) -> Option<String> {
         let text = self.string(field)?;
         let (kind, rule) = if text == "?" {
             (
                 Kind::Guess,
-                "the guess that starmap init wrote, and a purpose",
+                format!("the guess that starmap init wrote, and {noun}"),
             )
         } else if text.trim().is_empty() {
-            (Kind::BadValue, "which is empty, and a purpose")
+            (Kind::BadValue, format!("which is empty, and {noun}"))
         } else {
             return Some(text.to_owned());
         };
         let message = format!(
-            "`{}` is {text:?}, {rule} is one sentence that says what the variable is for",
+            "`{}` is {text:?}, {rule} is one sentence that says {says}",
             field.path
         );
         self.report(field.span(), kind, message);

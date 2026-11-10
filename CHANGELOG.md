@@ -63,6 +63,15 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the path of the embedded file relative to the crate root, which
   `#[derive(Env)]` sets. A hand-written `Env` impl must add it. starmap-test
   names that file in its messages where it named `starmap.toml`.
+- A variable may state what the application does when it is unset, in
+  one sentence in the optional `effect` field, such as
+  `effect = "Calls are not recorded."`. The parser refuses an empty effect
+  with `starmap::spec::bad_value` and `?` with `starmap::spec::guess`, as it
+  does for `purpose`. `Variable::effect` returns it. `starmap explain`
+  prints it in the long column `effect` and in an optional JSON field of
+  the same name, and `starmap diff` reports a changed effect. The effect
+  counts toward the digest, and the digest of an existing file does not
+  change.
 
 ### Fixed
 

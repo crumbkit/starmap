@@ -53,6 +53,37 @@ fn a_changed_bind_and_purpose_are_one_change_each_in_field_order() {
     );
 }
 
+#[test]
+fn an_added_changed_or_removed_effect_is_a_change_of_the_effect() {
+    let with = |effect: &str| {
+        TOKEN.replace(
+            "purpose = \"The token.\"\n",
+            &format!("purpose = \"The token.\"\neffect = \"{effect}\"\n"),
+        )
+    };
+    let change = |was: Option<&str>, now: Option<&str>| Change {
+        change: Kind::Changed,
+        name: "SHELF_TOKEN".to_owned(),
+        field: Some("effect".to_owned()),
+        was: was.map(str::to_owned),
+        now: now.map(str::to_owned),
+    };
+    let (old, new) = (with("Uploads fail."), with("Uploads are skipped."));
+
+    assert_eq!(
+        changes(Some(&spec(TOKEN)), &spec(&old)),
+        vec![change(None, Some("Uploads fail."))]
+    );
+    assert_eq!(
+        changes(Some(&spec(&old)), &spec(&new)),
+        vec![change(Some("Uploads fail."), Some("Uploads are skipped."))]
+    );
+    assert_eq!(
+        changes(Some(&spec(&old)), &spec(TOKEN)),
+        vec![change(Some("Uploads fail."), None)]
+    );
+}
+
 /// A port setting, which a later spec turns into a socket address.
 const LISTEN: &str = r#"
 [variables.SHELF_LISTEN]

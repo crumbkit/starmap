@@ -263,6 +263,9 @@ fn find_tool<'a>(tools: &'a [ToolTable], name: &str) -> Option<&'a ToolTable> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variable {
     purpose: String,
+    /// The sentence that says what the application does when the variable
+    /// is unset, which the file's optional `effect` field states.
+    effect: Option<String>,
     value_type: Type,
     unset: UnsetRule,
     show: Show,
@@ -276,6 +279,31 @@ impl Variable {
     #[must_use]
     pub fn purpose(&self) -> &str {
         &self.purpose
+    }
+
+    /// Returns the sentence that says what the application does when the
+    /// variable is unset, if the file states one in its `effect` field.
+    ///
+    /// ```
+    /// let spec = starmap::Spec::parse(
+    ///     r#"
+    /// [variables.SHELF_RECORDING_BUCKET]
+    /// purpose = "The bucket that call recordings are written to."
+    /// effect = "Calls are not recorded."
+    /// type = "string"
+    /// unset = "optional"
+    /// show = "shown"
+    /// source = "setting"
+    /// "#,
+    /// )?;
+    /// let name: starmap::Name = "SHELF_RECORDING_BUCKET".parse()?;
+    /// let variable = spec.variable(&name).ok_or("SHELF_RECORDING_BUCKET is declared")?;
+    /// assert_eq!(variable.effect(), Some("Calls are not recorded."));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[must_use]
+    pub fn effect(&self) -> Option<&str> {
+        self.effect.as_deref()
     }
 
     /// Returns the type of the variable's value, which the file's `type`
