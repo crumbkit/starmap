@@ -11,8 +11,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use base64::Engine as _;
-use base64::engine::DecodePaddingMode;
-use base64::engine::general_purpose::{GeneralPurpose, GeneralPurposeConfig, STANDARD};
+use base64::engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
 use regex::Regex;
 use url::Url;
 use zeroize::Zeroize as _;
@@ -694,22 +693,6 @@ pub enum Encoding {
     Base64Url,
 }
 
-/// The base64url engine for unpadded text, which also writes text without
-/// padding.
-const BASE64_URL: GeneralPurpose = GeneralPurpose::new(
-    &base64::alphabet::URL_SAFE,
-    GeneralPurposeConfig::new()
-        .with_encode_padding(false)
-        .with_decode_padding_mode(DecodePaddingMode::RequireNone),
-);
-
-/// The base64url engine for text that ends in `=`, which requires the full
-/// padding, so partly padded text is refused.
-const BASE64_URL_PADDED: GeneralPurpose = GeneralPurpose::new(
-    &base64::alphabet::URL_SAFE,
-    GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::RequireCanonical),
-);
-
 impl Encoding {
     /// Returns the bytes that `text` decodes to, or `None` when it is not
     /// text in the encoding. Whitespace is refused in each encoding. The
@@ -719,8 +702,10 @@ impl Encoding {
         let engine = match self {
             Self::Hex => return hex(text),
             Self::Base64 => &STANDARD,
-            Self::Base64Url if text.ends_with('=') => &BASE64_URL_PADDED,
-            Self::Base64Url => &BASE64_URL,
+            // Text that ends in `=` must carry all its padding, and other
+            // text none, so partly padded text is refused.
+            Self::Base64Url if text.ends_with('=') => &URL_SAFE,
+            Self::Base64Url => &URL_SAFE_NO_PAD,
         };
         // The buffer is allocated once at its largest size, so decoding
         // into it never moves the bytes and leaves an unzeroed copy.
@@ -746,7 +731,7 @@ impl Encoding {
         match self {
             Self::Hex => bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
             Self::Base64 => STANDARD.encode(bytes),
-            Self::Base64Url => BASE64_URL.encode(bytes),
+            Self::Base64Url => URL_SAFE_NO_PAD.encode(bytes),
         }
     }
 }
