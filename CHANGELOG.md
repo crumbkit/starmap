@@ -8,6 +8,18 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A string variable can require a pattern that its whole value matches,
+  with `type = { string = { pattern = "[0-9a-f]{40}" } }`. The pattern uses
+  the syntax of the Rust `regex` crate and holds at most 1024 bytes.
+  `starmap check` refuses a value that does not match, naming the variable
+  and the pattern and never the value, which covers a withheld value too. A
+  shown variable's default must match. starmap refuses a pattern that is too
+  long or does not compile with `starmap::spec::bad_pattern`. `starmap
+  explain` prints the type as `string matching <pattern>`, and `starmap
+  diff` reports a changed pattern as a change of `type`. The digest of an
+  existing file does not change.
+- `starmap::Pattern`, `starmap::PatternError`, `TypeError::NoMatch` and
+  `SpecProblemKind::BadPattern`.
 - A `starmap.toml` can point to the file that declares the variables, with
   `spec = "config/environment.toml"` and the optional `src = ["src"]` and
   `dotenv = ".env"`, each relative to the pointer file. `starmap init`,
@@ -35,6 +47,10 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** `Type::String` has the field `pattern: Option<Pattern>`, as
+  `Type::Path` has `absolute`. Code that matches it writes
+  `Type::String { .. }`, and code that builds it writes
+  `Type::String { pattern: None }`.
 - A `starmap` failure that offers two different repairs prints each one on
   its own `help:` line, and its JSON lists the second one under
   `alternatives`. This covers `--set` of an undeclared or secret variable, a

@@ -6,7 +6,7 @@ use std::fmt;
 
 use crate::env::Held;
 use crate::{
-    Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, TypeError, Unset, Variable,
+    Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, Type, TypeError, Unset, Variable,
 };
 
 #[cfg(test)]
@@ -180,8 +180,18 @@ fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
             .map(|value| value.map(Held::Shown))
             .map_err(Problem::Invalid),
         // A withheld variable has the type string, which the spec parser
-        // checks, and a string takes any text that a Secret holds.
-        (Show::Withheld, Bound::Secret(secret)) => Ok(Some(Held::Withheld(secret.duplicate()))),
+        // checks. A string without a pattern takes any text that a Secret
+        // holds, and the refusal of one with a pattern names only the
+        // pattern.
+        (Show::Withheld, Bound::Secret(secret)) => {
+            if let Type::String {
+                pattern: Some(pattern),
+            } = variable.value_type()
+            {
+                secret.check(pattern).map_err(Problem::Invalid)?;
+            }
+            Ok(Some(Held::Withheld(secret.duplicate())))
+        }
         (Show::Withheld, Bound::NotUnicode) => Err(Problem::Invalid(TypeError::NotUnicode)),
         (show, _) => Err(Problem::ShowMismatch { show }),
     }

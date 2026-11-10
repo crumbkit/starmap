@@ -1,6 +1,6 @@
 //! The type a variable's value has, the checking types that back it
-//! ([`Port`], [`IntegerRange`], [`Choices`] and [`Choice`]), and the value a
-//! type reads.
+//! ([`Port`], [`IntegerRange`], [`Choices`], [`Choice`] and [`Pattern`]), and
+//! the value a type reads.
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -10,6 +10,7 @@ use std::num::{IntErrorKind, NonZeroU16};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use regex::Regex;
 use url::Url;
 
 #[cfg(test)]
@@ -48,8 +49,12 @@ pub enum Type {
     Integer(IntegerRange),
     /// One of a fixed set of values.
     Enumeration(Choices),
-    /// Any text, which need not be Unicode.
-    String,
+    /// Any text, which need not be Unicode. With a pattern, Unicode text
+    /// that the pattern matches as a whole.
+    String {
+        /// The pattern the whole value must match, if the type has one.
+        pattern: Option<Pattern>,
+    },
 }
 
 impl Type {
@@ -57,8 +62,8 @@ impl Type {
     ///
     /// `Ok(None)` means the value counts as unset, which happens only for a
     /// relative path, including an empty one, where `absolute` is true. The
-    /// path and string types read a value that is not Unicode; every other
-    /// type needs Unicode text. A value is never trimmed, so a space around
+    /// path type and a string type without a pattern read a value that is
+    /// not Unicode; every other type needs Unicode text. A value is never trimmed, so a space around
     /// a word makes it a different word.
     ///
     /// # Errors
@@ -73,7 +78,12 @@ impl Type {
                 }
                 Value::Path(path)
             }
-            Self::String => Value::String(raw.to_os_string()),
+            Self::String { pattern } => {
+                if let Some(pattern) = pattern {
+                    pattern.check(text(raw)?)?;
+                }
+                Value::String(raw.to_os_string())
+            }
             Self::Port => Value::Port(text(raw)?.parse().map_err(|_| TypeError::NotPort)?),
             Self::Url => Value::Url(Url::parse(text(raw)?).map_err(TypeError::NotUrl)?),
             Self::SocketAddress => Value::SocketAddress(
@@ -115,7 +125,10 @@ impl fmt::Display for Type {
                 range.min, range.max
             ),
             Self::Enumeration(choices) => write!(formatter, "one of {choices}"),
-            Self::String => formatter.write_str("a string"),
+            Self::String { pattern: None } => formatter.write_str("a string"),
+            Self::String {
+                pattern: Some(pattern),
+            } => write!(formatter, "a string matching {pattern}"),
         }
     }
 }
@@ -212,6 +225,8 @@ pub enum TypeError {
     NotChoice(Choices),
     /// The value is empty, and the type takes one of these choices.
     EmptyChoice(Choices),
+    /// The value does not match the string type's pattern as a whole.
+    NoMatch(Pattern),
 }
 
 impl fmt::Display for TypeError {
@@ -237,6 +252,9 @@ impl fmt::Display for TypeError {
                     formatter,
                     "the value is empty, and it must be one of {choices}"
                 )
+            }
+            Self::NoMatch(pattern) => {
+                write!(formatter, "the value does not match the pattern {pattern}")
             }
         }
     }
@@ -551,3 +569,138 @@ impl fmt::Display for ChoicesError {
 }
 
 impl Error for ChoicesError {}
+
+/// The pattern of a string type, in the syntax of the Rust `regex` crate. The
+/// whole value must match it, so `^` and `$` are allowed and unnecessary.
+///
+/// The syntax is close to RE2's. It has no look-around and no
+/// backreferences, and matching takes time linear in the value's length.
+/// Two patterns are equal when their texts are equal.
+///
+/// ```
+/// let pattern: starmap::Pattern = "[0-9a-f]{40}".parse()?;
+/// assert_eq!(pattern.as_str(), "[0-9a-f]{40}");
+/// # Ok::<(), starmap::PatternError>(())
+/// ```
+#[derive(Clone)]
+pub struct Pattern {
+    /// The text the spec wrote.
+    text: String,
+    /// The text anchored at both ends of the value.
+    whole: Regex,
+}
+
+impl Pattern {
+    /// The most bytes a pattern's text holds.
+    pub const MAX_BYTES: usize = 1024;
+
+    /// Returns the pattern's text as the spec wrote it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+
+    /// Refuses `text` unless the pattern matches all of it.
+    pub(crate) fn check(&self, text: &str) -> Result<(), TypeError> {
+        if self.whole.is_match(text) {
+            Ok(())
+        } else {
+            Err(TypeError::NoMatch(self.clone()))
+        }
+    }
+}
+
+impl FromStr for Pattern {
+    type Err = PatternError;
+
+    /// Accepts a pattern of at most [`Pattern::MAX_BYTES`] bytes that the
+    /// `regex` crate compiles within its default size limit, after it is
+    /// anchored as `\A(?:pattern)\z`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PatternError`] for a longer pattern, or one that does not
+    /// compile.
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        if text.len() > Self::MAX_BYTES {
+            return Err(PatternError::TooLong { bytes: text.len() });
+        }
+        let invalid = |error: regex::Error| PatternError::Invalid(reason(&error));
+        // The text compiles alone first, so a pattern such as `a)|(b` cannot
+        // close the group that anchors it and match only part of a value.
+        Regex::new(text).map_err(invalid)?;
+        let whole = Regex::new(&format!("\\A(?:{text})\\z")).map_err(invalid)?;
+        Ok(Self {
+            text: text.to_owned(),
+            whole,
+        })
+    }
+}
+
+/// Returns the reason the `regex` crate gives for refusing a pattern, on one
+/// line.
+fn reason(error: &regex::Error) -> String {
+    match error {
+        // The syntax error's text draws the pattern with a caret under the
+        // fault over several lines, and ends with a line `error: <reason>`.
+        // Only that line is kept, so a spec problem stays on one line. A
+        // text without such a line is kept whole, with its lines joined.
+        regex::Error::Syntax(text) => text
+            .lines()
+            .rev()
+            .find_map(|line| line.strip_prefix("error: "))
+            .map_or_else(|| text.lines().collect::<Vec<_>>().join(" "), str::to_owned),
+        regex::Error::CompiledTooBig(limit) => {
+            format!("it compiles to more than the size limit of {limit} bytes")
+        }
+        other => other.to_string(),
+    }
+}
+
+impl PartialEq for Pattern {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+    }
+}
+
+impl Eq for Pattern {}
+
+impl fmt::Debug for Pattern {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_tuple("Pattern").field(&self.text).finish()
+    }
+}
+
+impl fmt::Display for Pattern {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.text)
+    }
+}
+
+/// The reason text is not a [`Pattern`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PatternError {
+    /// The text is over [`Pattern::MAX_BYTES`].
+    TooLong {
+        /// The number of bytes the text holds.
+        bytes: usize,
+    },
+    /// The `regex` crate does not compile the text, for this reason.
+    Invalid(String),
+}
+
+impl fmt::Display for PatternError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TooLong { bytes } => write!(
+                formatter,
+                "the pattern is {bytes} bytes, and a pattern holds at most {}",
+                Pattern::MAX_BYTES
+            ),
+            Self::Invalid(reason) => write!(formatter, "the pattern does not compile: {reason}"),
+        }
+    }
+}
+
+impl Error for PatternError {}

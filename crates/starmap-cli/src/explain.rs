@@ -264,7 +264,10 @@ pub(crate) fn type_text(ty: &Type) -> String {
         Type::Boolean => "boolean".to_owned(),
         Type::Integer(range) => format!("integer {}..={}", range.min(), range.max()),
         Type::Enumeration(choices) => format!("one of {choices}"),
-        Type::String => "string".to_owned(),
+        Type::String { pattern: None } => "string".to_owned(),
+        Type::String {
+            pattern: Some(pattern),
+        } => format!("string matching {pattern}"),
         // A type that a later release of starmap adds.
         _ => "another type".to_owned(),
     }

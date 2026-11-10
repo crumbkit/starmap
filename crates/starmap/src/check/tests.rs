@@ -588,3 +588,79 @@ source = "setting"
         "SHELF_PORT is required and has no value"
     );
 }
+
+// patterns
+
+/// A spec with a shown revision and a withheld key, each of whose string
+/// types has a pattern.
+const PATTERNS: &str = r#"
+[variables.SHELF_REVISION]
+purpose = "Which commit of the catalogue shelf serves."
+type = { string = { pattern = "[0-9a-f]{40}" } }
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_KEY]
+purpose = "The key shelf calls the catalogue mirror with."
+type = { string = { pattern = "sk-[a-z0-9]+" } }
+unset = "required"
+show = "withheld"
+source = "secret"
+"#;
+
+/// Captures `pairs` with [`PATTERNS`] and checks them in local mode.
+fn pattern_verdict(pairs: &[(&str, &str)]) -> Verdict {
+    let spec = Spec::parse(PATTERNS).unwrap();
+    let bindings = capture(&spec, vars(pairs));
+    check(&spec, &bindings, Mode::Local)
+}
+
+#[test]
+fn values_that_match_their_patterns_pass_the_check() {
+    let revision = "0123456789abcdef0123456789abcdef01234567";
+
+    let environment = ready(pattern_verdict(&[
+        ("SHELF_REVISION", revision),
+        ("SHELF_MIRROR_KEY", "sk-abc123"),
+    ]));
+
+    assert_eq!(
+        environment.value(&name("SHELF_REVISION")),
+        Some(&Value::String(revision.into()))
+    );
+}
+
+#[test]
+fn a_shown_value_that_does_not_match_names_the_variable_and_the_pattern() {
+    let Verdict::Refused(refusals) = pattern_verdict(&[
+        ("SHELF_REVISION", "main"),
+        ("SHELF_MIRROR_KEY", "sk-abc123"),
+    ]) else {
+        panic!("the check passed");
+    };
+
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_REVISION: the value does not match the pattern [0-9a-f]{40}"
+    );
+}
+
+#[test]
+fn a_withheld_value_that_does_not_match_is_refused_without_its_text() {
+    let revision = "0123456789abcdef0123456789abcdef01234567";
+
+    let Verdict::Refused(refusals) = pattern_verdict(&[
+        ("SHELF_REVISION", revision),
+        ("SHELF_MIRROR_KEY", "pk-live-hidden"),
+    ]) else {
+        panic!("the check passed");
+    };
+
+    let text = refusals.to_string();
+    assert_eq!(
+        text,
+        "SHELF_MIRROR_KEY: the value does not match the pattern sk-[a-z0-9]+"
+    );
+    assert!(!format!("{refusals:?}").contains("pk-live-hidden"));
+}

@@ -17,6 +17,22 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
 - `{ integer = { min = 1, max = 100 } }` is a whole number from `min` to
   `max`, both included.
 - `{ enumeration = ["dev", "prod"] }` is one of the listed values.
+- `{ string = { pattern = "[0-9a-f]{40}" } }` is Unicode text that the
+  pattern matches as a whole. `{ string = {} }` is the same type as the word
+  `string`, which takes any text, including text that is not Unicode.
+
+A pattern is written in the syntax of the Rust `regex` crate, which is close
+to RE2's. It has no look-around and no backreferences, and matching takes
+time linear in the value's length. A pattern that another implementation
+must read should keep to the syntax that both the `regex` crate and RE2
+accept. starmap anchors the pattern as `\A(?:pattern)\z`, so it matches the
+whole value, and `^` and `$` are allowed and unnecessary. A pattern holds at
+most 1024 bytes. The parser refuses a longer pattern, and one that the
+`regex` crate does not compile within its default size limit, with
+`starmap::spec::bad_pattern`, which quotes the pattern. A value that does not
+match fails with the text `the value does not match the pattern <pattern>`,
+which never holds the value. The Rust API names the pattern
+`starmap::Pattern`.
 
 `Type::parse` reads a raw value in the type and returns a `Value`, nothing
 when the value counts as unset, or a `TypeError` when the value does not fit
@@ -33,7 +49,9 @@ A withheld value is held in a `starmap::Secret`, whose `Debug` prints
 `Secret(••••••••)` whatever the value. `starmap explain` prints eight dots
 in place of a withheld value and gives it no text in JSON. A withheld
 variable has no default, because a default would sit in `starmap.toml` in
-plain text, and its type is `string`. The parser refuses a withheld
+plain text, and its type is `string`, with or without a pattern. A check
+reports a withheld value that does not match its pattern by naming the
+pattern alone. The parser refuses a withheld
 variable that breaks either rule.
 
 The parser also forces `show = "withheld"` on every variable whose source is

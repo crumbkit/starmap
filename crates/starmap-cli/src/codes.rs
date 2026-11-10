@@ -30,11 +30,14 @@ pub const SPEC_GUESS: Code = Code::new("starmap", "spec", "guess");
 pub const SPEC_BAD_DEFAULT: Code = Code::new("starmap", "spec", "bad_default");
 /// An integer's minimum is above its maximum.
 pub const SPEC_BAD_RANGE: Code = Code::new("starmap", "spec", "bad_range");
+/// A string's pattern is over 1024 bytes or does not compile.
+pub const SPEC_BAD_PATTERN: Code = Code::new("starmap", "spec", "bad_pattern");
 /// An enumeration has no values, or repeats one.
 pub const SPEC_EMPTY_ENUMERATION: Code = Code::new("starmap", "spec", "empty_enumeration");
 /// A secret or generated variable is shown.
 pub const SPEC_SHOWN_SECRET: Code = Code::new("starmap", "spec", "shown_secret");
-/// A withheld variable has a type other than string.
+/// A withheld variable has a type other than string, with or without a
+/// pattern.
 pub const SPEC_WITHHELD_TYPE: Code = Code::new("starmap", "spec", "withheld_type");
 /// A withheld variable has a default.
 pub const SPEC_WITHHELD_DEFAULT: Code = Code::new("starmap", "spec", "withheld_default");
@@ -107,6 +110,7 @@ pub const ALL: &[&Code] = &[
     &SPEC_GUESS,
     &SPEC_BAD_DEFAULT,
     &SPEC_BAD_RANGE,
+    &SPEC_BAD_PATTERN,
     &SPEC_EMPTY_ENUMERATION,
     &SPEC_SHOWN_SECRET,
     &SPEC_WITHHELD_TYPE,
