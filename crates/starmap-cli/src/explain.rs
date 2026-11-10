@@ -227,7 +227,15 @@ fn cell(variable: &Variable, bound: Option<&Bound>) -> Cell {
                 return Cell::new(State::Invalid, Some(raw.to_string_lossy().into_owned()));
             }
         },
-        Some(Bound::Secret(_)) => return Cell::new(State::Set, None),
+        // The cell never holds a withheld value's text, whichever state it
+        // shows.
+        Some(Bound::Secret(secret)) => {
+            let state = match variable.value_type().check_secret(secret) {
+                Ok(()) => State::Set,
+                Err(_) => State::Invalid,
+            };
+            return Cell::new(state, None);
+        }
         Some(_) => return Cell::new(State::Invalid, None),
         None => {}
     }
@@ -267,7 +275,10 @@ pub(crate) fn type_text(ty: &Type) -> String {
         Type::Boolean => "boolean".to_owned(),
         Type::Integer(range) => format!("integer {}..={}", range.min(), range.max()),
         Type::Enumeration(choices) => format!("one of {choices}"),
-        Type::String => "string".to_owned(),
+        Type::String { pattern: None } => "string".to_owned(),
+        Type::String {
+            pattern: Some(pattern),
+        } => format!("string matching {pattern}"),
         // A type that a later release of starmap adds.
         _ => "another type".to_owned(),
     }

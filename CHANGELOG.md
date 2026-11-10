@@ -23,6 +23,20 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file does not change.
 - `starmap::Scheme`, `starmap::SchemeError`, `starmap::Schemes`,
   `starmap::SchemesError` and `TypeError::SchemeNotAllowed`.
+- A string variable can require a pattern that its whole value matches,
+  with `type = { string = { pattern = "[0-9a-f]{40}" } }`. The pattern uses
+  the syntax of the Rust `regex` crate and holds at most 1024 bytes.
+  `starmap run` refuses a value that does not match, naming the variable
+  and the pattern and never the value, and this covers a withheld value
+  too. `starmap explain` marks such a value invalid and never prints a
+  withheld one. A shown variable's default must match. starmap refuses a
+  pattern that is too long or does not compile with
+  `starmap::spec::bad_pattern`. `starmap explain` prints the type as
+  `string matching <pattern>`, and `starmap diff` reports a changed pattern
+  as a change of `type`. The digest of an existing file does not change.
+- `starmap::Pattern`, `starmap::PatternError`, `TypeError::NoMatch`,
+  `SpecProblemKind::BadPattern`, and `Type::check_secret`, which checks a
+  withheld value against its type's pattern and returns only the refusal.
 - A `starmap.toml` may hold `[tool.<name>]` tables at its top level and in
   each variable, such as `[tool.codegen]` or
   `[variables.SHELF_PORT.tool.codegen]`, where a tool keeps settings of its
@@ -63,6 +77,10 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Type::Path` has `absolute`. Code that matches it writes
   `Type::Url { .. }`, and code that builds it writes
   `Type::Url { schemes: None }`.
+- **Breaking:** `Type::String` has the field `pattern: Option<Pattern>`, as
+  `Type::Path` has `absolute`. Code that matches it writes
+  `Type::String { .. }`, and code that builds it writes
+  `Type::String { pattern: None }`.
 - **Breaking:** an empty value, such as `FOO=`, counts as unset wherever it
   comes from, so the variable takes its default, stays unset when it is
   optional, and is missing when it is required. Before, the type decided:

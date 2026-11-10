@@ -1,0 +1,7 @@
+# The string type's pattern does not compile.
+[variables.SHELF_REVISION]
+purpose = "Which commit of the catalogue shelf serves."
+type = { string = { pattern = "[0-9a-f{40}" } }
+unset = "required"
+show = "shown"
+source = "setting"

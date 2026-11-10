@@ -240,6 +240,35 @@ fn a_port_field_disagrees_with_a_socket_address_variable() {
 }
 
 #[test]
+fn a_string_or_secret_field_agrees_with_a_string_that_has_a_pattern() {
+    let spec = r#"
+[variables.SHELF_REVISION]
+purpose = "Which commit of the catalogue shelf serves."
+type = { string = { pattern = "[0-9a-f]{40}" } }
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_KEY]
+purpose = "The key shelf calls the catalogue mirror with."
+type = { string = { pattern = "sk-[a-z0-9]+" } }
+unset = "required"
+show = "withheld"
+source = "secret"
+"#;
+    let fields = [
+        starmap::Field::new::<String>("SHELF_REVISION", "String", starmap::Presence::Always),
+        starmap::Field::new::<starmap::Secret>(
+            "SHELF_MIRROR_KEY",
+            "starmap::Secret",
+            starmap::Presence::Always,
+        ),
+    ];
+
+    assert_eq!(compare("Shelf", "starmap.toml", &fields, spec, &[]), Ok(()));
+}
+
+#[test]
 fn a_url_field_agrees_with_a_url_that_has_schemes() {
     let spec = r#"
 [variables.SHELF_DATABASE_URL]

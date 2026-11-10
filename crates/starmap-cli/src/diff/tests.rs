@@ -64,6 +64,23 @@ source = "setting"
 "#;
 
 #[test]
+fn a_changed_pattern_is_a_change_of_the_type() {
+    let four = LISTEN.replace("\"port\"", "{ string = { pattern = \"[0-9]{4}\" } }");
+    let five = LISTEN.replace("\"port\"", "{ string = { pattern = \"[0-9]{5}\" } }");
+
+    assert_eq!(
+        changes(Some(&spec(&four)), &spec(&five)),
+        vec![Change {
+            change: Kind::Changed,
+            name: "SHELF_LISTEN".to_owned(),
+            field: Some("type".to_owned()),
+            was: Some("string matching [0-9]{4}".to_owned()),
+            now: Some("string matching [0-9]{5}".to_owned()),
+        }]
+    );
+}
+
+#[test]
 fn a_socket_address_is_named_when_it_is_added_and_when_a_type_changes_to_it() {
     let socket = LISTEN.replace("\"port\"", "\"socket-address\"");
 
