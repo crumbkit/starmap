@@ -418,6 +418,13 @@
             "null"
           ]
         },
+        "effect": {
+          "description": "The sentence that says what the application does when the variable is unset; empty, and left out of `--json`, when the spec states none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "description": "The variable's name.",
           "type": "string"

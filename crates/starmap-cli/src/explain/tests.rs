@@ -303,3 +303,47 @@ fn explain_prints_the_same_row_for_a_variable_with_and_without_tool_tables() {
 
     assert_eq!(json(&tools), json(LISTEN));
 }
+
+/// Returns the JSON that `starmap explain --json` prints for one optional
+/// setting whose extra fields are `extra`.
+fn optional_bucket(extra: &str) -> serde_json::Value {
+    let spec = Spec::parse(&format!(
+        "[variables.SHELF_BUCKET]\npurpose = \"The bucket.\"\n{extra}type = \"string\"\n\
+         unset = \"optional\"\nshow = \"shown\"\nsource = \"setting\"\n"
+    ))
+    .unwrap();
+    let bindings = starmap::capture(&spec, Vec::<(OsString, OsString)>::new());
+    let row = row(
+        &spec,
+        "starmap.toml",
+        &bindings,
+        "SHELF_BUCKET".parse().unwrap(),
+    )
+    .unwrap();
+    serde_json::to_value(row).unwrap()
+}
+
+#[test]
+fn a_variable_with_an_effect_shows_it_in_json() {
+    let json = optional_bucket("effect = \"Calls are not recorded.\"\n");
+
+    assert_eq!(json["effect"], serde_json::json!("Calls are not recorded."));
+}
+
+#[test]
+fn a_variable_without_an_effect_has_no_effect_field_in_json() {
+    let json = optional_bucket("");
+
+    assert!(json.get("effect").is_none(), "{json}");
+}
+
+#[test]
+fn the_effect_is_the_long_column_after_the_purpose() {
+    use crumbkit::Row;
+
+    let long = super::Explained::LONG_COLUMNS;
+    let purpose = long.iter().position(|column| *column == "purpose");
+    let effect = long.iter().position(|column| *column == "effect");
+
+    assert_eq!(effect, purpose.map(|purpose| purpose + 1));
+}

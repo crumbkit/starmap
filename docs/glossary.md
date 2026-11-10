@@ -128,6 +128,25 @@ value from an earlier one, so `FOO=` in the shell leaves the value that
 value, and `check` treats an empty bound value as unset before any type
 reads it.
 
+## effect
+
+The optional `effect` field of a variable in `starmap.toml` is one sentence
+that says what the application does when the variable is unset, such as
+`effect = "Calls are not recorded."`. Any variable may have one. Its text
+follows the rules of `purpose`: the parser refuses an empty or blank
+sentence with `starmap::spec::bad_value`, and `?` with
+`starmap::spec::guess`. `starmap init` does not write it.
+`Variable::effect` returns the sentence, or nothing when the file states
+none.
+
+The effect counts toward the canonical form and the digest, as the purpose
+does. The canonical form writes it right after `purpose`, and only when the
+variable has one, so a file without effects keeps its digest.
+`starmap explain --long` prints it in the `effect` column after `purpose`,
+and `starmap explain --json` leaves the field out when the variable has
+none. `starmap diff` reports an effect that was added, changed or removed
+as a change of the field `effect`.
+
 ## pointer
 
 A pointer is a `starmap.toml` that names the file that declares the

@@ -57,11 +57,14 @@ pub(crate) struct Explained {
     cache: Option<String>,
     /// The sentence that says what the variable is for.
     purpose: String,
+    /// The sentence that says what the application does when the variable is unset; empty, and left out of `--json`, when the spec states none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effect: Option<String>,
 }
 
 impl Row for Explained {
     const COLUMNS: &'static [&'static str] = &["name", "type", "unset", "source", "value"];
-    const LONG_COLUMNS: &'static [&'static str] = &["show", "bind", "cache", "purpose"];
+    const LONG_COLUMNS: &'static [&'static str] = &["show", "bind", "cache", "purpose", "effect"];
     const UNCUT_COLUMNS: &'static [&'static str] = &["name"];
 }
 
@@ -211,6 +214,7 @@ fn row(
         bind: bind_text(variable.source()),
         cache: cache_text(variable.source()).map(str::to_owned),
         purpose: variable.purpose().to_owned(),
+        effect: variable.effect().map(str::to_owned),
         name: name.as_str().to_owned(),
     })
 }

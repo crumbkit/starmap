@@ -244,7 +244,7 @@ fn changes(was: Option<&Spec>, now: &Spec) -> Vec<Change> {
 type FieldChange = (&'static str, Option<String>, Option<String>);
 
 /// Returns each field that differs between `old` and `new`, in the order
-/// type, unset, show, source, bind, cache and purpose, with the text that
+/// type, unset, show, source, bind, cache, purpose and effect, with the text that
 /// explain prints for it. The fields are compared by value and shown as
 /// text, and a withheld variable has no default, so diff shows no secret
 /// value. A changed source lists
@@ -292,6 +292,13 @@ fn changed_fields(old: &Variable, new: &Variable) -> Vec<FieldChange> {
             "purpose",
             Some(old.purpose().to_owned()),
             Some(new.purpose().to_owned()),
+        ));
+    }
+    if old.effect() != new.effect() {
+        changed.push((
+            "effect",
+            old.effect().map(str::to_owned),
+            new.effect().map(str::to_owned),
         ));
     }
     changed
