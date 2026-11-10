@@ -11,15 +11,17 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A string variable can require a pattern that its whole value matches,
   with `type = { string = { pattern = "[0-9a-f]{40}" } }`. The pattern uses
   the syntax of the Rust `regex` crate and holds at most 1024 bytes.
-  `starmap check` refuses a value that does not match, naming the variable
-  and the pattern and never the value, which covers a withheld value too. A
-  shown variable's default must match. starmap refuses a pattern that is too
+  `starmap run` refuses a value that does not match, naming the variable
+  and the pattern and never the value, and this covers a withheld value
+  too. `starmap explain` marks such a value invalid and never prints a
+  withheld one. A shown variable's default must match. starmap refuses a pattern that is too
   long or does not compile with `starmap::spec::bad_pattern`. `starmap
   explain` prints the type as `string matching <pattern>`, and `starmap
   diff` reports a changed pattern as a change of `type`. The digest of an
   existing file does not change.
-- `starmap::Pattern`, `starmap::PatternError`, `TypeError::NoMatch` and
-  `SpecProblemKind::BadPattern`.
+- `starmap::Pattern`, `starmap::PatternError`, `TypeError::NoMatch`,
+  `SpecProblemKind::BadPattern`, and `Type::check_secret`, which checks a
+  withheld value against its type's pattern and returns only the refusal.
 - A `starmap.toml` can point to the file that declares the variables, with
   `spec = "config/environment.toml"` and the optional `src = ["src"]` and
   `dotenv = ".env"`, each relative to the pointer file. `starmap init`,
@@ -51,6 +53,16 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Type::Path` has `absolute`. Code that matches it writes
   `Type::String { .. }`, and code that builds it writes
   `Type::String { pattern: None }`.
+- **Breaking:** an empty value, such as `FOO=`, counts as unset wherever it
+  comes from, so the variable takes its default, stays unset when it is
+  optional, and is missing when it is required. Before, the type decided:
+  a required string accepted `FOO=`, and a port, URL, boolean, integer or
+  enumeration refused it as invalid. An empty value in the shell, `.env` or
+  `--set` no longer hides a value from another of them, and a setting with
+  a path bind expands the bind when the shell holds `FOO=`.
+  `starmap::capture` binds nothing for an empty value, and `starmap::check`
+  treats an empty bound value as unset. `starmap explain` shows the default
+  or `unset` for `FOO=`. The digest of a `starmap.toml` does not change.
 - A `starmap` failure that offers two different repairs prints each one on
   its own `help:` line, and its JSON lists the second one under
   `alternatives`. This covers `--set` of an undeclared or secret variable, a

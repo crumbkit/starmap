@@ -56,6 +56,17 @@ impl Secret {
         self.0.expose_secret().as_str()
     }
 
+    /// Returns whether the value is empty, without exposing it, so that
+    /// [`check`](crate::check) can treat an empty secret as unset.
+    #[must_use]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "BASE-24: only the length of the value leaves the wrapper"
+    )]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.expose_secret().is_empty()
+    }
+
     /// Returns a second secret that holds a copy of the value, without the
     /// value passing through any other type. It is the one way to copy a
     /// secret: `Secret` has no `Clone`, so a copy is a deliberate call.

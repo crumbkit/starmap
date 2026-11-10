@@ -17,6 +17,11 @@ mod tests;
 /// [`Secret`], or as [`Bound::NotUnicode`] when it is not Unicode.
 /// A shown variable's value is bound as it is.
 ///
+/// An empty value, such as the value of `FOO=`, counts as unset, so
+/// `capture` binds nothing for it. When `vars` names a variable more than
+/// once, the last non-empty value is bound, and an empty later value leaves
+/// an earlier value in place.
+///
 /// The caller passes the environment in, such as `std::env::vars_os()`,
 /// because the crate reads no environment variable itself.
 #[must_use]
@@ -29,6 +34,9 @@ pub fn capture(spec: &Spec, vars: impl IntoIterator<Item = (OsString, OsString)>
         let Some(variable) = spec.variable(&name) else {
             continue;
         };
+        if raw.is_empty() {
+            continue;
+        }
         bindings.bind(name, variable.capture(raw));
     }
     bindings
@@ -73,7 +81,7 @@ fn discard(raw: OsString) {
 
 /// Decides the mode from the mode variable, read as [`check`] reads it. A
 /// spec without a `[mode]` table always runs in local mode. When nothing
-/// binds the mode variable, or its value counts as unset or is not
+/// binds the mode variable, or its value is empty, counts as unset or is not
 /// Unicode, its local default decides. Any other value that does not fit
 /// its type decides local mode, and `check` refuses it.
 #[must_use]
@@ -102,9 +110,11 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 
 /// Checks `bindings` against every variable `spec` declares, in `mode`.
 ///
-/// A bound value is read in its variable's type, and a value that the type
-/// counts as unset, such as a relative path where `absolute = true`, is
-/// treated as unbound. An unbound variable takes its default in `mode`,
+/// An empty bound value, shown or withheld, counts as unset before any type
+/// reads it, so it is treated as unbound. This covers values that do not
+/// pass through [`capture`], such as a provider's value. A bound value is
+/// read in its variable's type, and a value that the type counts as unset,
+/// such as a relative path where `absolute = true`, is treated as unbound. An unbound variable takes its default in `mode`,
 /// stays unset when it is optional, and is missing when it is required.
 /// When the bindings decide another mode than `mode`, the mode variable has
 /// a finding too, so a ready environment fits the mode its child decides.
@@ -171,9 +181,11 @@ fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option
 }
 
 /// Reads `bound` as a value of `variable`. `Ok(None)` means the value
-/// counts as unset.
+/// counts as unset, which an empty value always does.
 fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
     match (variable.show(), bound) {
+        (Show::Shown, Bound::Plain(raw)) if raw.is_empty() => Ok(None),
+        (Show::Withheld, Bound::Secret(secret)) if secret.is_empty() => Ok(None),
         (Show::Shown, Bound::Plain(raw)) => variable
             .value_type()
             .parse(raw)

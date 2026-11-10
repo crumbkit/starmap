@@ -199,6 +199,36 @@ fn the_example_struct_loads_from_a_fixed_set_of_variables() {
 }
 
 #[test]
+fn an_empty_value_reads_as_none_for_an_optional_field_and_as_its_default_for_a_defaulted_one() {
+    let env = ShelfEnv::from_vars(vars(&[
+        ("SHELF_ENV", ""),
+        ("SHELF_PORT", "8080"),
+        ("SHELF_CATALOGUE_URL", ""),
+        ("SHELF_PAGE_SIZE", ""),
+        ("SHELF_MIRROR_TOKEN", ""),
+        ("SHELF_SESSION_KEY", "session-key"),
+    ]))
+    .expect("an empty value counts as unset");
+
+    assert_eq!(env.stage, Stage::Dev);
+    assert_eq!(env.catalogue, None);
+    assert_eq!(env.page_size, 20);
+    assert!(env.mirror_token.is_none());
+}
+
+#[test]
+fn an_empty_value_refuses_the_read_of_a_required_field() {
+    let error = ShelfEnv::from_vars(vars(&[("SHELF_PORT", "8080"), ("SHELF_SESSION_KEY", "")]))
+        .expect_err("the session key is required");
+
+    assert!(matches!(error, ReadError::Refused(_)));
+    assert_eq!(
+        error.to_string(),
+        "SHELF_SESSION_KEY is required in local mode and has no value"
+    );
+}
+
+#[test]
 fn the_mode_variable_decides_the_mode_the_struct_is_read_in() {
     let error = ShelfEnv::from_vars(vars(&[
         ("SHELF_ENV", "prod"),
@@ -315,7 +345,7 @@ fn without_a_mode_table_a_refusal_names_no_mode_and_no_file() {
     assert_eq!(
         empty.to_string(),
         "SHELF_LISTEN_ADDRESS: the value is not an ip socket address, such as 127.0.0.1:8080 or [::1]:8080; \
-         SHELF_STAGE: the value is empty, and it must be one of dev, prod"
+         SHELF_STAGE is required and has no value"
     );
 }
 
