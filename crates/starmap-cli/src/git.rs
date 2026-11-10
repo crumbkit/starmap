@@ -187,28 +187,43 @@ fn git(dir: &Path, args: &[&str], limit: usize, deadline: Instant) -> io::Result
         .stderr(Capture::Tail { limit: SMALL })
         .deadline(deadline);
     let finished = crumbkit_process::run(command, &options).map_err(io::Error::other)?;
-    let success = match finished.outcome() {
-        Outcome::Ended(Status::Code(code)) => code == 0,
-        Outcome::TimedOut => {
-            return Err(io::Error::other(format!(
-                "git did not finish within {} seconds",
-                DEADLINE.as_secs()
-            )));
-        }
-        Outcome::Stopped(_) => {
-            return Err(io::Error::other(format!(
-                "git printed more than {limit} bytes"
-            )));
-        }
-        // A signal, or an end that a later crumbkit-process adds.
-        _ => return Err(io::Error::other("git was ended by a signal")),
-    };
+    let success = ended(finished.outcome(), finished.stdout().over_limit(), limit)?;
     let (stdout, stderr) = finished.into_output();
     Ok(Ran {
         success,
         stdout: stdout.into_bytes(),
         stderr: stderr.into_bytes(),
     })
+}
+
+/// Returns whether a git run that ended with `outcome` succeeded, given
+/// whether its standard output passed `limit`. git may exit before the run
+/// notices that its output passed the limit, so the outcome is then an
+/// exit and not a stop; the output is cut short all the same, and the run
+/// fails.
+///
+/// # Errors
+///
+/// Returns an error when the deadline passed, when the output passed
+/// `limit`, or when git was ended by a signal. A timeout keeps its own
+/// message even when the output also passed the limit.
+fn ended(outcome: Outcome, over_limit: bool, limit: usize) -> io::Result<bool> {
+    match outcome {
+        Outcome::TimedOut => Err(io::Error::other(format!(
+            "git did not finish within {} seconds",
+            DEADLINE.as_secs()
+        ))),
+        _ if over_limit => Err(io::Error::other(format!(
+            "git printed more than {limit} bytes"
+        ))),
+        // The run uses no cancel, so a stop is for passing the limit.
+        Outcome::Stopped(_) => Err(io::Error::other(format!(
+            "git printed more than {limit} bytes"
+        ))),
+        Outcome::Ended(Status::Code(code)) => Ok(code == 0),
+        // A signal, or an end that a later crumbkit-process adds.
+        _ => Err(io::Error::other("git was ended by a signal")),
+    }
 }
 
 /// Returns the output of the git run `command` when it exited with
