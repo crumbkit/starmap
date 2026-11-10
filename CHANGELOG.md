@@ -8,6 +8,13 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A starmap-resolve `Provider` can check a provided bind without resolving
+  a value, with `Provider::check`, whose default accepts every bind, so an
+  existing provider needs no change. `starmap_resolve::check_binds` runs
+  the first registered provider of each bind's kind over a spec and returns
+  a `BindFailure` for each refused bind, in the spec's order. A
+  `BindFailure` names the variable and the provider's kind and holds the
+  provider's message. The digest of an existing file does not change.
 - A url variable can list the schemes it allows, with
   `type = { url = { schemes = ["postgres", "postgresql"] } }`. Each scheme
   is a lower case ASCII letter followed by lower case letters, digits, `+`,
