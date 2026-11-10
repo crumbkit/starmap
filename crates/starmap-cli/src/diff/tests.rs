@@ -194,3 +194,74 @@ fn a_changed_scheme_list_is_a_change_of_the_type() {
         }]
     );
 }
+
+/// A log level setting whose type is the named enumeration `log-level`.
+const LOG_LEVEL: &str = r#"
+[enumerations.log-level]
+debug = "Logs every request."
+info = "Logs each request once."
+
+[variables.SHELF_LOG_LEVEL]
+purpose = "How much the api process logs."
+type = { enumeration = "log-level" }
+unset = "required"
+show = "shown"
+source = "setting"
+"#;
+
+/// Returns a change of `field` of `SHELF_LOG_LEVEL` from `was` to `now`.
+fn log_level_change(field: &str, was: &str, now: &str) -> Change {
+    Change {
+        change: Kind::Changed,
+        name: "SHELF_LOG_LEVEL".to_owned(),
+        field: Some(field.to_owned()),
+        was: Some(was.to_owned()),
+        now: Some(now.to_owned()),
+    }
+}
+
+#[test]
+fn a_changed_description_is_a_change_of_the_values() {
+    let now = LOG_LEVEL.replace("Logs every request.", "Logs every request and its timing.");
+
+    assert_eq!(
+        changes(Some(&spec(LOG_LEVEL)), &spec(&now)),
+        vec![log_level_change(
+            "values",
+            "debug: Logs every request.; info: Logs each request once.",
+            "debug: Logs every request and its timing.; info: Logs each request once.",
+        )]
+    );
+}
+
+#[test]
+fn a_change_from_an_inline_list_to_a_named_enumeration_is_a_change_of_the_type() {
+    let inline = LOG_LEVEL.replace(
+        "{ enumeration = \"log-level\" }",
+        "{ enumeration = [\"debug\", \"info\"] }",
+    );
+
+    let fields: Vec<Option<String>> = changes(Some(&spec(&inline)), &spec(LOG_LEVEL))
+        .into_iter()
+        .map(|change| change.field)
+        .collect();
+
+    assert_eq!(
+        fields,
+        vec![Some("type".to_owned()), Some("values".to_owned())]
+    );
+}
+
+#[test]
+fn a_renamed_enumeration_is_a_change_of_the_type_alone() {
+    let renamed = LOG_LEVEL.replace("log-level", "verbosity");
+
+    assert_eq!(
+        changes(Some(&spec(LOG_LEVEL)), &spec(&renamed)),
+        vec![log_level_change(
+            "type",
+            "log-level: one of debug, info",
+            "verbosity: one of debug, info",
+        )]
+    );
+}

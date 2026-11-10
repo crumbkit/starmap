@@ -8,6 +8,25 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A file can declare named enumerations, each value with a description, as
+  `[enumerations.log-level]` with `debug = "Logs every request."`, and a
+  variable can name one with `type = { enumeration = "log-level" }`. Any
+  number of variables may share one. A name starts with a lower case ASCII
+  letter and holds lower case letters, digits and hyphens. A bad name, a
+  value with whitespace or a missing, empty or blank description fails with
+  `starmap::spec::bad_value`, a description of `?` with
+  `starmap::spec::guess`, an empty table with
+  `starmap::spec::empty_enumeration`, and a name the file does not declare
+  with the new `starmap::spec::enumeration_undeclared`. A default outside
+  the values fails with `starmap::spec::bad_default`, and `starmap run`
+  refuses a value outside them as it does for an inline list. The names
+  and descriptions count toward the canonical form and the digest.
+  `starmap explain` prints the type as `log-level: one of debug, info`,
+  adds a `values` long column, and adds the optional JSON fields
+  `enumeration` and `values`. `starmap diff` reports a changed description
+  as a change of `values`. The Rust API adds `EnumerationName`,
+  `Choices::name`, `Choices::description`, `Spec::enumeration` and
+  `Spec::enumerations`. The digest of an existing file does not change.
 - A starmap-resolve `Provider` can check a provided bind without resolving
   a value, with `Provider::check`, whose default accepts every bind, so an
   existing provider needs no change. `starmap_resolve::check_binds` runs

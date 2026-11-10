@@ -10,7 +10,8 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind, SecretBytes, Type, Value,
+    Choices, EnumerationName, Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind,
+    SecretBytes, Type, Value,
 };
 
 #[cfg(test)]
@@ -40,6 +41,8 @@ mod tests;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spec {
     mode: Option<ModeRule>,
+    /// The file's named enumerations, in name order. Each one has a name.
+    enumerations: Vec<Choices>,
     variables: Vec<(Name, Variable)>,
     /// The file's top-level tool tables, in name order.
     tools: Vec<ToolTable>,
@@ -68,6 +71,21 @@ impl Spec {
     #[must_use]
     pub fn mode(&self) -> Option<&ModeRule> {
         self.mode.as_ref()
+    }
+
+    /// Returns the named enumeration called `name`, if the spec declares
+    /// it in an `[enumerations.<name>]` table.
+    #[must_use]
+    pub fn enumeration(&self, name: &EnumerationName) -> Option<&Choices> {
+        self.enumerations
+            .iter()
+            .find(|choices| choices.name() == Some(name))
+    }
+
+    /// Returns each named enumeration the spec declares, in name order,
+    /// including those that no variable uses.
+    pub fn enumerations(&self) -> impl Iterator<Item = &Choices> {
+        self.enumerations.iter()
     }
 
     /// Returns the variable called `name`, if the spec declares it.
@@ -109,8 +127,9 @@ impl Spec {
         Digest::of(self.to_toml().as_bytes())
     }
 
-    /// Returns the spec's canonical form: TOML that lists the mode table and
-    /// then each variable in order, with each field in a fixed order, each
+    /// Returns the spec's canonical form: TOML that lists the mode table,
+    /// then each named enumeration in name order with its values in the
+    /// file's order, and then each variable in order, with each field in a fixed order, each
     /// value in one spelling, and no comments. It leaves out every tool
     /// table, so parsing it returns a spec equal to this one without its
     /// tool tables.
@@ -575,11 +594,14 @@ pub enum SpecProblemKind {
     /// The mode variable is not a setting or inherited variable.
     ModeSource,
     /// A file has `spec`, which makes it a [`Pointer`], and declares
-    /// variables or a mode too.
+    /// variables, enumerations or a mode too.
     PointerDeclares,
     /// A [`Pointer`] is read where a file that declares variables belongs,
     /// such as the file that another pointer names.
     PointerChain,
+    /// A variable's type names an enumeration that the file does not
+    /// declare in an `[enumerations.<name>]` table.
+    EnumerationUndeclared,
 }
 
 impl SpecProblemKind {
@@ -608,6 +630,7 @@ impl SpecProblemKind {
             Self::ModeSource => "starmap::spec::mode_source",
             Self::PointerDeclares => "starmap::spec::pointer_declares",
             Self::PointerChain => "starmap::spec::pointer_chain",
+            Self::EnumerationUndeclared => "starmap::spec::enumeration_undeclared",
         }
     }
 }

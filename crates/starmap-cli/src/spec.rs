@@ -516,6 +516,9 @@ fn hint(kind: SpecProblemKind) -> &'static str {
             "move the declarations to the file that spec names, or remove spec, src and dotenv"
         }
         SpecProblemKind::PointerChain => "point spec at the file that declares the variables",
+        SpecProblemKind::EnumerationUndeclared => {
+            "declare the enumeration in an [enumerations.<name>] table, or correct the name"
+        }
         // `Syntax`, and any kind that a later release adds.
         _ => "fix the line the failure points at",
     }

@@ -1,6 +1,7 @@
 //! The type a variable's value has, the checking types that back it
-//! ([`Port`], [`IntegerRange`], [`Choices`], [`Choice`], [`Pattern`],
-//! [`Schemes`] and [`Scheme`]), and the value a type reads.
+//! ([`Port`], [`IntegerRange`], [`Choices`], [`Choice`],
+//! [`EnumerationName`], [`Pattern`], [`Schemes`] and [`Scheme`]), and the
+//! value a type reads.
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -15,10 +16,12 @@ use url::Url;
 
 use crate::Secret;
 
+mod enumeration;
 mod scheme;
 #[cfg(test)]
 mod tests;
 
+pub use enumeration::{EnumerationName, EnumerationNameError};
 pub use scheme::{Scheme, SchemeError, Schemes, SchemesError};
 
 /// The words the boolean type reads as `true`.
@@ -552,8 +555,17 @@ impl Error for ChoiceError {}
 
 /// The values of an enumeration type: at least one [`Choice`], none of them
 /// repeated, in the order the spec lists them.
+///
+/// The values of a named enumeration, which a spec declares as
+/// `[enumerations.<name>]`, also carry the enumeration's name and a
+/// description of each value. An inline list has neither.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Choices(Vec<Choice>);
+pub struct Choices {
+    choices: Vec<Choice>,
+    /// The name and the descriptions of a named enumeration, with one
+    /// description for each choice, in the same order.
+    named: Option<(EnumerationName, Vec<String>)>,
+}
 
 impl Choices {
     /// Builds the set from `choices`, keeping their order.
@@ -566,23 +578,58 @@ impl Choices {
         if kept.is_empty() {
             return Err(ChoicesError::Empty);
         }
-        Ok(Self(kept))
+        Ok(Self {
+            choices: kept,
+            named: None,
+        })
+    }
+
+    /// Builds the named enumeration `name` from `values`, each a choice
+    /// with its description, keeping their order. The spec parser checks
+    /// each description before it calls this.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ChoicesError`] when there is no value or one repeats.
+    pub(crate) fn named(
+        name: EnumerationName,
+        values: impl IntoIterator<Item = (Choice, String)>,
+    ) -> Result<Self, ChoicesError> {
+        let (choices, descriptions): (Vec<Choice>, Vec<String>) = values.into_iter().unzip();
+        let mut built = Self::new(choices)?;
+        built.named = Some((name, descriptions));
+        Ok(built)
     }
 
     /// Returns the choices in order.
     pub fn iter(&self) -> impl Iterator<Item = &Choice> {
-        self.0.iter()
+        self.choices.iter()
+    }
+
+    /// Returns the name of the enumeration, or `None` for an inline list.
+    #[must_use]
+    pub fn name(&self) -> Option<&EnumerationName> {
+        self.named.as_ref().map(|(name, _)| name)
+    }
+
+    /// Returns the description of `choice` in a named enumeration, or
+    /// `None` for an inline list or a choice that is not one of these.
+    #[must_use]
+    pub fn description(&self, choice: &Choice) -> Option<&str> {
+        let (_, descriptions) = self.named.as_ref()?;
+        let at = self.choices.iter().position(|listed| listed == choice)?;
+        descriptions.get(at).map(String::as_str)
     }
 
     /// Returns the choice that equals `text` exactly, if there is one.
     pub(crate) fn get(&self, text: &str) -> Option<&Choice> {
-        self.0.iter().find(|choice| choice.as_str() == text)
+        self.choices.iter().find(|choice| choice.as_str() == text)
     }
 }
 
 impl fmt::Display for Choices {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_list(formatter, &self.0)
+        write_list(formatter, &self.choices)
     }
 }
 

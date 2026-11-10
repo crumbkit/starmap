@@ -19,6 +19,7 @@ use crate::{
     ProvidedRef, ProviderKind, SecretBind, SecretBytes, SecretRef, Type, Value,
 };
 
+mod enumerations;
 mod lists;
 mod pointer;
 mod tool;
@@ -26,7 +27,7 @@ mod tool;
 pub(super) use pointer::parse_pointer;
 
 /// The keys of the file's top-level table.
-const ROOT_FIELDS: &[&str] = &["mode", "variables", "tool"];
+const ROOT_FIELDS: &[&str] = &["mode", "enumerations", "variables", "tool"];
 /// The keys of the `[mode]` table.
 const MODE_FIELDS: &[&str] = &["variable", "production"];
 /// The keys of a variable's table.
@@ -119,10 +120,12 @@ impl<'a> Field<'a> {
     }
 }
 
-/// The parser's state: the problems it has found so far.
+/// The parser's state: the problems it has found so far, and the
+/// enumerations the file declares, which a variable's type may name.
 #[derive(Default)]
 struct Parser {
     problems: Vec<SpecProblem>,
+    enumerations: enumerations::Declared,
 }
 
 impl Parser {
@@ -140,6 +143,7 @@ impl Parser {
     fn document(&mut self, text: &str) -> Spec {
         let mut spec = Spec {
             mode: None,
+            enumerations: Vec::new(),
             variables: Vec::new(),
             tools: Vec::new(),
         };
@@ -152,6 +156,10 @@ impl Parser {
             return spec;
         }
         self.known(root, "", ROOT_FIELDS);
+        if let Some(field) = root_field(root, "enumerations") {
+            self.enumerations = self.enumerations(&field);
+            spec.enumerations = self.enumerations.values().flatten().cloned().collect();
+        }
         let mut declared = Vec::new();
         if let Some(field) = root_field(root, "variables")
             && let Some(table) = self.table(&field)
@@ -475,10 +483,7 @@ impl Parser {
         match named.as_slice() {
             ["path"] => self.path_type(&field.child(table, "path")?),
             ["integer"] => self.integer_type(&field.child(table, "integer")?),
-            ["enumeration"] => {
-                let enumeration = field.child(table, "enumeration")?;
-                self.choices(&enumeration).map(Type::Enumeration)
-            }
+            ["enumeration"] => self.enumeration_type(&field.child(table, "enumeration")?),
             ["string"] => self.string_type(&field.child(table, "string")?),
             ["url"] => self.url_type(&field.child(table, "url")?),
             // Each unknown key was reported above.

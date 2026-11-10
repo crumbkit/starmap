@@ -11,8 +11,8 @@ use proptest::prelude::*;
 use crate::Secret;
 
 use super::{
-    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Pattern, Port, Schemes, Type,
-    TypeError, Value,
+    Choice, ChoiceError, Choices, ChoicesError, EnumerationName, EnumerationNameError,
+    IntegerRange, Pattern, Port, Schemes, Type, TypeError, Value,
 };
 
 /// The eight words the boolean type accepts, each with the value it reads as.
@@ -229,7 +229,138 @@ fn choices_print_as_a_list() {
     assert_eq!(choices(&["dev", "prod"]).to_string(), "dev, prod");
 }
 
+/// Builds the named enumeration `name` from `values`, each with its
+/// description.
+fn named(name: &str, values: &[(&str, &str)]) -> Choices {
+    let values = values
+        .iter()
+        .map(|(value, description)| (value.parse::<Choice>().unwrap(), (*description).to_owned()));
+    Choices::named(name.parse().unwrap(), values).unwrap()
+}
+
+#[test]
+fn an_enumeration_name_is_lower_case_letters_digits_and_hyphens() {
+    let name: EnumerationName = "log-level2".parse().unwrap();
+
+    assert_eq!(name.as_str(), "log-level2");
+    assert_eq!(name.to_string(), "log-level2");
+}
+
+#[test]
+fn an_enumeration_name_is_refused_when_empty_or_not_starting_with_a_letter() {
+    assert_eq!(
+        "".parse::<EnumerationName>(),
+        Err(EnumerationNameError::Empty)
+    );
+    assert_eq!(
+        "2xx".parse::<EnumerationName>(),
+        Err(EnumerationNameError::Character {
+            character: '2',
+            at: 0
+        })
+    );
+    assert_eq!(
+        "-level".parse::<EnumerationName>(),
+        Err(EnumerationNameError::Character {
+            character: '-',
+            at: 0
+        })
+    );
+}
+
+#[test]
+fn an_enumeration_name_is_refused_at_its_first_upper_case_letter_or_symbol() {
+    assert_eq!(
+        "log_Level".parse::<EnumerationName>(),
+        Err(EnumerationNameError::Character {
+            character: '_',
+            at: 3
+        })
+    );
+    assert_eq!(
+        "logLevel".parse::<EnumerationName>(),
+        Err(EnumerationNameError::Character {
+            character: 'L',
+            at: 3
+        })
+    );
+}
+
+#[test]
+fn a_named_enumeration_keeps_its_name_its_order_and_each_description() {
+    let choices = named(
+        "log-level",
+        &[("warn", "Logs failures."), ("debug", "Logs all.")],
+    );
+    let values: Vec<&str> = choices.iter().map(Choice::as_str).collect();
+    let warn: Choice = "warn".parse().unwrap();
+
+    assert_eq!(
+        choices.name().map(EnumerationName::as_str),
+        Some("log-level")
+    );
+    assert_eq!(values, ["warn", "debug"]);
+    assert_eq!(choices.description(&warn), Some("Logs failures."));
+    assert_eq!(choices.to_string(), "warn, debug");
+}
+
+#[test]
+fn an_inline_enumeration_has_no_name_and_no_descriptions() {
+    let choices = choices(&["dev", "prod"]);
+    let dev: Choice = "dev".parse().unwrap();
+
+    assert_eq!(choices.name(), None);
+    assert_eq!(choices.description(&dev), None);
+}
+
+#[test]
+fn a_named_enumeration_differs_from_the_inline_list_of_its_values() {
+    let inline = choices(&["dev", "prod"]);
+    let named = named("stage", &[("dev", "Local."), ("prod", "Live.")]);
+
+    assert_ne!(inline, named);
+}
+
+#[test]
+fn a_named_enumeration_reads_a_value_as_an_inline_one_does() {
+    let ty = Type::Enumeration(named("stage", &[("dev", "Local."), ("prod", "Live.")]));
+
+    assert_eq!(
+        parse(&ty, "prod"),
+        Ok(Some(Value::Choice("prod".parse().unwrap())))
+    );
+    assert!(matches!(parse(&ty, "test"), Err(TypeError::NotChoice(_))));
+}
+
+#[test]
+fn a_named_enumeration_is_refused_when_it_has_no_values_or_repeats_one() {
+    let name: EnumerationName = "stage".parse().unwrap();
+    let dev: Choice = "dev".parse().unwrap();
+
+    assert_eq!(
+        Choices::named(name.clone(), Vec::new()),
+        Err(ChoicesError::Empty)
+    );
+    assert_eq!(
+        Choices::named(
+            name,
+            [
+                (dev.clone(), "Local.".to_owned()),
+                (dev.clone(), "Again.".to_owned())
+            ]
+        ),
+        Err(ChoicesError::Repeated(dev))
+    );
+}
+
 proptest! {
+    #[test]
+    fn every_lower_case_name_is_an_enumeration_name(text in "[a-z][a-z0-9-]{0,30}") {
+        let name: EnumerationName = text.parse().unwrap();
+
+        prop_assert_eq!(name.as_str(), text.as_str());
+    }
+
     #[test]
     fn every_string_without_whitespace_is_a_choice(text in "\\S{1,40}") {
         let choice: Choice = text.parse().unwrap();

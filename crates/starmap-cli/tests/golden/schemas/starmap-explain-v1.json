@@ -400,6 +400,24 @@
     "failures"
   ],
   "$defs": {
+    "Described": {
+      "description": "One value of a named enumeration with its description.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "description": "The sentence that says what choosing the value means.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "description"
+      ]
+    },
     "Explained": {
       "description": "One declared variable, with its rules and the value it has in this\nshell.",
       "type": "object",
@@ -420,6 +438,13 @@
         },
         "effect": {
           "description": "The sentence that says what the application does when the variable is unset; empty, and left out of `--json`, when the spec states none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enumeration": {
+          "description": "The name of the named enumeration that the variable's type is; left out of `--json` for any other type.",
           "type": [
             "string",
             "null"
@@ -468,6 +493,16 @@
           "required": [
             "state"
           ]
+        },
+        "values": {
+          "description": "Each value of a named enumeration with its description; empty, and left out of `--json`, for any other type.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Described"
+          }
         }
       },
       "required": [
