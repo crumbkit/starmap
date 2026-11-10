@@ -166,6 +166,27 @@ fn a_variable_binds_one_raw_value_by_its_show() {
     ));
 }
 
+#[test]
+fn capture_binds_nothing_for_an_empty_value() {
+    let bindings = capture(
+        &spec(),
+        vars(&[("SHELF_PORT", ""), ("SHELF_MIRROR_TOKEN", "")]),
+    );
+
+    assert!(bindings.get(&name("SHELF_PORT")).is_none());
+    assert!(bindings.get(&name("SHELF_MIRROR_TOKEN")).is_none());
+}
+
+#[test]
+fn an_empty_later_value_leaves_an_earlier_value_in_place() {
+    let bindings = capture(&spec(), vars(&[("SHELF_PORT", "8080"), ("SHELF_PORT", "")]));
+
+    assert!(matches!(
+        bindings.get(&name("SHELF_PORT")),
+        Some(Bound::Plain(value)) if value == "8080"
+    ));
+}
+
 // mode
 
 #[test]
@@ -317,6 +338,89 @@ fn a_relative_value_of_an_absolute_path_counts_as_unset() {
     ]));
 
     assert_eq!(environment.value(&name("XDG_STATE_HOME")), None);
+}
+
+#[test]
+fn an_empty_value_in_the_environment_takes_the_default_of_its_variable() {
+    let environment = ready(verdict(&[
+        ("SHELF_PORT", "8080"),
+        ("SHELF_DEBUG", ""),
+        ("SHELF_ENV", ""),
+    ]));
+
+    assert_eq!(
+        environment.value(&name("SHELF_DEBUG")),
+        Some(&Value::Boolean(false))
+    );
+    assert_eq!(environment.mode(), Mode::Local);
+}
+
+#[test]
+fn an_empty_value_in_the_environment_leaves_an_optional_variable_unset() {
+    let environment = ready(verdict(&[
+        ("SHELF_PORT", "8080"),
+        ("XDG_STATE_HOME", ""),
+        ("SHELF_MIRROR_TOKEN", ""),
+    ]));
+
+    assert_eq!(environment.value(&name("XDG_STATE_HOME")), None);
+    assert!(environment.secret(&name("SHELF_MIRROR_TOKEN")).is_none());
+}
+
+#[test]
+fn an_empty_value_in_the_environment_leaves_a_required_variable_missing() {
+    assert_eq!(
+        findings(verdict(&[("SHELF_PORT", "")])),
+        [finding(
+            "SHELF_PORT",
+            Problem::Missing { mode: Mode::Local }
+        )]
+    );
+}
+
+#[test]
+fn an_empty_value_leaves_a_required_string_missing() {
+    let spec = Spec::parse(
+        r#"
+[variables.SHELF_NAME]
+purpose = "The name shelf shows in its title."
+type = "string"
+unset = "required"
+show = "shown"
+source = "setting"
+"#,
+    )
+    .unwrap();
+    let bindings = capture(&spec, vars(&[("SHELF_NAME", "")]));
+
+    assert_eq!(
+        findings(check(&spec, &bindings, Mode::Local)),
+        [finding(
+            "SHELF_NAME",
+            Problem::Missing { mode: Mode::Local }
+        )]
+    );
+}
+
+#[test]
+fn an_empty_bound_value_counts_as_unset() {
+    let spec = spec();
+    let mut bindings = Bindings::new();
+    bindings.bind(name("SHELF_PORT"), Bound::Plain(OsString::new()));
+    bindings.bind(name("SHELF_ENV"), Bound::Plain(OsString::new()));
+    bindings.bind(
+        name("SHELF_MIRROR_TOKEN"),
+        Bound::Secret(Secret::new(String::new())),
+    );
+
+    assert_eq!(mode(&spec, &bindings), Mode::Local);
+    assert_eq!(
+        findings(check(&spec, &bindings, Mode::Local)),
+        [finding(
+            "SHELF_PORT",
+            Problem::Missing { mode: Mode::Local }
+        )]
+    );
 }
 
 #[test]

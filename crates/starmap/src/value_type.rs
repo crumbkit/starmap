@@ -61,6 +61,11 @@ impl Type {
     /// type needs Unicode text. A value is never trimmed, so a space around
     /// a word makes it a different word.
     ///
+    /// [`check`](crate::check) treats an empty value as unset before any
+    /// type reads it, so this method sees an empty value only when a caller
+    /// passes one directly. It then reads the empty value in the type as
+    /// it reads any other value.
+    ///
     /// # Errors
     ///
     /// Returns [`TypeError`] when the value does not fit the type.

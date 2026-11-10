@@ -124,7 +124,10 @@ pub trait Env: Sized {
     /// Reads `vars` into the struct. The embedded spec gives each
     /// variable's type, its unset rule and its default, and the mode
     /// variable decides the mode. A variable that the spec does not
-    /// declare is ignored.
+    /// declare is ignored. An empty value, such as the value of `FOO=`,
+    /// counts as unset, so an `Option` field reads it as `None`, a field
+    /// with a default reads the default, and a required field refuses the
+    /// read.
     ///
     /// # Errors
     ///

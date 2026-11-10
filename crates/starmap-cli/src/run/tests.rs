@@ -302,6 +302,52 @@ fn set_beats_the_shell_which_beats_dotenv_which_beats_the_default() {
 }
 
 #[test]
+fn an_empty_value_in_dotenv_is_unset_for_starmap_run() {
+    let checkout = Checkout::new(Some("SHELF_PAGE_SIZE=\nXDG_STATE_HOME=\n"));
+    let resolver = FakeResolver::default();
+    let mut person = Person::absent();
+
+    let ready = prepared(&checkout.args(&[]), &[TOKEN], &resolver, &mut person).unwrap();
+    assert_eq!(value(&ready, "SHELF_PAGE_SIZE").as_deref(), Some("20"));
+    assert_eq!(value(&ready, "XDG_STATE_HOME"), None);
+}
+
+#[test]
+fn an_empty_value_in_dotenv_does_not_hide_a_value_from_the_shell() {
+    let checkout = Checkout::new(Some("SHELF_PAGE_SIZE=\n"));
+    let resolver = FakeResolver::default();
+    let mut person = Person::absent();
+
+    let vars = [TOKEN, ("SHELF_PAGE_SIZE", "40")];
+    let ready = prepared(&checkout.args(&[]), &vars, &resolver, &mut person).unwrap();
+    assert_eq!(value(&ready, "SHELF_PAGE_SIZE").as_deref(), Some("40"));
+}
+
+#[test]
+fn an_empty_value_in_the_shell_does_not_hide_a_value_from_dotenv() {
+    let checkout = Checkout::new(Some("SHELF_PAGE_SIZE=30\n"));
+    let resolver = FakeResolver::default();
+    let mut person = Person::absent();
+
+    let vars = [TOKEN, ("SHELF_PAGE_SIZE", "")];
+    let ready = prepared(&checkout.args(&[]), &vars, &resolver, &mut person).unwrap();
+    assert_eq!(value(&ready, "SHELF_PAGE_SIZE").as_deref(), Some("30"));
+}
+
+#[test]
+fn an_empty_secret_in_the_shell_is_refused_as_unbound_when_no_person_can_answer() {
+    let checkout = Checkout::new(None);
+    let refused = prepared(
+        &checkout.args(&[]),
+        &[("SHELF_UPSTREAM_TOKEN", "")],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+    assert_eq!(codes(&refused), [&codes::SECRET_UNBOUND]);
+}
+
+#[test]
 fn a_provided_variable_takes_the_shell_or_dotenv_value_without_a_provider() {
     let checkout = Checkout::new(Some("SHELF_PORT=8081\n"));
     let resolver = FakeResolver::default();

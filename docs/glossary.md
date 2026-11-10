@@ -98,6 +98,15 @@ returns a variable's `UnsetRule`. When the file states no `production`, the
 production rule equals the local one. A stated `production` is `required`
 or `optional`, because a production rule takes no default of its own.
 
+An empty value counts as unset, wherever it comes from: the process
+environment, `.env`, `--set`, a provider or a resolver. So `FOO=` gives a
+variable its default, leaves an optional variable unset, and leaves a
+required variable missing. An empty value in a later layer does not hide a
+value from an earlier one, so `FOO=` in the shell leaves the value that
+`.env` gives `FOO` in place. `starmap::capture` binds nothing for an empty
+value, and `check` treats an empty bound value as unset before any type
+reads it.
+
 ## pointer
 
 A pointer is a `starmap.toml` that names the file that declares the

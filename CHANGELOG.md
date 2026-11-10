@@ -44,6 +44,16 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** an empty value, such as `FOO=`, counts as unset wherever it
+  comes from, so the variable takes its default, stays unset when it is
+  optional, and is missing when it is required. Before, the type decided:
+  a required string accepted `FOO=`, and a port, URL, boolean, integer or
+  enumeration refused it as invalid. An empty value in the shell, `.env` or
+  `--set` no longer hides a value from another of them, and a setting with
+  a path bind expands the bind when the shell holds `FOO=`.
+  `starmap::capture` binds nothing for an empty value, and `starmap::check`
+  treats an empty bound value as unset. `starmap explain` shows the default
+  or `unset` for `FOO=`. The digest of a `starmap.toml` does not change.
 - A `starmap` failure that offers two different repairs prints each one on
   its own `help:` line, and its JSON lists the second one under
   `alternatives`. This covers `--set` of an undeclared or secret variable, a
