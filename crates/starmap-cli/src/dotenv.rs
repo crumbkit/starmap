@@ -8,6 +8,10 @@
 //! is literal and the process environment is never read. Any other line,
 //! such as a value over several lines or an escape in double quotes, is
 //! refused.
+//!
+//! An empty value, such as `NAME=` or `NAME=""`, counts as unset, because
+//! `starmap::capture` binds nothing for it. It therefore does not hide a
+//! value that the process environment or `--set` gives the same variable.
 
 use std::ffi::OsString;
 use std::fmt;

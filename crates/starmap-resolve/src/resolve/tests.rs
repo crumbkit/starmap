@@ -357,6 +357,20 @@ fn a_setting_without_a_caller_value_expands_its_path_bind() {
 }
 
 #[test]
+fn a_setting_whose_caller_value_is_empty_expands_its_path_bind() {
+    let caller = caller(&[("SHELF_DATABASE", "")]);
+    let resolution = resolve(
+        &spec(),
+        Mode::Local,
+        &Context::new(places(), &caller, later()),
+    );
+    assert_eq!(
+        bound(&resolution, "SHELF_DATABASE").as_deref(),
+        Some("plain:/workspace/books.db")
+    );
+}
+
+#[test]
 fn a_path_bind_without_its_place_leaves_an_optional_setting_to_its_default() {
     let caller = caller(&[("SHELF_PORT", "8080")]);
     let places = Places::new(PathBuf::from("/checkout"));
@@ -671,6 +685,28 @@ bind = { provided = "multiverse/token" }
     assert_eq!(
         bound(&resolution, "SHELF_UPSTREAM_TOKEN").as_deref(),
         Some("secret:issued")
+    );
+}
+
+#[test]
+fn an_empty_value_from_a_provider_counts_as_unset_in_check() {
+    let caller = Bindings::new();
+    let ports = FakeProvider::answering("multiverse/port", "");
+    let urls = FakeProvider::answering("multiverse/url", "");
+    let resolver = FakeResolver::answering();
+    let context = Context::new(places(), &caller, later())
+        .provider(&ports)
+        .provider(&urls)
+        .resolver(&resolver);
+    let resolution = resolve(&spec(), Mode::Local, &context);
+
+    let Verdict::Refused(refusals) = starmap::check(&spec(), &resolution.bindings, Mode::Local)
+    else {
+        panic!("the required port has an empty value");
+    };
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_PORT is required in local mode and has no value"
     );
 }
 

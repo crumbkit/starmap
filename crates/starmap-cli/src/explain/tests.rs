@@ -98,6 +98,15 @@ fn a_relative_path_where_an_absolute_one_is_needed_counts_as_unset() {
 }
 
 #[test]
+fn an_empty_value_shows_the_default_or_unset() {
+    assert_eq!(
+        columns("SHELF_DEBUG", &[("SHELF_DEBUG", "")])[4],
+        "false (default)"
+    );
+    assert_eq!(columns("SHELF_PORT", &[("SHELF_PORT", "")])[4], "unset");
+}
+
+#[test]
 fn a_value_that_does_not_fit_its_type_is_marked_invalid() {
     assert_eq!(
         columns("SHELF_DEBUG", &[("SHELF_DEBUG", "maybe")])[4],
