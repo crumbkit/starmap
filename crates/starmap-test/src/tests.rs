@@ -106,7 +106,14 @@ const EVERY_KIND_ALLOW: &[Allow] = &[
 
 /// Returns the report of `E` against `spec`, which must disagree.
 fn report<E: Env>(spec: &str, allow: &[Allow]) -> String {
-    compare(std::any::type_name::<E>(), E::FIELDS, spec, allow).unwrap_err()
+    compare(
+        std::any::type_name::<E>(),
+        "starmap.toml",
+        E::FIELDS,
+        spec,
+        allow,
+    )
+    .unwrap_err()
 }
 
 /// Compares `actual` with the golden file `name` under `tests/golden`, or
@@ -153,11 +160,16 @@ source = "inherited"
 "#
     );
     let allow = [Allow::new("XDG_CONFIG_HOME", "only a dependency reads it")];
-    assert_eq!(compare("Shelf", Shelf::FIELDS, &spec, &allow), Ok(()));
+    assert_eq!(
+        compare("Shelf", "starmap.toml", Shelf::FIELDS, &spec, &allow),
+        Ok(())
+    );
 }
 
 #[test]
-#[should_panic(expected = "disagree in 13 places:\n  SHELF_COLOUR        starmap.toml shows it")]
+#[should_panic(
+    expected = "disagree in 13 places:\n  SHELF_COLOUR        tests/golden/every_kind.toml shows it"
+)]
 fn check_panics_with_the_report() {
     check_allowing::<EveryKind>(EVERY_KIND_ALLOW);
 }

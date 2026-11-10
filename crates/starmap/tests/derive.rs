@@ -62,6 +62,22 @@ fn the_derive_embeds_the_spec_that_the_struct_names() {
 }
 
 #[test]
+fn the_derive_names_the_file_it_embeds() {
+    assert_eq!(ShelfEnv::SPEC_FILE, "tests/example/starmap.toml");
+}
+
+/// A struct over a pointer to the example spec.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/pointer/starmap.toml")]
+struct PointedEnv {}
+
+#[test]
+fn the_derive_follows_a_pointer_and_embeds_the_file_it_names() {
+    assert_eq!(PointedEnv::SPEC, include_str!("example/starmap.toml"));
+    assert_eq!(PointedEnv::SPEC_FILE, "tests/example/starmap.toml");
+}
+
+#[test]
 fn each_field_type_sets_the_shape_presence_and_show_of_its_field() {
     let fields: Vec<_> = ShelfEnv::FIELDS
         .iter()

@@ -1,0 +1,4 @@
+starmap::spec::pointer_chain: the file has `spec`, so it points to another file, and starmap reads variables only from a file that declares them
+  at: 2:1 to 2:5, bytes 61..65
+   2 | spec = "pointer_chain.toml"
+     | ^^^^

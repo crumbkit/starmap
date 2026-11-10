@@ -49,6 +49,10 @@ pub const SPEC_UNKNOWN_PLACEHOLDER: Code = Code::new("starmap", "spec", "unknown
 pub const SPEC_MODE_UNDECLARED: Code = Code::new("starmap", "spec", "mode_undeclared");
 /// The mode variable is not a setting or inherited variable.
 pub const SPEC_MODE_SOURCE: Code = Code::new("starmap", "spec", "mode_source");
+/// A file points to another file with `spec` and declares variables too.
+pub const SPEC_POINTER_DECLARES: Code = Code::new("starmap", "spec", "pointer_declares");
+/// A pointer names a file that is a pointer too.
+pub const SPEC_POINTER_CHAIN: Code = Code::new("starmap", "spec", "pointer_chain");
 /// `explain` names a variable that the spec does not declare.
 pub const VARIABLE_UNKNOWN: Code = Code::new("starmap", "variable", "unknown");
 /// `check` finds source code that reads a variable the spec does not
@@ -112,6 +116,8 @@ pub const ALL: &[&Code] = &[
     &SPEC_UNKNOWN_PLACEHOLDER,
     &SPEC_MODE_UNDECLARED,
     &SPEC_MODE_SOURCE,
+    &SPEC_POINTER_DECLARES,
+    &SPEC_POINTER_CHAIN,
     &VARIABLE_UNKNOWN,
     &VARIABLE_UNDECLARED,
     &SOURCE_UNREADABLE,

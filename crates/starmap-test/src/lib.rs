@@ -12,7 +12,9 @@
 //!
 //! The check reads the spec that the struct embeds, [`Env::SPEC`], which
 //! is the file the struct reads at run time, so a test cannot check the
-//! struct against another file.
+//! struct against another file. Each message names that file by
+//! [`Env::SPEC_FILE`], which is the file a pointer names when the struct's
+//! `starmap.toml` is a pointer.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -79,16 +81,22 @@ pub fn check<E: Env>() {
 )]
 pub fn check_allowing<E: Env>(allow: &[Allow]) {
     let type_name = std::any::type_name::<E>();
-    if let Err(report) = compare(type_name, E::FIELDS, E::SPEC, allow) {
+    if let Err(report) = compare(type_name, E::SPEC_FILE, E::FIELDS, E::SPEC, allow) {
         panic!("{report}");
     }
 }
 
 /// Returns the report of every disagreement between the struct `type_name`
-/// with `fields` and the spec `text`, or `Ok` when they agree.
-fn compare(type_name: &str, fields: &[Field], text: &str, allow: &[Allow]) -> Result<(), String> {
-    let spec =
-        Spec::parse(text).map_err(|error| format!("starmap.toml does not parse: {error}"))?;
+/// with `fields` and the spec `text`, read from `file`, or `Ok` when they
+/// agree. Each message names `file`.
+fn compare(
+    type_name: &str,
+    file: &str,
+    fields: &[Field],
+    text: &str,
+    allow: &[Allow],
+) -> Result<(), String> {
+    let spec = Spec::parse(text).map_err(|error| format!("{file} does not parse: {error}"))?;
     let mut found: Vec<(&str, String)> = Vec::new();
     for field in fields {
         let variable = field
@@ -98,7 +106,7 @@ fn compare(type_name: &str, fields: &[Field], text: &str, allow: &[Allow]) -> Re
             .and_then(|name| spec.variable(&name));
         match variable {
             Some(variable) => {
-                let messages = disagreements(field, variable, spec.mode().is_some());
+                let messages = disagreements(file, field, variable, spec.mode().is_some());
                 found.extend(messages.into_iter().map(|message| (field.name, message)));
             }
             None => found.push((
@@ -114,7 +122,7 @@ fn compare(type_name: &str, fields: &[Field], text: &str, allow: &[Allow]) -> Re
         if !read.contains(name) && !allowed.contains(name) {
             found.push((
                 name,
-                "starmap.toml declares it, and the struct neither reads it nor has an Allow entry for it".to_owned(),
+                format!("{file} declares it, and the struct neither reads it nor has an Allow entry for it"),
             ));
         }
     }
@@ -124,9 +132,9 @@ fn compare(type_name: &str, fields: &[Field], text: &str, allow: &[Allow]) -> Re
             .parse()
             .is_ok_and(|name| spec.variable(&name).is_some());
         let why = if read.contains(entry.name) {
-            "the struct reads it"
+            "the struct reads it".to_owned()
         } else if !declared {
-            "starmap.toml does not declare it"
+            format!("{file} does not declare it")
         } else {
             continue;
         };
@@ -142,7 +150,7 @@ fn compare(type_name: &str, fields: &[Field], text: &str, allow: &[Allow]) -> Re
     let width = found.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
     let places = if found.len() == 1 { "place" } else { "places" };
     let mut report = format!(
-        "starmap.toml and {type_name} disagree in {} {places}:",
+        "{file} and {type_name} disagree in {} {places}:",
         found.len()
     );
     for (name, message) in found {
@@ -152,22 +160,22 @@ fn compare(type_name: &str, fields: &[Field], text: &str, allow: &[Allow]) -> Re
     Err(report)
 }
 
-/// Returns each way `field` disagrees with its `variable`. `has_mode` says
-/// whether the spec has a `[mode]` table, without which the variable is
-/// only ever read in local mode.
-fn disagreements(field: &Field, variable: &Variable, has_mode: bool) -> Vec<String> {
+/// Returns each way `field` disagrees with its `variable`, which `file`
+/// declares. `has_mode` says whether the spec has a `[mode]` table, without
+/// which the variable is only ever read in local mode.
+fn disagreements(file: &str, field: &Field, variable: &Variable, has_mode: bool) -> Vec<String> {
     let rust_type = field.rust_type;
     let mut found = Vec::new();
     match (variable.show(), field.show) {
         (Show::Withheld, Show::Shown) => found.push(format!(
-            "starmap.toml withholds it, and the field type {rust_type} is not starmap::Secret"
+            "{file} withholds it, and the field type {rust_type} is not starmap::Secret"
         )),
         (Show::Shown, Show::Withheld) => found.push(format!(
-            "starmap.toml shows it, and the field type {rust_type} holds a withheld value"
+            "{file} shows it, and the field type {rust_type} holds a withheld value"
         )),
         _ => {}
     }
-    found.extend(shape(field, variable.value_type()));
+    found.extend(shape(file, field, variable.value_type()));
     let modes: &[Mode] = if has_mode {
         &[Mode::Local, Mode::Production]
     } else {
@@ -180,19 +188,20 @@ fn disagreements(field: &Field, variable: &Variable, has_mode: bool) -> Vec<Stri
         .collect();
     match (field.presence, unset_in.is_empty()) {
         (Presence::Always, false) => found.push(format!(
-            "starmap.toml lets it stay unset in {}, and the field type {rust_type} is not inside an Option",
+            "{file} lets it stay unset in {}, and the field type {rust_type} is not inside an Option",
             unset_in.join(" and ")
         )),
         (Presence::Maybe, true) => found.push(format!(
-            "starmap.toml always gives it a value, and the field type Option<{rust_type}> holds an unset value"
+            "{file} always gives it a value, and the field type Option<{rust_type}> holds an unset value"
         )),
         _ => {}
     }
     found
 }
 
-/// Returns each way the shape of `field` cannot hold a value of `ty`.
-fn shape(field: &Field, ty: &Type) -> Vec<String> {
+/// Returns each way the shape of `field` cannot hold a value of `ty`, which
+/// `file` declares.
+fn shape(file: &str, field: &Field, ty: &Type) -> Vec<String> {
     let rust_type = field.rust_type;
     match (field.shape, ty) {
         (Shape::Path, Type::Path { .. })
@@ -206,13 +215,13 @@ fn shape(field: &Field, ty: &Type) -> Vec<String> {
             let mut found = Vec::new();
             if range.max() > max {
                 found.push(format!(
-                    "starmap.toml allows up to {}, and the field type {rust_type} holds at most {max}",
+                    "{file} allows up to {}, and the field type {rust_type} holds at most {max}",
                     range.max()
                 ));
             }
             if range.min() < min {
                 found.push(format!(
-                    "starmap.toml allows down to {}, and the field type {rust_type} holds at least {min}",
+                    "{file} allows down to {}, and the field type {rust_type} holds at least {min}",
                     range.min()
                 ));
             }
@@ -222,11 +231,13 @@ fn shape(field: &Field, ty: &Type) -> Vec<String> {
             .iter()
             .filter(|choice| !values.contains(&choice.as_str()))
             .map(|choice| {
-                format!("starmap.toml allows {choice}, and the field type {rust_type} has no value {choice}")
+                format!(
+                    "{file} allows {choice}, and the field type {rust_type} has no value {choice}"
+                )
             })
             .collect(),
         (shape, ty) => vec![format!(
-            "starmap.toml types it as {}, and the field type {rust_type} holds {}",
+            "{file} types it as {}, and the field type {rust_type} holds {}",
             ty,
             shape_words(shape)
         )],

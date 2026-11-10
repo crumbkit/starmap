@@ -6,7 +6,7 @@ Usage: starmap init [OPTIONS]
 
 Options:
       --spec <FILE>
-          Write the spec to this file, and scan the src directory beside it
+          Write the spec to this file, and scan the src directory beside it; for a pointer, write the file it names and scan the directories it lists
           
           [default: starmap.toml]
 

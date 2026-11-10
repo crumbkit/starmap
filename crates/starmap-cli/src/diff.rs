@@ -125,8 +125,8 @@ impl std::error::Error for RevisionFailure {
     }
 }
 
-/// Reads the spec that `--spec` names and the spec that the revision holds
-/// at the same path, and returns one change for each variable that was
+/// Reads the spec that `--spec` names, through its pointer when it holds
+/// one, and the spec that the revision holds at the same path, and returns one change for each variable that was
 /// added or removed and for each field that changed, in name order. A
 /// revision without the file counts as an empty spec. The note names the
 /// revision and its commit.
@@ -136,9 +136,9 @@ impl std::error::Error for RevisionFailure {
 /// Returns a [`crumbkit::Error`] when either spec cannot be read or parsed, and when
 /// git cannot read the revision.
 pub(crate) fn diff(args: &DiffArgs) -> Result<Listing<Change>, crumbkit::Error> {
-    let path = &args.file.spec;
+    let spec::Opened { spec: now, located } = spec::open(&args.file.spec)?;
+    let path = &located.file;
     let file = path.display().to_string();
-    let now = spec::load(path)?;
     let revision = args.revision.as_str();
     let dir = match path.parent() {
         Some(dir) if !dir.as_os_str().is_empty() => dir,

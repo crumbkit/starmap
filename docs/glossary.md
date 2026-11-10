@@ -97,3 +97,34 @@ words).
 returns a variable's `UnsetRule`. When the file states no `production`, the
 production rule equals the local one. A stated `production` is `required`
 or `optional`, because a production rule takes no default of its own.
+
+## pointer
+
+A pointer is a `starmap.toml` that names the file that declares the
+variables, in place of declaring them itself. A file is a pointer when its
+top level has the key `spec`. The Rust API names it `starmap::Pointer`, and
+`Pointer::parse` returns it, or nothing for a file without `spec`.
+
+```toml
+spec = "config/environment.toml"
+src = ["src"]
+dotenv = ".env"
+```
+
+Each path is relative to the directory of the pointer file. `spec` is the
+declaration file. `src` lists the directories whose source `starmap init`
+and `starmap check` scan, is `["src"]` when the pointer leaves it out, and
+scans nothing when it is an empty list.
+`dotenv` is the file that `starmap run` reads values from, and is `.env`
+when the pointer leaves it out. `starmap init`, `check`, `explain`, `diff`
+and `run` follow a pointer as if `--spec` named the declaration file, and
+`#[derive(Env)]` embeds the declaration file and names it in
+`Env::SPEC_FILE`. `starmap run` keeps the pointer's directory as the
+checkout.
+
+A file either points or declares. A pointer that also has `variables` or
+`mode` fails with `starmap::spec::pointer_declares`. A pointer reached where
+a declaration file belongs, such as the file that another pointer names,
+fails with `starmap::spec::pointer_chain`, so starmap follows at most one
+pointer. A pointer has no digest of its own, and `starmap check` prints the
+digest of the declaration file.

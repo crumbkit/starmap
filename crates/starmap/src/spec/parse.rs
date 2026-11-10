@@ -20,6 +20,10 @@ use crate::{
     Type, Value,
 };
 
+mod pointer;
+
+pub(super) use pointer::parse_pointer;
+
 /// The keys of the file's top-level table.
 const ROOT_FIELDS: &[&str] = &["mode", "variables"];
 /// The keys of the `[mode]` table.
@@ -137,27 +141,14 @@ impl Parser {
             mode: None,
             variables: Vec::new(),
         };
-        if text.len() > Spec::MAX_BYTES {
-            let message = format!(
-                "the file has {} bytes, and the limit is {} bytes",
-                text.len(),
-                Spec::MAX_BYTES
-            );
-            self.report(0..0, Kind::TooLarge, message);
+        let Some(document) = self.toml(text) else {
             return spec;
-        }
-        let document = match Document::parse(text) {
-            Ok(document) => document,
-            Err(error) => {
-                // BASE-37: the message copies toml_edit's text and drops the
-                // error itself. A typed detail on SpecProblem replaces it if
-                // a caller needs the cause.
-                let message = format!("the file is not valid toml: {}", error.message().trim());
-                self.report(span(error.span()), Kind::Syntax, message);
-                return spec;
-            }
         };
         let root = document.as_table();
+        if let Some(field) = root_field(root, "spec") {
+            self.points(root, &field);
+            return spec;
+        }
         self.known(root, "", ROOT_FIELDS);
         let mut declared = Vec::new();
         if let Some(field) = root_field(root, "variables")
@@ -183,6 +174,31 @@ impl Parser {
             spec.mode = self.mode(&field, &declared, &spec.variables);
         }
         spec
+    }
+
+    /// Returns the TOML document of `text`, or reports that the text is
+    /// over [`Spec::MAX_BYTES`] or is not TOML.
+    fn toml<'t>(&mut self, text: &'t str) -> Option<Document<&'t str>> {
+        if text.len() > Spec::MAX_BYTES {
+            let message = format!(
+                "the file has {} bytes, and the limit is {} bytes",
+                text.len(),
+                Spec::MAX_BYTES
+            );
+            self.report(0..0, Kind::TooLarge, message);
+            return None;
+        }
+        match Document::parse(text) {
+            Ok(document) => Some(document),
+            Err(error) => {
+                // BASE-37: the message copies toml_edit's text and drops the
+                // error itself. A typed detail on SpecProblem replaces it if
+                // a caller needs the cause.
+                let message = format!("the file is not valid toml: {}", error.message().trim());
+                self.report(span(error.span()), Kind::Syntax, message);
+                None
+            }
+        }
     }
 
     /// Reports each key of `table` that is not in `known`. `path` is the

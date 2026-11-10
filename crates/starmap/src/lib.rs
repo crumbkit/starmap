@@ -62,7 +62,8 @@ pub use mode::{Mode, ModeRule};
 pub use name::{Name, NameError};
 pub use secret::Secret;
 pub use spec::{
-    Digest, Show, Source, Spec, SpecError, SpecProblem, SpecProblemKind, Unset, UnsetRule, Variable,
+    Digest, Pointer, Show, Source, Spec, SpecError, SpecProblem, SpecProblemKind, Unset, UnsetRule,
+    Variable,
 };
 pub use url;
 pub use value_type::{
@@ -79,7 +80,9 @@ pub use starmap_derive::Enumeration;
 ///
 /// The derive embeds the `starmap.toml` in the root of the crate, or the
 /// file that `#[starmap(spec = "config/starmap.toml")]` on the struct
-/// names, relative to the crate root. Each field names its variable with
+/// names, relative to the crate root. When that file is a [`Pointer`], the
+/// derive embeds the file that the pointer names, and a pointer that also
+/// declares variables, or names another pointer, fails to compile. Each field names its variable with
 /// `#[starmap("NAME")]`, and its type is one of `PathBuf`,
 /// [`Port`], `url::Url`, `std::net::SocketAddr`, `bool`, an integer type
 /// of at most 64 bits, `String`, `OsString`, [`Secret`] or a type
@@ -101,6 +104,10 @@ pub mod __private {
 pub trait Env: Sized {
     /// The text of the embedded `starmap.toml`.
     const SPEC: &'static str;
+    /// The path of the file whose text [`Env::SPEC`] holds, relative to the
+    /// crate root, such as `starmap.toml`. When the struct's file is a
+    /// [`Pointer`], it is the file that the pointer names.
+    const SPEC_FILE: &'static str;
     /// The struct's fields, in the order the struct lists them.
     const FIELDS: &'static [Field];
 

@@ -4,7 +4,6 @@
 
 use std::ffi::OsString;
 use std::fmt;
-use std::path::Path;
 
 use crumbkit::{Document, Failure, Prose, Recovery};
 use schemars::JsonSchema;
@@ -14,7 +13,7 @@ use starmap::{Mode, Name};
 use crate::cli::CheckArgs;
 use crate::codes::VARIABLE_UNDECLARED;
 use crate::mode;
-use crate::scan;
+use crate::scan::{self, Dirs};
 use crate::spec;
 
 /// The document that `starmap check` prints.
@@ -28,7 +27,7 @@ pub(crate) const CHECK: Document<Prose<Checked, Undeclared>> = Document::new(
 /// A spec that follows every rule of the file.
 #[derive(Debug, Serialize, JsonSchema)]
 pub(crate) struct Checked {
-    /// The path of the spec, as the caller gave it.
+    /// The path of the file that declares the variables: the file the caller gave, or the file its pointer names.
     spec: String,
     /// The SHA-256 digest of the spec's canonical form, as `sha256:<hex>`.
     digest: String,
@@ -38,9 +37,17 @@ pub(crate) struct Checked {
     read: u64,
     /// The variables that src reads and the spec does not declare, each of which is also a failure.
     undeclared: Vec<String>,
-    /// The src directory that check scanned, beside the spec.
+    /// The source directories that check scanned, as a sentence names
+    /// them.
     #[serde(skip)]
     src: String,
+    /// The verb that agrees with `src`: `reads` or `read`.
+    #[serde(skip)]
+    src_verb: &'static str,
+    /// Whether the pointer lists no source directory, so check scanned
+    /// nothing.
+    #[serde(skip)]
+    scanned_nothing: bool,
     /// The mode that this shell's values decide.
     mode: ModeWord,
 }
@@ -74,6 +81,13 @@ impl fmt::Display for Checked {
         } else {
             "variables"
         };
+        if self.scanned_nothing {
+            return write!(
+                formatter,
+                "{} declares {declared} {noun}, and no source directory is scanned.",
+                self.spec
+            );
+        }
         let reads = match read {
             1 if declared == 1 => "it".to_owned(),
             0 => "none of them".to_owned(),
@@ -82,8 +96,8 @@ impl fmt::Display for Checked {
         };
         write!(
             formatter,
-            "{} declares {declared} {noun}, and {} reads {reads}.",
-            self.spec, self.src
+            "{} declares {declared} {noun}, and {} {} {reads}.",
+            self.spec, self.src, self.src_verb
         )
     }
 }
@@ -118,8 +132,8 @@ impl fmt::Display for Undeclared {
 
 impl std::error::Error for Undeclared {}
 
-/// Reads and parses the spec that `--spec` names, scans the src directory
-/// beside it, and decides the mode from `vars`, the process environment.
+/// Reads and parses the spec that `--spec` names, through its pointer when
+/// it holds one, scans the source directories that go with it, and decides the mode from `vars`, the process environment.
 /// The note names the reason for the mode, and each variable that src
 /// reads and the spec does not declare is a failure.
 ///
@@ -131,11 +145,9 @@ pub(crate) fn check(
     args: &CheckArgs,
     vars: Vec<(OsString, OsString)>,
 ) -> Result<Prose<Checked, Undeclared>, crumbkit::Error> {
-    let path = &args.file.spec;
-    let file = path.display().to_string();
-    let spec = spec::load(path)?;
-    let src = path.parent().unwrap_or(Path::new("")).join("src");
-    let reads = scan::scan(&src)?;
+    let spec::Opened { spec, located } = spec::open(&args.file.spec)?;
+    let file = located.file.display().to_string();
+    let reads = scan::scan_all(&located.src)?;
     let bindings = starmap::capture(&spec, vars);
     let (mode, note) = mode::decide(&spec, &bindings);
     let mut read = 0;
@@ -157,7 +169,9 @@ pub(crate) fn check(
         variables: u64::try_from(spec.variables().count()).unwrap_or(u64::MAX),
         read,
         undeclared: undeclared.iter().map(|u| u.name.to_string()).collect(),
-        src: src.display().to_string(),
+        src: Dirs(&located.src).to_string(),
+        src_verb: Dirs(&located.src).verb("reads", "read"),
+        scanned_nothing: Dirs(&located.src).is_empty(),
         spec: file,
         mode: mode.into(),
     };

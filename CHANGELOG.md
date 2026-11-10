@@ -6,6 +6,26 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A `starmap.toml` can point to the file that declares the variables, with
+  `spec = "config/environment.toml"` and the optional `src = ["src"]` and
+  `dotenv = ".env"`, each relative to the pointer file. `starmap init`,
+  `check`, `explain`, `diff` and `run` follow the pointer as if `--spec`
+  named that file, scan the listed source directories and read the named
+  `.env` file. `init` writes a missing declaration file that a pointer
+  names. `#[derive(Env)]` embeds the file that the pointer names. starmap
+  refuses a file that both points and declares
+  (`starmap::spec::pointer_declares`) and a pointer to another pointer
+  (`starmap::spec::pointer_chain`). The digest of a file that declares
+  variables does not change.
+- `starmap::Pointer::parse` reads a pointer, and `Spec::parse` refuses one
+  with `starmap::spec::pointer_chain`.
+- **Breaking:** the `Env` trait has the associated constant `SPEC_FILE`,
+  the path of the embedded file relative to the crate root, which
+  `#[derive(Env)]` sets. A hand-written `Env` impl must add it. starmap-test
+  names that file in its messages where it named `starmap.toml`.
+
 ### Fixed
 
 - `starmap diff` no longer accepts a git run that exits before its output

@@ -11,6 +11,7 @@ use syn::{DeriveInput, parse_macro_input};
 
 mod enumeration;
 mod env;
+mod pointer;
 
 /// Derives `starmap::Env` for a struct whose fields each read one variable.
 /// starmap's re-export documents the attributes.

@@ -10,7 +10,9 @@ use crate::spec;
 
 /// Returns the example spec in `crates/starmap/tests/example/starmap.toml`.
 fn example() -> Spec {
-    spec::load(Path::new("../starmap/tests/example/starmap.toml")).unwrap()
+    spec::open(Path::new("../starmap/tests/example/starmap.toml"))
+        .unwrap()
+        .spec
 }
 
 /// Returns the text of each column of the row of `name`, with `vars` as
