@@ -519,12 +519,16 @@ pub enum SpecProblemKind {
     BadDefault,
     /// An integer type's minimum is above its maximum.
     BadRange,
+    /// A string type's pattern is over [`Pattern::MAX_BYTES`](crate::Pattern::MAX_BYTES)
+    /// or does not compile.
+    BadPattern,
     /// An enumeration, or the mode's production list, has no values or
     /// repeats one.
     EmptyEnumeration,
     /// A secret or generated variable is shown.
     ShownSecret,
-    /// A withheld variable has a type other than string and bytes.
+    /// A withheld variable has a type other than string, with or without a
+    /// pattern, and bytes.
     WithheldType,
     /// A withheld variable has a default, which `starmap.toml` would hold in
     /// plain text.
@@ -565,6 +569,7 @@ impl SpecProblemKind {
             Self::Guess => "starmap::spec::guess",
             Self::BadDefault => "starmap::spec::bad_default",
             Self::BadRange => "starmap::spec::bad_range",
+            Self::BadPattern => "starmap::spec::bad_pattern",
             Self::EmptyEnumeration => "starmap::spec::empty_enumeration",
             Self::ShownSecret => "starmap::spec::shown_secret",
             Self::WithheldType => "starmap::spec::withheld_type",
@@ -598,7 +603,7 @@ const TYPE_WORDS: &[(&str, Type)] = &[
     ("url", Type::Url),
     ("socket-address", Type::SocketAddress),
     ("boolean", Type::Boolean),
-    ("string", Type::String),
+    ("string", Type::String { pattern: None }),
 ];
 /// The words a bytes type's `encoding` takes.
 const ENCODING_WORDS: &[(&str, Encoding)] = &[

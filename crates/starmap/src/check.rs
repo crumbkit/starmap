@@ -192,16 +192,18 @@ fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
             .map(|value| value.map(Held::Shown))
             .map_err(Problem::Invalid),
         // A withheld variable has the type string or bytes, which the spec
-        // parser checks. A string takes any text that a Secret holds. A
-        // bytes value is decoded inside the secret and its bytes are held
-        // beside the text, and its refusal names only the encoding or the
-        // length.
+        // parser checks. A bytes value is decoded inside the secret and its
+        // bytes are held beside the text. A string with a pattern is matched
+        // inside the secret. Each refusal names only the rule.
         (Show::Withheld, Bound::Secret(secret)) => match variable.value_type() {
             Type::Bytes(rule) => {
                 let bytes = secret.decode(*rule).map_err(Problem::Invalid)?;
                 Ok(Some(Held::WithheldBytes(secret.duplicate(), bytes)))
             }
-            _ => Ok(Some(Held::Withheld(secret.duplicate()))),
+            ty => {
+                ty.check_secret(secret).map_err(Problem::Invalid)?;
+                Ok(Some(Held::Withheld(secret.duplicate())))
+            }
         },
         (Show::Withheld, Bound::NotUnicode) => Err(Problem::Invalid(TypeError::NotUnicode)),
         (show, _) => Err(Problem::ShowMismatch { show }),

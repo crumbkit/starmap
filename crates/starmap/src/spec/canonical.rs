@@ -82,6 +82,9 @@ fn value_type(value_type: &Type) -> Toml {
                 ]),
             )])
         }
+        Type::String {
+            pattern: Some(pattern),
+        } => inline([("string", inline([("pattern", pattern.as_str().into())]))]),
         word => word_of(TYPE_WORDS, word).into(),
     }
 }

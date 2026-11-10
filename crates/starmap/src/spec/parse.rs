@@ -17,8 +17,8 @@ use super::{
 use crate::bind::BIND_KINDS;
 use crate::{
     ByteCount, ByteLength, ByteRule, BytesError, Cache, Choice, Choices, ChoicesError,
-    IntegerRange, ModeRule, Name, OnePasswordRef, PathTemplate, PathTemplateError, ProvidedRef,
-    ProviderKind, SecretBind, SecretRef, Type, Value,
+    IntegerRange, ModeRule, Name, OnePasswordRef, PathTemplate, PathTemplateError, Pattern,
+    ProvidedRef, ProviderKind, SecretBind, SecretRef, Type, Value,
 };
 
 mod pointer;
@@ -35,7 +35,7 @@ const VARIABLE_FIELDS: &[&str] = &[
     "purpose", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
 /// The keys of a type table.
-const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "bytes"];
+const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "string", "bytes"];
 /// The keys of an unset table.
 const UNSET_FIELDS: &[&str] = &["local", "default", "production"];
 
@@ -385,11 +385,11 @@ impl Parser {
             self.report(show.span(), Kind::ShownSecret, message);
         }
         if let (Some((Show::Withheld, _)), Some((ty, type_field))) = (&show, &ty)
-            && !matches!(ty, Type::String | Type::Bytes(_))
+            && !matches!(ty, Type::String { .. } | Type::Bytes(_))
         {
             let message = format!(
                 "`{}` is not \"string\" or a bytes type, and a withheld variable has the type \
-                 string or bytes",
+                 string, with or without a pattern, or bytes",
                 type_field.path
             );
             self.report(type_field.span(), Kind::WithheldType, message);
@@ -468,13 +468,14 @@ impl Parser {
                 let enumeration = field.child(table, "enumeration")?;
                 self.choices(&enumeration).map(Type::Enumeration)
             }
+            ["string"] => self.string_type(&field.child(table, "string")?),
             ["bytes"] => self.bytes_type(&field.child(table, "bytes")?),
             // Each unknown key was reported above.
             [] if !table.is_empty() => None,
             [] => {
                 let message = format!(
-                    "`{}` is an empty table, and it takes one of path, integer, enumeration and \
-                     bytes",
+                    "`{}` is an empty table, and it takes one of path, integer, enumeration, \
+                     string and bytes",
                     field.path
                 );
                 self.report(field.span(), Kind::MissingField, message);
@@ -504,6 +505,27 @@ impl Parser {
             self.wrong_type(&absolute, "true or false");
         }
         Some(Type::Path { absolute: value? })
+    }
+
+    /// Parses `{ string = { pattern = .. } }`, whose pattern is optional.
+    fn string_type(&mut self, field: &Field<'_>) -> Option<Type> {
+        let table = self.table(field)?;
+        self.known(table, &field.path, &["pattern"]);
+        let Some(pattern) = field.child(table, "pattern") else {
+            return Some(Type::String { pattern: None });
+        };
+        let text = self.string(&pattern)?;
+        let parsed = text.parse::<Pattern>();
+        let pattern = self.checked(
+            pattern.span(),
+            &pattern.path,
+            text,
+            Kind::BadPattern,
+            parsed,
+        )?;
+        Some(Type::String {
+            pattern: Some(pattern),
+        })
     }
 
     /// Parses `{ integer = { min = .., max = .. } }`.

@@ -183,6 +183,46 @@ fn a_socket_address_is_named_as_its_type_and_shows_its_value() {
     assert_eq!(default.value.to_string(), "0.0.0.0:8080 (default)");
 }
 
+#[test]
+fn a_string_with_a_pattern_shows_the_pattern_in_its_type() {
+    let spec = Spec::parse(
+        "[variables.SHELF_REVISION]\npurpose = \"The revision.\"\n\
+         type = { string = { pattern = \"[0-9a-f]{40}\" } }\nunset = \"optional\"\n\
+         show = \"shown\"\nsource = \"setting\"\n",
+    )
+    .unwrap();
+    let name: Name = "SHELF_REVISION".parse().unwrap();
+    let bindings = starmap::capture(&spec, Vec::<(OsString, OsString)>::new());
+
+    let row = row(&spec, "starmap.toml", &bindings, name).unwrap();
+
+    assert_eq!(row.kind, "string matching [0-9a-f]{40}");
+}
+
+#[test]
+fn a_withheld_value_that_does_not_match_its_pattern_is_marked_invalid_without_its_text() {
+    let spec = Spec::parse(
+        "[variables.SHELF_MIRROR_KEY]\npurpose = \"The mirror key.\"\n\
+         type = { string = { pattern = \"sk-[a-z0-9]+\" } }\nunset = \"required\"\n\
+         show = \"withheld\"\nsource = \"secret\"\n",
+    )
+    .unwrap();
+    let name: Name = "SHELF_MIRROR_KEY".parse().unwrap();
+    let value = |text: &str| {
+        let vars = [(OsString::from("SHELF_MIRROR_KEY"), OsString::from(text))];
+        let bindings = starmap::capture(&spec, vars);
+        row(&spec, "starmap.toml", &bindings, name.clone())
+            .unwrap()
+            .value
+            .to_string()
+    };
+
+    assert_eq!(value("sk-abc123"), "\u{2022}".repeat(8));
+    let refused = value("pk-hidden-value");
+    assert_eq!(refused, format!("{} (invalid)", "\u{2022}".repeat(8)));
+    assert!(!refused.contains("pk-hidden-value"));
+}
+
 /// Returns the `bind` and `cache` fields that `starmap explain --json`
 /// prints for the one secret whose bind is `bind`.
 fn secret_bind(bind: &str) -> (serde_json::Value, serde_json::Value) {

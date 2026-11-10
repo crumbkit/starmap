@@ -26,7 +26,7 @@ const CANONICAL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/example/cano
 
 /// Every problem kind. A kind added to `SpecProblemKind` belongs here too,
 /// with a fixture or a test of its own that writes its golden.
-const KINDS: [SpecProblemKind; 20] = [
+const KINDS: [SpecProblemKind; 21] = [
     SpecProblemKind::TooLarge,
     SpecProblemKind::Syntax,
     SpecProblemKind::UnknownField,
@@ -36,6 +36,7 @@ const KINDS: [SpecProblemKind; 20] = [
     SpecProblemKind::Guess,
     SpecProblemKind::BadDefault,
     SpecProblemKind::BadRange,
+    SpecProblemKind::BadPattern,
     SpecProblemKind::EmptyEnumeration,
     SpecProblemKind::ShownSecret,
     SpecProblemKind::WithheldType,
@@ -188,7 +189,7 @@ fn the_example_spec_reads_each_type() {
     assert_eq!(ty("SHELF_DATABASE"), Type::Path { absolute: false });
     assert_eq!(ty("XDG_STATE_HOME"), Type::Path { absolute: true });
     assert_eq!(ty("SHELF_DEBUG"), Type::Boolean);
-    assert_eq!(ty("SHELF_MIRROR_TOKEN"), Type::String);
+    assert_eq!(ty("SHELF_MIRROR_TOKEN"), Type::String { pattern: None });
     assert_eq!(
         ty("SHELF_PAGE_SIZE"),
         Type::Integer(IntegerRange::new(1, 100).unwrap())
@@ -462,6 +463,121 @@ fn a_withheld_setting_must_have_the_type_string() {
     );
 
     assert_eq!(kinds(&text), [SpecProblemKind::WithheldType]);
+}
+
+/// Returns a spec with one shown setting whose type is `ty` and whose
+/// unset rule is `unset`.
+fn typed(ty: &str, unset: &str) -> String {
+    one(&format!(
+        "purpose = \"The revision shelf serves.\"\ntype = {ty}\nunset = {unset}\n\
+         show = \"shown\"\nsource = \"setting\""
+    ))
+}
+
+#[test]
+fn a_string_type_table_reads_its_pattern() {
+    let spec = spec(&typed(
+        "{ string = { pattern = \"[0-9a-f]{40}\" } }",
+        "\"required\"",
+    ));
+
+    assert_eq!(
+        spec.variable(&name("SHELF_X")).unwrap().value_type(),
+        &Type::String {
+            pattern: Some("[0-9a-f]{40}".parse().unwrap())
+        }
+    );
+}
+
+#[test]
+fn an_empty_string_type_table_is_a_string_without_a_pattern() {
+    let table = spec(&typed("{ string = {} }", "\"required\""));
+    let word = spec(&typed("\"string\"", "\"required\""));
+
+    assert_eq!(
+        table.variable(&name("SHELF_X")).unwrap().value_type(),
+        &Type::String { pattern: None }
+    );
+    assert_eq!(table.digest(), word.digest());
+}
+
+#[test]
+fn a_pattern_that_does_not_compile_is_a_bad_pattern() {
+    let text = typed("{ string = { pattern = \"[0-9\" } }", "\"required\"");
+
+    assert_eq!(kinds(&text), [SpecProblemKind::BadPattern]);
+}
+
+#[test]
+fn a_pattern_over_1024_bytes_is_a_bad_pattern() {
+    let ty = format!("{{ string = {{ pattern = \"{}\" }} }}", "a".repeat(1025));
+
+    assert_eq!(
+        kinds(&typed(&ty, "\"required\"")),
+        [SpecProblemKind::BadPattern]
+    );
+}
+
+#[test]
+fn a_string_type_table_refuses_a_field_other_than_pattern() {
+    let text = typed("{ string = { case = \"lower\" } }", "\"required\"");
+
+    assert_eq!(kinds(&text), [SpecProblemKind::UnknownField]);
+}
+
+#[test]
+fn a_default_that_does_not_match_the_pattern_is_a_bad_default() {
+    let ty = "{ string = { pattern = \"[a-z]+-[0-9]\" } }";
+
+    assert_eq!(
+        kinds(&typed(ty, "{ default = \"eu-west\" }")),
+        [SpecProblemKind::BadDefault]
+    );
+    spec(&typed(ty, "{ default = \"eu-1\" }"));
+}
+
+#[test]
+fn a_withheld_variable_may_have_a_pattern() {
+    spec(&one("purpose = \"The key shelf calls the mirror with.\"\n\
+         type = { string = { pattern = \"sk-[a-z0-9]+\" } }\nunset = \"required\"\n\
+         show = \"withheld\"\nsource = \"secret\""));
+}
+
+#[test]
+fn the_canonical_form_writes_a_string_without_a_pattern_as_its_word() {
+    let canonical = spec(&typed("{ string = {} }", "\"required\"")).to_toml();
+
+    assert!(canonical.contains("type = \"string\"\n"), "{canonical}");
+}
+
+#[test]
+fn the_canonical_form_writes_a_pattern_and_parses_back_to_the_same_spec() {
+    let original = spec(&typed(
+        "{ string = { pattern = '\\d{4}' } }",
+        "{ default = \"2026\" }",
+    ));
+
+    let canonical = original.to_toml();
+
+    assert!(
+        canonical.contains("type = { string = { pattern = '\\d{4}' } }"),
+        "{canonical}"
+    );
+    assert_eq!(spec(&canonical), original);
+}
+
+#[test]
+fn a_changed_pattern_changes_the_digest() {
+    let four = spec(&typed(
+        "{ string = { pattern = \"[0-9]{4}\" } }",
+        "\"required\"",
+    ));
+    let five = spec(&typed(
+        "{ string = { pattern = \"[0-9]{5}\" } }",
+        "\"required\"",
+    ));
+
+    assert_ne!(four.digest(), five.digest());
 }
 
 #[test]

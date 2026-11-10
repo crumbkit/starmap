@@ -5,7 +5,7 @@ use std::fmt;
 
 use secrecy::{ExposeSecret as _, SecretBox};
 
-use crate::{ByteRule, TypeError};
+use crate::{ByteRule, Pattern, TypeError};
 
 #[cfg(test)]
 mod tests;
@@ -97,6 +97,16 @@ impl Secret {
     )]
     pub(crate) fn decode(&self, rule: ByteRule) -> Result<SecretBytes, TypeError> {
         rule.decode(self.0.expose_secret()).map(SecretBytes::new)
+    }
+
+    /// Refuses the value unless `pattern` matches all of it. The refusal
+    /// names only the pattern, so the value stays inside the secret.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "BASE-24: the value is matched in place and never leaves the secret"
+    )]
+    pub(crate) fn check(&self, pattern: &Pattern) -> Result<(), TypeError> {
+        pattern.check(self.0.expose_secret())
     }
 }
 

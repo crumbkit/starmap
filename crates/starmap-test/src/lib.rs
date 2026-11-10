@@ -209,7 +209,7 @@ fn shape(file: &str, field: &Field, ty: &Type) -> Vec<String> {
         | (Shape::Url, Type::Url)
         | (Shape::SocketAddress, Type::SocketAddress)
         | (Shape::Boolean, Type::Boolean)
-        | (Shape::String | Shape::OsString, Type::String)
+        | (Shape::String | Shape::OsString, Type::String { .. })
         | (Shape::OsString, Type::Path { .. }) => Vec::new(),
         (Shape::Integer { min, max }, Type::Integer(range)) => {
             let mut found = Vec::new();

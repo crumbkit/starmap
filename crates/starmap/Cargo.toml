@@ -18,6 +18,7 @@ starmap-derive = { workspace = true, optional = true }
 # base64 decodes the value of a bytes variable whose encoding is base64 or
 # base64url, and writes a shown value back in its encoding.
 base64.workspace = true
+regex.workspace = true
 secrecy.workspace = true
 sha2.workspace = true
 toml_edit.workspace = true

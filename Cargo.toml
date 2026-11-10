@@ -28,6 +28,13 @@ clap = { version = "4.6.7", default-features = false, features = ["std"] }
 # starmap does not use.
 url = { version = "2.5.8", default-features = false }
 
+# regex matches the value of a string variable against the pattern its type
+# states. Its syntax is close to RE2's, and matching takes time linear in the
+# value's length. The default features stay on: `std`, `perf` for faster
+# matching, and `unicode` so that classes such as `\d` and `\w` compile and
+# match Unicode text.
+regex = "1.12.3"
+
 # toml_edit parses starmap.toml with the span of every key and value, and
 # writes the canonical form that `Spec::to_toml` returns.
 toml_edit = "0.25.17"
