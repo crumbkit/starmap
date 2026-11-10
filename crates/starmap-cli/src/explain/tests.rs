@@ -303,3 +303,51 @@ fn explain_prints_the_same_row_for_a_variable_with_and_without_tool_tables() {
 
     assert_eq!(json(&tools), json(LISTEN));
 }
+
+/// A spec with a withheld base64 key of 4 bytes and a shown hex salt with a
+/// default.
+const KEYS: &str = "[variables.SHELF_KEY]\npurpose = \"The key.\"\n\
+                    type = { bytes = { encoding = \"base64\", length = 4 } }\n\
+                    unset = \"required\"\nshow = \"withheld\"\nsource = \"secret\"\n\n\
+                    [variables.SHELF_SALT]\npurpose = \"The salt.\"\n\
+                    type = { bytes = { encoding = \"hex\", min-length = 2 } }\n\
+                    unset = { default = \"BEEF\" }\nshow = \"shown\"\nsource = \"setting\"\n";
+
+/// Returns the type and value columns of `name` in [`KEYS`], with `vars` as
+/// the shell's values.
+fn key_columns(name: &str, vars: &[(&str, &str)]) -> (String, String) {
+    let spec = Spec::parse(KEYS).unwrap();
+    let vars = vars
+        .iter()
+        .map(|(name, value)| (OsString::from(name), OsString::from(value)));
+    let bindings = starmap::capture(&spec, vars);
+    let row = row(&spec, "starmap.toml", &bindings, name.parse().unwrap()).unwrap();
+    (row.kind, row.value.to_string())
+}
+
+#[test]
+fn a_bytes_type_shows_its_length_and_encoding_and_a_default_in_its_encoding() {
+    assert_eq!(
+        key_columns("SHELF_SALT", &[]),
+        (
+            "at least 2 bytes as hex".to_owned(),
+            "beef (default)".to_owned()
+        )
+    );
+    assert_eq!(key_columns("SHELF_KEY", &[]).0, "4 bytes as base64");
+}
+
+#[test]
+fn a_withheld_bytes_value_that_does_not_fit_is_marked_invalid_without_its_text() {
+    let dots = "\u{2022}".repeat(8);
+
+    assert_eq!(
+        key_columns("SHELF_KEY", &[("SHELF_KEY", "3q2+7w==")]).1,
+        dots
+    );
+    for raw in ["hunter2!", "AAAA"] {
+        let value = key_columns("SHELF_KEY", &[("SHELF_KEY", raw)]).1;
+        assert_eq!(value, format!("{dots} (invalid)"));
+        assert!(!value.contains(raw));
+    }
+}

@@ -256,6 +256,7 @@ pub(crate) fn value_text(value: &Value) -> String {
         Value::Integer(number) => number.to_string(),
         Value::Choice(choice) => choice.to_string(),
         Value::String(string) => string.to_string_lossy().into_owned(),
+        Value::Bytes { .. } => value.to_string(),
         // A kind of value that a later release of starmap adds.
         _ => "a value".to_owned(),
     }
@@ -276,6 +277,7 @@ pub(crate) fn type_text(ty: &Type) -> String {
         Type::String {
             pattern: Some(pattern),
         } => format!("string matching {pattern}"),
+        Type::Bytes(rule) => rule.to_string(),
         // A type that a later release of starmap adds.
         _ => "another type".to_owned(),
     }

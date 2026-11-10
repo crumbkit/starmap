@@ -146,3 +146,46 @@ fn writing_cache_true_is_no_change() {
     );
     assert_eq!(changes(Some(&spec(TOKEN)), &spec(&now)), Vec::new());
 }
+
+/// A withheld key whose type is 32 bytes as base64.
+const KEY: &str = r#"
+[variables.SHELF_KEY]
+purpose = "The key."
+type = { bytes = { encoding = "base64", length = 32 } }
+unset = "required"
+show = "withheld"
+source = "secret"
+"#;
+
+#[test]
+fn an_added_bytes_variable_names_the_type_word_bytes() {
+    assert_eq!(
+        changes(None, &spec(KEY))
+            .into_iter()
+            .map(|change| change.now)
+            .collect::<Vec<_>>(),
+        [Some("bytes, withheld, secret".to_owned())]
+    );
+}
+
+#[test]
+fn a_changed_encoding_or_length_is_a_change_of_the_type() {
+    let hex = KEY.replace("\"base64\"", "\"hex\"");
+    let longer = KEY.replace("length = 32", "min-length = 64");
+
+    for (now, text) in [
+        (hex, "32 bytes as hex"),
+        (longer, "at least 64 bytes as base64"),
+    ] {
+        assert_eq!(
+            changes(Some(&spec(KEY)), &spec(&now)),
+            vec![Change {
+                change: Kind::Changed,
+                name: "SHELF_KEY".to_owned(),
+                field: Some("type".to_owned()),
+                was: Some("32 bytes as base64".to_owned()),
+                now: Some(text.to_owned()),
+            }]
+        );
+    }
+}

@@ -168,7 +168,7 @@ fn disagreements(file: &str, field: &Field, variable: &Variable, has_mode: bool)
     let mut found = Vec::new();
     match (variable.show(), field.show) {
         (Show::Withheld, Show::Shown) => found.push(format!(
-            "{file} withholds it, and the field type {rust_type} is not starmap::Secret"
+            "{file} withholds it, and the field type {rust_type} is not starmap::Secret or starmap::SecretBytes"
         )),
         (Show::Shown, Show::Withheld) => found.push(format!(
             "{file} shows it, and the field type {rust_type} holds a withheld value"
@@ -210,6 +210,7 @@ fn shape(file: &str, field: &Field, ty: &Type) -> Vec<String> {
         | (Shape::SocketAddress, Type::SocketAddress)
         | (Shape::Boolean, Type::Boolean)
         | (Shape::String | Shape::OsString, Type::String { .. })
+        | (Shape::Bytes, Type::Bytes(_))
         | (Shape::OsString, Type::Path { .. }) => Vec::new(),
         (Shape::Integer { min, max }, Type::Integer(range)) => {
             let mut found = Vec::new();
@@ -256,6 +257,7 @@ fn shape_words(shape: Shape) -> &'static str {
         Shape::Enumeration(_) => "an enumeration",
         Shape::String => "a string",
         Shape::OsString => "a string or a path",
+        Shape::Bytes => "bytes",
         _ => "a shape this check does not know",
     }
 }
