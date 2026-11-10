@@ -7,6 +7,12 @@ use std::process::ExitCode;
 /// runs the command. Returning the exit code lets destructors run before the
 /// process ends (BASE-7).
 fn main() -> ExitCode {
+    // A shell's completion request ends the run here, before the usage log
+    // starts, so a Tab press writes no line. starmap parses against
+    // `Cli::command()`, so completion offers what parsing accepts.
+    if let Some(code) = crumbkit::complete(<starmap_cli::Cli as clap::CommandFactory>::command) {
+        return code;
+    }
     // The guard writes this run's line to the usage log when `main`
     // returns, after the output is flushed (CLI-7).
     let _log = crumbkit_usage::start();
