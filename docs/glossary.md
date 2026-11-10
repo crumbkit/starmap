@@ -35,7 +35,9 @@ most 1024 bytes. The parser refuses a longer pattern, and one that the
 `regex` crate does not compile within its default size limit, with
 `starmap::spec::bad_pattern`, which quotes the pattern. A value that does not
 match fails with the text `the value does not match the pattern <pattern>`,
-which never holds the value. `starmap run` refuses such a value, and
+which never holds the value. A refusal of a shown variable quotes the value
+after that text, and a refusal of a withheld one never does, as the
+`withheld` entry says. `starmap run` refuses such a value, and
 `starmap explain` marks it invalid. A pattern that sets the `x` flag and ends
 inside a `#` comment is refused, because the comment would hide the anchors;
 ending the comment with a newline fixes it. The Rust API names the pattern
@@ -58,7 +60,12 @@ in place of a withheld value and gives it no text in JSON. A withheld
 variable has no default, because a default would sit in `starmap.toml` in
 plain text, and its type is `string`, with or without a pattern. A check
 reports a withheld value that does not match its pattern by naming the
-pattern alone. The parser refuses a withheld
+pattern alone. A refusal of a shown variable's value quotes the value after
+its reason, as in `SHELF_PORT: the value is not a port from 1 to 65535 (the
+value is "80a")`, and a refusal of a withheld variable's value never quotes
+it. The quote holds the first 64 characters of the value and then `…` when
+the value is longer, and it is written as a JSON string, so a quote, a
+backslash or a newline in the value is escaped. The parser refuses a withheld
 variable that breaks either rule.
 
 The parser also forces `show = "withheld"` on every variable whose source is

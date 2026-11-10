@@ -55,7 +55,7 @@ pub use bind::{
     PathTemplateError, Placeholder, ProvidedRef, ProviderKind, ProviderKindError, QualifierError,
     SecretBind, SecretBytes, SecretRef,
 };
-pub use check::{Finding, Problem, Refusals, Verdict, capture, check, mode};
+pub use check::{Finding, Problem, Quote, Refusals, Verdict, capture, check, mode};
 pub use env::Environment;
 pub use field::{Field, FieldError, FieldProblem, Presence, Shape};
 pub use mode::{Mode, ModeRule};
@@ -172,7 +172,9 @@ pub trait Enumeration: Sized {
 /// field error is its `source()` (BASE-47), and a refusal's findings are
 /// its text, as [`Refusals`] writes them, so a program can print it after
 /// its own words, such as `shelf cannot start: SHELF_PORT is required and
-/// has no value`. A field error's text names the variable.
+/// has no value`. That text quotes an invalid value of a shown variable,
+/// and never a withheld variable's value. A field error's text names the
+/// variable.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ReadError {
