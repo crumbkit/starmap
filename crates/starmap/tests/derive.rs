@@ -250,9 +250,30 @@ fn a_missing_or_invalid_variable_refuses_the_read_with_every_finding() {
     assert_eq!(
         error.to_string(),
         "SHELF_PORT is required in local mode and has no value; \
-         SHELF_PAGE_SIZE: the value is not a whole number from 1 to 100; \
+         SHELF_PAGE_SIZE: the value is not a whole number from 1 to 100 (the value is \"500\"); \
          SHELF_SESSION_KEY is required in local mode and has no value"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_withheld_value_that_does_not_fit_refuses_the_read_without_a_quote() {
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let error = ShelfEnv::from_vars([
+        (OsString::from("SHELF_PORT"), OsString::from("8080")),
+        (
+            OsString::from("SHELF_SESSION_KEY"),
+            OsString::from_vec(b"session-\xffkey".to_vec()),
+        ),
+    ])
+    .expect_err("the session key is not unicode text");
+
+    assert_eq!(
+        error.to_string(),
+        "SHELF_SESSION_KEY: the value is not unicode text"
+    );
+    assert!(!format!("{error:?}").contains("session-"));
 }
 
 /// A struct whose page size field is narrower than its spec's range.
@@ -402,8 +423,8 @@ fn without_a_mode_table_a_refusal_names_no_mode_and_no_file() {
     );
     assert_eq!(
         empty.to_string(),
-        "SHELF_LISTEN_ADDRESS: the value is not an ip socket address, such as 127.0.0.1:8080 or [::1]:8080; \
-         SHELF_STAGE is required and has no value"
+        "SHELF_LISTEN_ADDRESS: the value is not an ip socket address, such as 127.0.0.1:8080 or [::1]:8080 \
+         (the value is \"localhost:8080\"); SHELF_STAGE is required and has no value"
     );
 }
 

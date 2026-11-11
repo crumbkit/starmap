@@ -247,3 +247,42 @@ fn a_program_that_does_not_exist_fails_as_not_found() {
     let stderr = String::from_utf8_lossy(&run.get_output().stderr).into_owned();
     assert!(stderr.contains("starmap::child::not_found"), "{stderr}");
 }
+
+#[test]
+fn a_shown_value_that_does_not_fit_is_quoted_and_a_withheld_one_is_not() {
+    let dir = checkout("");
+    std::fs::write(
+        dir.path().join("starmap.toml"),
+        SPEC.replace(
+            "type = \"string\"",
+            "type = { string = { pattern = \"sk-[a-z0-9]+\" } }",
+        ),
+    )
+    .unwrap();
+    let run = starmap(
+        dir.path(),
+        &[
+            "run",
+            "--no-input",
+            "--set",
+            "SHELF_PAGE_SIZE=10\n00",
+            "--",
+            "/usr/bin/true",
+        ],
+        &[("SHELF_UPSTREAM_TOKEN", "pk-live-hidden")],
+    )
+    .code(1);
+    let stderr = String::from_utf8_lossy(&run.get_output().stderr).into_owned();
+
+    assert!(
+        stderr.contains(
+            "SHELF_PAGE_SIZE: the value is not a whole number (the value is \"10\\n00\")"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("SHELF_UPSTREAM_TOKEN: the value does not match the pattern sk-[a-z0-9]+"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("pk-live-hidden"), "{stderr}");
+}

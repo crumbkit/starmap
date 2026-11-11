@@ -8,7 +8,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crumbkit::{Code, Failure, Recovery};
+use crumbkit::{Code, Failure, Field, FieldValue, Recovery};
 use starmap::{Name, Secret};
 use starmap_resolve::{Lookup, ResolveProblem, Resolver, SecretError};
 
@@ -553,6 +553,105 @@ fn a_value_that_does_not_fit_its_type_is_refused_as_invalid() {
             .notes
             .contains(&"starmap started nothing, because of 1 problem.".to_owned())
     );
+}
+
+#[test]
+fn a_shown_value_that_does_not_fit_is_quoted_in_the_failure_text_and_its_value_field() {
+    let checkout = Checkout::new(None);
+    let refused = prepared(
+        &checkout.args(&[("SHELF_PAGE_SIZE", "1000")]),
+        &[TOKEN],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+    let failure = &refused.failures[0];
+
+    assert_eq!(
+        failure.to_string(),
+        "SHELF_PAGE_SIZE: the value is not a whole number from 1 to 100 (the value is \"1000\")"
+    );
+    assert_eq!(
+        failure.fields(),
+        [
+            Field::new("key", "SHELF_PAGE_SIZE"),
+            Field::new("value", "1000"),
+        ]
+    );
+}
+
+/// A spec whose secret without a bind has a pattern.
+const PATTERN_SPEC: &str = r#"
+[variables.SHELF_UPSTREAM_TOKEN]
+purpose = "The token shelf sends to the upstream catalogue."
+type = { string = { pattern = "sk-[a-z0-9]+" } }
+unset = "required"
+show = "withheld"
+source = "secret"
+"#;
+
+#[test]
+fn a_withheld_value_that_does_not_fit_is_not_quoted_in_the_failure() {
+    let checkout = Checkout::with_spec(PATTERN_SPEC, None);
+    let refused = prepared(
+        &checkout.args(&[]),
+        &[("SHELF_UPSTREAM_TOKEN", "pk-live-hidden")],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+    let failure = &refused.failures[0];
+
+    assert_eq!(
+        failure.to_string(),
+        "SHELF_UPSTREAM_TOKEN: the value does not match the pattern sk-[a-z0-9]+"
+    );
+    assert_eq!(
+        failure.fields(),
+        [
+            Field::new("key", "SHELF_UPSTREAM_TOKEN"),
+            Field::new("value", FieldValue::Null),
+        ]
+    );
+    assert!(!format!("{refused:?}").contains("pk-live-hidden"));
+}
+
+/// A spec whose secret without a bind is 4 bytes of base64.
+const BYTES_SPEC: &str = r#"
+[variables.SHELF_UPSTREAM_TOKEN]
+purpose = "The key shelf signs upstream requests with."
+type = { bytes = { encoding = "base64", length = 4 } }
+unset = "required"
+show = "withheld"
+source = "secret"
+"#;
+
+#[test]
+fn a_withheld_bytes_value_that_does_not_fit_is_not_quoted_in_the_failure() {
+    let checkout = Checkout::with_spec(BYTES_SPEC, None);
+    for raw in ["hunter2!", "c2VjcmV0LWtleS12YWx1ZQ=="] {
+        let refused = prepared(
+            &checkout.args(&[]),
+            &[("SHELF_UPSTREAM_TOKEN", raw)],
+            &FakeResolver::default(),
+            &mut Person::absent(),
+        )
+        .unwrap_err();
+        let failure = &refused.failures[0];
+
+        assert_eq!(codes(&refused), [&codes::VARIABLE_INVALID]);
+        assert_eq!(
+            failure.fields(),
+            [
+                Field::new("key", "SHELF_UPSTREAM_TOKEN"),
+                Field::new("value", FieldValue::Null),
+            ]
+        );
+        for text in [failure.to_string(), format!("{refused:?}")] {
+            assert!(!text.contains(raw), "{text}");
+            assert!(!text.contains("(the value is"), "{text}");
+        }
+    }
 }
 
 /// Returns the recovery and the alternatives of each failure of `refused`.
