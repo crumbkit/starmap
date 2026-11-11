@@ -134,8 +134,8 @@ pub enum Shape {
     /// Unicode text, held as a `String`, or as a [`Secret`] when
     /// it is withheld.
     String,
-    /// Text that need not be Unicode, from a string or a path variable,
-    /// held as an `OsString`.
+    /// The text of a string variable or the path of a path variable, held
+    /// as an `OsString`. A path need not be Unicode.
     OsString,
     /// The decoded bytes of a bytes variable, held as a `Vec<u8>`, or as a
     /// [`SecretBytes`] when it is withheld.
@@ -219,7 +219,7 @@ shown!(Vec<u8>, Shape::Bytes, |value| match value {
     _ => None,
 });
 shown!(OsString, Shape::OsString, |value| match value {
-    Value::String(string) => Some(string.clone()),
+    Value::String(string) => Some(string.into()),
     Value::Path(path) => Some(path.clone().into_os_string()),
     _ => None,
 });
@@ -262,10 +262,7 @@ impl FieldType for String {
 
     fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
         match environment.value(name) {
-            Some(Value::String(string)) => string
-                .clone()
-                .into_string()
-                .map_err(|_| FieldProblem::NotUnicode),
+            Some(Value::String(string)) => Ok(string.clone()),
             _ => Err(FieldProblem::Disagreement),
         }
     }
@@ -342,9 +339,6 @@ pub enum FieldProblem {
     /// The struct and its `starmap.toml` disagree about the variable, which
     /// `starmap_test::check` reports.
     Disagreement,
-    /// The field is a `String`, and the value is not Unicode. An
-    /// `OsString` field holds such a value.
-    NotUnicode,
 }
 
 impl fmt::Display for FieldError {
@@ -354,10 +348,6 @@ impl fmt::Display for FieldError {
             FieldProblem::Disagreement => write!(
                 formatter,
                 "the field that reads {name} cannot hold its checked value, because the struct and starmap.toml disagree"
-            ),
-            FieldProblem::NotUnicode => write!(
-                formatter,
-                "the field that reads {name} holds unicode text, and the value is not unicode"
             ),
         }
     }

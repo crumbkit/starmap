@@ -283,6 +283,34 @@ fn a_field_that_cannot_hold_a_checked_value_refuses_the_read() {
     );
 }
 
+/// A struct with a shown string field and a required port.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/title.toml")]
+#[expect(dead_code, reason = "the test reads the struct only to see it refused")]
+struct Titled {
+    #[starmap("SHELF_TITLE")]
+    title: String,
+    #[starmap("SHELF_PORT")]
+    port: Port,
+}
+
+#[test]
+#[cfg(unix)]
+fn a_string_value_that_is_not_unicode_and_a_missing_variable_are_refused_together() {
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let title = OsString::from_vec(vec![b'S', 0xff]);
+    let error = Titled::from_vars([(OsString::from("SHELF_TITLE"), title)])
+        .expect_err("the title is not unicode and the port is missing");
+
+    assert!(matches!(error, ReadError::Refused(_)));
+    assert_eq!(
+        error.to_string(),
+        "SHELF_TITLE: the value is not unicode text; \
+         SHELF_PORT is required and has no value"
+    );
+}
+
 #[test]
 fn an_enumeration_variant_reads_as_its_kebab_case_name_with_a_run_of_capitals_as_one_word_or_its_rename()
  {

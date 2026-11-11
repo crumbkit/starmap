@@ -62,6 +62,20 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ByteCount::new` accepts 1 to 1024 bytes, and `ByteCount::generated`
   accepts the 16 to 1024 bytes of a generated value, as `SecretBytes::new`
   did.
+- **Breaking:** a value that is not valid Unicode is refused with
+  `the value is not unicode text` by every type except `path`, which holds
+  it as it is. A `string` without a pattern held such a value before, and
+  now refuses it, so `starmap run` refuses it and `starmap explain` marks
+  it invalid. A variable that names a file that may not be Unicode should
+  have the type `path`. `Value::String` holds a `String` in place of an
+  `OsString`. The glossary states the rule in its `Unicode` entry. The
+  digest of an existing file does not change.
+
+### Removed
+
+- **Breaking:** `FieldProblem::NotUnicode` is gone. A `String` field never
+  meets a value that is not Unicode, because the check refuses that value
+  with the other findings of a derived struct's read.
 
 ## [0.2.0](https://github.com/crumbkit/starmap/compare/v0.1.0...v0.2.0) - 2026-11-11
 ### Added

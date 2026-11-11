@@ -15,7 +15,9 @@ mod tests;
 /// Binds each variable of `vars` that `spec` declares, and ignores every
 /// other variable. A withheld variable's value is held as a
 /// [`Secret`], or as [`Bound::NotUnicode`] when it is not Unicode.
-/// A shown variable's value is bound as it is.
+/// A shown variable's value is bound as it is, and [`check`] refuses one
+/// that is not Unicode unless the variable's type is a path. A name that
+/// is not Unicode is ignored, as an undeclared name is.
 ///
 /// An empty value, such as the value of `FOO=`, counts as unset, so
 /// `capture` binds nothing for it. When `vars` names a variable more than

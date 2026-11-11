@@ -510,3 +510,55 @@ fn the_values_are_the_last_long_column() {
 
     assert_eq!(super::Explained::LONG_COLUMNS.last(), Some(&"values"));
 }
+
+/// A spec with a shown path and a shown port, for the tests of a value
+/// that is not Unicode.
+#[cfg(unix)]
+const PATH_AND_PORT: &str = r#"
+[variables.SHELF_DATABASE]
+purpose = "The SQLite file that holds the catalogue."
+type = "path"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "optional"
+show = "shown"
+source = "setting"
+"#;
+
+/// Returns the value cell of `name` in [`PATH_AND_PORT`] when the shell
+/// sets it to `raw`.
+#[cfg(unix)]
+fn not_unicode_cell(name: &str, raw: &[u8]) -> String {
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let spec = Spec::parse(PATH_AND_PORT).unwrap();
+    let vars = [(OsString::from(name), OsString::from_vec(raw.to_vec()))];
+    let bindings = starmap::capture(&spec, vars);
+    row(&spec, "starmap.toml", &bindings, name.parse().unwrap())
+        .unwrap()
+        .value
+        .to_string()
+}
+
+#[test]
+#[cfg(unix)]
+fn a_path_that_is_not_unicode_is_shown_with_each_invalid_sequence_replaced() {
+    assert_eq!(
+        not_unicode_cell("SHELF_DATABASE", b"/state/\xffbooks.db"),
+        "/state/\u{fffd}books.db"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn a_port_that_is_not_unicode_is_marked_invalid() {
+    assert_eq!(
+        not_unicode_cell("SHELF_PORT", b"80\xff"),
+        "80\u{fffd} (invalid)"
+    );
+}

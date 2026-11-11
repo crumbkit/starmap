@@ -159,6 +159,30 @@ fn set_for_a_secret_is_refused() {
 }
 
 #[test]
+#[cfg(unix)]
+fn set_refuses_a_value_that_is_not_unicode_and_starts_nothing() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let state = tempfile::tempdir().unwrap();
+    let assignment = OsString::from_vec(b"SHELF_PAGE_SIZE=3\xff".to_vec());
+    let run = Command::new(env!("CARGO_BIN_EXE_starmap"))
+        .args(["run", "--no-input", "--set"])
+        .arg(assignment)
+        .args(["--", "sh", "-c", "echo started"])
+        .current_dir(FIXTURES)
+        .env_clear()
+        .env("XDG_STATE_HOME", state.path())
+        .env("PATH", "/usr/bin:/bin")
+        .assert()
+        .failure();
+    let output = run.get_output();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert!(stderr.contains("UTF-8"), "{stderr}");
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn a_required_secret_without_a_bind_is_refused_under_no_input() {
     let run = starmap(
         Path::new(FIXTURES),

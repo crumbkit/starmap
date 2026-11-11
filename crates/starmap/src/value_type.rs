@@ -67,8 +67,8 @@ pub enum Type {
     Integer(IntegerRange),
     /// One of a fixed set of values.
     Enumeration(Choices),
-    /// Any text, which need not be Unicode. With a pattern, Unicode text
-    /// that the pattern matches as a whole.
+    /// Any Unicode text. With a pattern, Unicode text that the pattern
+    /// matches as a whole.
     String {
         /// The pattern the whole value must match, if the type has one.
         pattern: Option<Pattern>,
@@ -83,9 +83,10 @@ impl Type {
     ///
     /// `Ok(None)` means the value counts as unset, which happens only for a
     /// relative path, including an empty one, where `absolute` is true. The
-    /// path type and a string type without a pattern read a value that is
-    /// not Unicode; every other type needs Unicode text. A value is never
-    /// trimmed, so a space around a word makes it a different word.
+    /// path type holds a value that is not Unicode as it is, and every
+    /// other type refuses such a value with [`TypeError::NotUnicode`]. A
+    /// value is never trimmed, so a space around a word makes it a
+    /// different word.
     ///
     /// [`check`](crate::check) treats an empty value as unset before any
     /// type reads it, so this method sees an empty value only when a caller
@@ -107,10 +108,11 @@ impl Type {
                 Value::Path(path)
             }
             Self::String { pattern } => {
+                let text = text(raw)?;
                 if let Some(pattern) = pattern {
-                    pattern.check(text(raw)?)?;
+                    pattern.check(text)?;
                 }
-                Value::String(raw.to_os_string())
+                Value::String(text.to_owned())
             }
             Self::Port => Value::Port(text(raw)?.parse().map_err(|_| TypeError::NotPort)?),
             Self::Url { schemes } => {
@@ -246,8 +248,8 @@ pub enum Value {
     Integer(i64),
     /// The value of an enumeration type, which is one of the type's choices.
     Choice(Choice),
-    /// The value of the string type.
-    String(OsString),
+    /// The value of the string type, which is Unicode text.
+    String(String),
     /// The value of a bytes type of a shown variable, decoded from its
     /// encoding.
     Bytes {
@@ -264,7 +266,7 @@ impl Value {
     pub(crate) fn to_os_string(&self) -> OsString {
         match self {
             Self::Path(path) => path.clone().into_os_string(),
-            Self::String(string) => string.clone(),
+            Self::String(string) => string.into(),
             Self::Port(port) => port.to_string().into(),
             Self::Url(url) => url.as_str().into(),
             Self::SocketAddress(address) => address.to_string().into(),
@@ -277,8 +279,9 @@ impl Value {
 }
 
 impl fmt::Display for Value {
-    /// Writes the text an environment holds, with each part that is not
-    /// Unicode replaced by U+FFFD.
+    /// Writes the text an environment holds. A path is the only value that
+    /// may not be Unicode, and each of its parts that is not Unicode is
+    /// written as U+FFFD.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.to_os_string().to_string_lossy())
     }
@@ -289,7 +292,8 @@ impl fmt::Display for Value {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TypeError {
-    /// The type needs Unicode text, and the value is not Unicode.
+    /// The value is not Unicode, and only the path type holds such a
+    /// value.
     NotUnicode,
     /// The value is not a port from 1 to 65535.
     NotPort,
