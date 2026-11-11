@@ -28,6 +28,42 @@ binaries for Apple silicon macOS, Linux and Windows.
 An application depends on `starmap` with its `derive` feature, and on
 `starmap-test` as a dev-dependency.
 
+## Command-line flags
+
+An application that takes a value from a flag or a variable often lets clap
+read the variable:
+
+```rust
+#[arg(long, env = "SHELF_PORT")]
+port: u16,
+```
+
+That read happens outside the struct, so the variable's declared type, its
+default and its check do not apply to it. Remove `env` from the argument,
+make the flag an `Option`, and use the struct's field when the flag is not
+given. The flag takes the field's type, `starmap::Port` here, in place of the
+`u16` above, so clap refuses the values that type refuses:
+
+```rust
+#[derive(clap::Parser)]
+struct Cli {
+    #[arg(long)]
+    port: Option<starmap::Port>,
+}
+```
+
+In the next block, `ShelfEnv` is the struct that derives `Env` and declares
+`SHELF_PORT` as a `Port`, and `cli` is the parsed `Cli`:
+
+```rust
+let env = ShelfEnv::load()?;
+let port = cli.port.unwrap_or(env.port);
+```
+
+starmap adds no function for this. The glossary's
+[flag override](docs/glossary.md#flag-override) entry gives the `Option`
+method for each kind of variable and the limits of the pattern.
+
 ## Contributing
 
 [AGENTS.md](AGENTS.md) lists the checks that a change must pass, and
