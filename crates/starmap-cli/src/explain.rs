@@ -70,12 +70,15 @@ pub(crate) struct Explained {
     /// Each value of a named enumeration with its description; empty, and left out of `--json`, for any other type.
     #[serde(skip_serializing_if = "Option::is_none")]
     values: Option<Values>,
+    /// The name of the group of variables that are set together or not at all, which the variable belongs to; empty, and left out of `--json`, when it belongs to none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group: Option<String>,
 }
 
 impl Row for Explained {
     const COLUMNS: &'static [&'static str] = &["name", "type", "unset", "source", "value"];
     const LONG_COLUMNS: &'static [&'static str] = &[
-        "show", "bind", "cache", "purpose", "effect", "check", "values",
+        "show", "bind", "cache", "purpose", "effect", "values", "check", "group",
     ];
     const UNCUT_COLUMNS: &'static [&'static str] = &["name"];
 }
@@ -292,6 +295,7 @@ fn row(
         check: variable.check().map(str::to_owned),
         enumeration: enumeration_name(variable.value_type()),
         values: Values::of(variable.value_type()),
+        group: spec.group_of(&name).map(|group| group.name().to_string()),
         name: name.as_str().to_owned(),
     })
 }

@@ -59,6 +59,11 @@ pub const SPEC_POINTER_CHAIN: Code = Code::new("starmap", "spec", "pointer_chain
 /// A variable's type names an enumeration the file does not declare.
 pub const SPEC_ENUMERATION_UNDECLARED: Code =
     Code::new("starmap", "spec", "enumeration_undeclared");
+/// A group lists a variable the file does not declare.
+pub const SPEC_GROUP_UNDECLARED: Code = Code::new("starmap", "spec", "group_undeclared");
+/// A group lists fewer than two variables, repeats one, shares one with
+/// another group, or lists one with a default or a generated value.
+pub const SPEC_BAD_GROUP: Code = Code::new("starmap", "spec", "bad_group");
 /// `explain` names a variable that the spec does not declare.
 pub const VARIABLE_UNKNOWN: Code = Code::new("starmap", "variable", "unknown");
 /// `check` finds source code that reads a variable the spec does not
@@ -85,6 +90,8 @@ pub const VARIABLE_SECRET: Code = Code::new("starmap", "variable", "secret");
 pub const VARIABLE_MISSING: Code = Code::new("starmap", "variable", "missing");
 /// A variable's value does not fit its type.
 pub const VARIABLE_INVALID: Code = Code::new("starmap", "variable", "invalid");
+/// A variable is unset, and other members of its group are set.
+pub const GROUP_INCOMPLETE: Code = Code::new("starmap", "group", "incomplete");
 /// No provider of a provided variable's kind is present, and nothing else
 /// gives it a value.
 pub const BIND_NO_PROVIDER: Code = Code::new("starmap", "bind", "no_provider");
@@ -126,6 +133,8 @@ pub const ALL: &[&Code] = &[
     &SPEC_POINTER_DECLARES,
     &SPEC_POINTER_CHAIN,
     &SPEC_ENUMERATION_UNDECLARED,
+    &SPEC_GROUP_UNDECLARED,
+    &SPEC_BAD_GROUP,
     &VARIABLE_UNKNOWN,
     &VARIABLE_UNDECLARED,
     &SOURCE_UNREADABLE,
@@ -138,6 +147,7 @@ pub const ALL: &[&Code] = &[
     &VARIABLE_SECRET,
     &VARIABLE_MISSING,
     &VARIABLE_INVALID,
+    &GROUP_INCOMPLETE,
     &BIND_NO_PROVIDER,
     &BIND_NO_PLACE,
     &SECRET_UNBOUND,

@@ -26,6 +26,24 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `checks_without_sentence` and `sentences_without_check`. The sentence
   counts toward the digest, and the digest of an existing file does not
   change.
+- A file can declare a group of variables that must be set together or not
+  at all, as `[groups.mirror]` with
+  `variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY"]`. `check`
+  refuses a partly set group with one finding for each unset member, which
+  names the members that are set, and passes a group that is wholly set or
+  wholly unset. `starmap run` reports it as `starmap::group::incomplete`.
+  A member the file does not declare fails with the new
+  `starmap::spec::group_undeclared`, and the new `starmap::spec::bad_group`
+  refuses a group of fewer than two variables, a repeated member, a
+  variable in two groups, and a member with a default or a generated
+  value. A bad group name fails with `starmap::spec::bad_value`. Groups
+  count toward the canonical form and the digest. `starmap explain` adds a
+  `group` long column and an optional `group` JSON field, and
+  `starmap diff` reports a changed group as a change of `group`. The Rust
+  API adds `Group`, `GroupName`, `GroupNameError`, `Spec::groups`,
+  `Spec::group`, `Spec::group_of`, `Problem::GroupIncomplete`, and
+  `SpecProblemKind::GroupUndeclared` and `BadGroup`. The digest of an
+  existing file does not change.
 - A file can declare named enumerations, each value with a description, as
   `[enumerations.log-level]` with `debug = "Logs every request."`, and a
   variable can name one with `type = { enumeration = "log-level" }`. Any

@@ -290,6 +290,48 @@ reports a change of the field `check`.
 without a check sentence, and a check sentence whose variable no field in
 src checks. Each is a note on standard error and a list in the JSON
 document, and neither fails the command.
+## group
+
+A group is a set of variables that must be set together or not at all,
+such as the account, key and secret of one external service. A file
+declares one as a top-level table with one field, `variables`:
+
+```toml
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY", "SHELF_MIRROR_SECRET"]
+```
+
+A group name starts with a lower case ASCII letter and holds only lower
+case ASCII letters, digits and hyphens, as an enumeration name does, and a
+bad name fails with `starmap::spec::bad_value`. A member that the file does
+not declare fails with `starmap::spec::group_undeclared`, which names the
+group and the variable. `starmap::spec::bad_group` refuses a group with
+fewer than two members or a repeated member, a variable in two groups, and
+a member with a default or a generated value, because a default or a
+generated value always counts as set. The Rust API names a group
+`starmap::Group` and its name `starmap::GroupName`. `Spec::groups` lists
+the groups in name order, `Spec::group` returns one by name, and
+`Spec::group_of` returns the group a variable belongs to.
+
+`check` applies the rule after it has read each variable. A member counts
+as set when the check holds a value for it, so `FOO=` counts as unset. When
+at least one member is set and another is unset, each unset member that
+has no finding of its own gets `Problem::GroupIncomplete`, which names the
+group and the members that are set. A member that is missing because it is
+required gets only that finding. A group that is wholly unset or wholly
+set passes. A member may be required in production and optional locally;
+the group is then required in production and all or none locally.
+`starmap run` reports the finding with the code `starmap::group::incomplete`,
+and `#[derive(Env)]` refuses the read with the same text.
+
+Groups count toward the canonical form and the digest, because a group
+changes what `check` accepts. The canonical form writes each group after
+the named enumerations and before the variables, in name order, with its
+members in the file's order. A file without groups keeps its digest.
+`starmap explain --long` prints the variable's group in the `group`
+column, and `starmap explain --json` leaves the field out for a variable
+without one. `starmap diff` reports a variable that joins, leaves or
+changes group as a change of the field `group`.
 
 ## pointer
 
@@ -315,8 +357,8 @@ and `run` follow a pointer as if `--spec` named the declaration file, and
 `Env::SPEC_FILE`. `starmap run` keeps the pointer's directory as the
 checkout.
 
-A file either points or declares. A pointer that also has `variables` or
-`mode` fails with `starmap::spec::pointer_declares`. A pointer reached where
+A file either points or declares. A pointer that also has `variables`,
+`groups` or `mode` fails with `starmap::spec::pointer_declares`. A pointer reached where
 a declaration file belongs, such as the file that another pointer names,
 fails with `starmap::spec::pointer_chain`, so starmap follows at most one
 pointer. A pointer has no digest of its own, and `starmap check` prints the

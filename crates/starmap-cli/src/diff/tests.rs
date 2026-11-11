@@ -327,3 +327,55 @@ fn a_renamed_enumeration_is_a_change_of_the_type_alone() {
         )]
     );
 }
+
+/// Two optional settings, which `group` may put in a group.
+fn mirror(group: &str) -> String {
+    format!(
+        "{group}\n\
+         [variables.SHELF_MIRROR_ACCOUNT]\npurpose = \"The account.\"\ntype = \"string\"\n\
+         unset = \"optional\"\nshow = \"shown\"\nsource = \"setting\"\n\n\
+         [variables.SHELF_MIRROR_KEY]\npurpose = \"The key.\"\ntype = \"string\"\n\
+         unset = \"optional\"\nshow = \"shown\"\nsource = \"setting\"\n"
+    )
+}
+
+/// The group `name` of both settings.
+fn group(name: &str) -> String {
+    format!("[groups.{name}]\nvariables = [\"SHELF_MIRROR_ACCOUNT\", \"SHELF_MIRROR_KEY\"]\n")
+}
+
+/// Returns a change of the group of `variable` from `was` to `now`.
+fn group_change(variable: &str, was: Option<&str>, now: Option<&str>) -> Change {
+    Change {
+        change: Kind::Changed,
+        name: variable.to_owned(),
+        field: Some("group".to_owned()),
+        was: was.map(str::to_owned),
+        now: now.map(str::to_owned),
+    }
+}
+
+#[test]
+fn a_variable_that_joins_a_group_is_a_change_of_the_group() {
+    assert_eq!(
+        changes(Some(&spec(&mirror(""))), &spec(&mirror(&group("mirror")))),
+        vec![
+            group_change("SHELF_MIRROR_ACCOUNT", None, Some("mirror")),
+            group_change("SHELF_MIRROR_KEY", None, Some("mirror")),
+        ]
+    );
+}
+
+#[test]
+fn a_renamed_group_is_a_change_of_the_group_of_each_member() {
+    assert_eq!(
+        changes(
+            Some(&spec(&mirror(&group("mirror")))),
+            &spec(&mirror(&group("upstream")))
+        ),
+        vec![
+            group_change("SHELF_MIRROR_ACCOUNT", Some("mirror"), Some("upstream")),
+            group_change("SHELF_MIRROR_KEY", Some("mirror"), Some("upstream")),
+        ]
+    );
+}

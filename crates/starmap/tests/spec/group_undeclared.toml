@@ -1,0 +1,10 @@
+# A group lists a variable the file does not declare.
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY"]
+
+[variables.SHELF_MIRROR_ACCOUNT]
+purpose = "The account shelf uses at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"

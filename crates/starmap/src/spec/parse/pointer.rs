@@ -14,7 +14,7 @@ const POINTER_FIELDS: &[&str] = &["spec", "src", "dotenv", "tool"];
 /// The top-level keys of a file that declares variables. A pointer that
 /// holds one of them declares too, which starmap refuses. Both kinds of
 /// file take `tool`, so it is not among them.
-const DECLARING_FIELDS: &[&str] = &["mode", "enumerations", "variables"];
+const DECLARING_FIELDS: &[&str] = &["mode", "enumerations", "groups", "variables"];
 /// Parses `text` into a pointer, returns `None` when the file has no `spec`
 /// key and so declares variables itself, or returns every problem of a
 /// pointer.

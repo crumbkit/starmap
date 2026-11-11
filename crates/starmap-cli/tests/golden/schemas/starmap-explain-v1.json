@@ -489,6 +489,13 @@
             "null"
           ]
         },
+        "group": {
+          "description": "The name of the group of variables that are set together or not at all, which the variable belongs to; empty, and left out of `--json`, when it belongs to none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "description": "The variable's name.",
           "type": "string"
