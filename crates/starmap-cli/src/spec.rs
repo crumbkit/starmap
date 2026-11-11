@@ -525,7 +525,10 @@ fn hint(kind: SpecProblemKind) -> &'static str {
             "declare the variable, or remove it from the group's variables"
         }
         SpecProblemKind::BadGroup => {
-            "list at least two variables in each group, each once and in one group only, and none with a default or a generated value"
+            "list at least two variables in each group, each once and in one group only, and none with a default, a generated value or a family"
+        }
+        SpecProblemKind::BadFamily => {
+            "give the family no default, list its keys before it is required, make it a setting without a bind or inherited, and give no other variable or family one of its member names"
         }
         // `Syntax`, and any kind that a later release adds.
         _ => "fix the line the failure points at",

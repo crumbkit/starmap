@@ -44,6 +44,7 @@ use std::fmt;
 mod bind;
 mod check;
 mod env;
+mod family;
 mod field;
 mod mode;
 mod name;
@@ -58,13 +59,14 @@ pub use bind::{
 };
 pub use check::{Finding, Problem, Quote, Refusals, Verdict, capture, check, mode};
 pub use env::Environment;
+pub use family::Family;
 pub use field::{Field, FieldError, FieldProblem, Presence, Shape};
 pub use mode::{Mode, ModeRule};
 pub use name::{Name, NameError};
 pub use secret::{Secret, SecretBytes};
 pub use spec::{
-    Digest, Group, GroupName, GroupNameError, Pointer, Show, Source, Spec, SpecError, SpecProblem,
-    SpecProblemKind, ToolTable, Unset, UnsetRule, Variable,
+    Declaration, Digest, FamilyDeclaration, Group, GroupName, GroupNameError, Pointer, Show,
+    Source, Spec, SpecError, SpecProblem, SpecProblemKind, ToolTable, Unset, UnsetRule, Variable,
 };
 pub use url;
 pub use value_type::{
@@ -101,6 +103,11 @@ pub use starmap_derive::Enumeration;
 /// another signature fails to compile. [`Env::from_vars`] runs the check on
 /// each value, a default included, after its type and unset rule pass, and
 /// a refusal joins the other findings as [`Problem::Rejected`].
+///
+/// A field reads a family of variables with
+/// `#[starmap(family = "SHELF_DB_URL")]`, and its type is [`Family<T>`],
+/// where `T` is any type a field of one variable holds, without an
+/// `Option`. The field holds each member that is set, under its key.
 #[cfg(feature = "derive")]
 pub use starmap_derive::Env;
 
@@ -108,6 +115,7 @@ pub use starmap_derive::Env;
 /// starmap's public API, and any release may change them (LIB-7).
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::family::read_family;
     pub use crate::field::{FieldType, ReadField, Rule, read_choice, run_check};
 }
 
@@ -142,7 +150,7 @@ pub trait Env: Sized {
     /// Reads `vars` into the struct. The embedded spec gives each
     /// variable's type, its unset rule and its default, and the mode
     /// variable decides the mode. A variable that the spec does not
-    /// declare is ignored. An empty value, such as the value of `FOO=`,
+    /// declare, and that is no member of a family, is ignored. An empty value, such as the value of `FOO=`,
     /// counts as unset, so an `Option` field reads it as `None`, a field
     /// with a default reads the default, and a required field refuses the
     /// read.

@@ -45,6 +45,17 @@ fn the_json_counts_the_declared_reads_and_names_each_undeclared_one() {
 }
 
 #[test]
+fn a_read_of_a_member_is_declared_and_a_read_of_an_unlisted_key_is_undeclared() {
+    let run = starmap(&["check", "--spec", "families/starmap.toml", "--json"]).code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(
+        document["data"]["undeclared"],
+        json!(["SHELF_TOKEN_INITECH"])
+    );
+    assert_eq!(document["data"]["read"], 1);
+}
+
+#[test]
 fn a_source_file_that_is_not_rust_fails_and_names_the_file() {
     starmap(&["check", "--spec", "unreadable/starmap.toml"])
         .code(1)

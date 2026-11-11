@@ -8,6 +8,26 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A file can declare a family of variables whose names are chosen at run
+  time, as `[families.SHELF_DB_URL]` with the fields of a variable. A
+  member is any variable named by the prefix, an underscore and a key, such
+  as `SHELF_DB_URL_EU`. A family's keys are open unless `keys = [...]`
+  lists them, and a listed family refuses a member whose key it does not
+  list with `Problem::UnlistedKey`, which `starmap run` reports as
+  `starmap::family::unlisted_key`. Only a listed family may be required, no
+  family has a default, and a family is a setting without a bind or
+  inherited. The new `starmap::spec::bad_family` refuses a file that breaks
+  these rules, or whose family shares a member with a variable or another
+  family, and `starmap::spec::bad_group` refuses a group that names a
+  family or a member. `capture`, `check`, `.env`, `--set` and `starmap
+  check` read each member through `Spec::declared`. A struct field reads a
+  family with `#[starmap(family = "SHELF_DB_URL")]` into the new
+  `starmap::Family<T>`, and `starmap_test::check` compares it with the
+  family. The Rust API gains `FamilyDeclaration`, `Declaration`,
+  `Spec::families`, `Spec::family`, `Spec::declared`,
+  `Environment::members`, `Bindings::iter` and `Field::family`. Families
+  count toward the digest, and the digest of a file without families does
+  not change.
 - A field of a struct that derives `Env` can name the application's own
   check, as `#[starmap("SHELF_PORT", check = unprivileged)]`. A shown
   field's check returns `Result<(), String>` and a withheld field's check

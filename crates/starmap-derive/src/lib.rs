@@ -13,8 +13,9 @@ mod enumeration;
 mod env;
 mod pointer;
 
-/// Derives `starmap::Env` for a struct whose fields each read one variable.
-/// starmap's re-export documents the attributes.
+/// Derives `starmap::Env` for a struct whose fields each read one variable
+/// or one family of variables. starmap's re-export documents the
+/// attributes.
 #[proc_macro_derive(Env, attributes(starmap))]
 pub fn derive_env(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

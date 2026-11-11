@@ -22,10 +22,16 @@ mod tests;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Field {
-    /// The name of the variable the field reads.
+    /// The name of the variable the field reads, or the prefix of the
+    /// family it reads when [`Field::family`] is true.
     pub name: &'static str,
+    /// Whether the field reads a family of variables into a
+    /// [`Family`](crate::Family), whose prefix is [`Field::name`].
+    pub family: bool,
     /// The field's type as the struct writes it, without the `Option`
-    /// around it, such as `url::Url` for `Option<url::Url>`.
+    /// around it, such as `url::Url` for `Option<url::Url>`. For a family,
+    /// it is the type of each member's value, such as `url::Url` for
+    /// `starmap::Family<url::Url>`.
     pub rust_type: &'static str,
     /// The kind of value the field's type holds.
     pub shape: Shape,
@@ -49,9 +55,27 @@ impl Field {
     ) -> Self {
         Self {
             name,
+            family: false,
             rust_type,
             shape: T::SHAPE,
             presence,
+            show: T::SHOW,
+        }
+    }
+
+    /// Describes a field of type `Family<T>` that reads the family whose
+    /// prefix is `prefix`. The derive calls it, and `rust_type` is `T` as
+    /// the struct writes it. Its presence is [`Presence::Always`], because
+    /// a family with no member set is an empty `Family`.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn of_family<T: FieldType>(prefix: &'static str, rust_type: &'static str) -> Self {
+        Self {
+            name: prefix,
+            family: true,
+            rust_type,
+            shape: T::SHAPE,
+            presence: Presence::Always,
             show: T::SHOW,
         }
     }
@@ -374,6 +398,12 @@ pub struct FieldError {
 }
 
 impl FieldError {
+    /// Returns the error of the field that reads `name`, which cannot hold
+    /// its value because of `problem`.
+    pub(crate) const fn new(name: &'static str, problem: FieldProblem) -> Self {
+        Self { name, problem }
+    }
+
     /// Returns the name of the variable the field reads.
     #[must_use]
     pub fn name(&self) -> &'static str {

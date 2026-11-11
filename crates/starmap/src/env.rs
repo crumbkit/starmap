@@ -8,15 +8,30 @@ use crate::{Mode, Name, Secret, SecretBytes, Value};
 #[cfg(test)]
 mod tests;
 
-/// The values of every variable a spec declares, each checked against its
-/// type and its unset rule in one mode. Only [`check`](crate::check)
-/// builds one, so an `Environment` always holds checked values.
+/// The values of every variable a spec declares, and of each member of a
+/// family that is set, each checked against its type and its unset rule in
+/// one mode. Only [`check`](crate::check) builds one, so an `Environment`
+/// always holds checked values.
 #[derive(Debug)]
 pub struct Environment {
     mode: Mode,
     /// Each declared variable in the spec's order, with `None` for one that
-    /// stays unset.
+    /// stays unset, and then each member of a family that is set.
     entries: Vec<(Name, Option<Held>)>,
+    /// Each member of a family that is set, in prefix order and then key
+    /// order.
+    members: Vec<Member>,
+}
+
+/// A member of a family that the environment holds a value for.
+#[derive(Debug)]
+pub(crate) struct Member {
+    /// The family's prefix.
+    pub(crate) prefix: Name,
+    /// The member's key.
+    pub(crate) key: String,
+    /// The member's name.
+    pub(crate) name: Name,
 }
 
 /// A checked value.
@@ -32,9 +47,54 @@ pub(crate) enum Held {
 
 impl Environment {
     /// Builds the environment of `entries`, which `check` has checked in
-    /// `mode`.
-    pub(crate) fn new(mode: Mode, entries: Vec<(Name, Option<Held>)>) -> Self {
-        Self { mode, entries }
+    /// `mode`, where `members` names each entry that is a member of a
+    /// family.
+    pub(crate) fn new(
+        mode: Mode,
+        entries: Vec<(Name, Option<Held>)>,
+        members: Vec<Member>,
+    ) -> Self {
+        let mut members = members;
+        members.sort_by(|left, right| (&left.prefix, &left.key).cmp(&(&right.prefix, &right.key)));
+        Self {
+            mode,
+            entries,
+            members,
+        }
+    }
+
+    /// Returns the key and the name of each member of the family whose
+    /// prefix is `prefix` that has a value, in key order. Its value is
+    /// [`Environment::value`] or [`Environment::secret`] of the name. It
+    /// returns nothing when the spec declares no such family.
+    ///
+    /// ```
+    /// let spec = starmap::Spec::parse(
+    ///     r#"
+    /// [families.SHELF_DB_URL]
+    /// purpose = "The database of one region, keyed by the region's code."
+    /// type = "url"
+    /// unset = "optional"
+    /// show = "shown"
+    /// source = "setting"
+    /// "#,
+    /// )?;
+    /// let vars = [("SHELF_DB_URL_US", "https://us.example"), ("SHELF_DB_URL_EU", "https://eu.example")]
+    ///     .map(|(name, value)| (name.into(), value.into()));
+    /// let bindings = starmap::capture(&spec, vars);
+    /// let starmap::Verdict::Ready(environment) = starmap::check(&spec, &bindings, starmap::Mode::Local) else {
+    ///     return Err("the members fit".into());
+    /// };
+    /// let prefix: starmap::Name = "SHELF_DB_URL".parse()?;
+    /// let keys: Vec<&str> = environment.members(&prefix).map(|(key, _)| key).collect();
+    /// assert_eq!(keys, ["EU", "US"]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn members<'e>(&'e self, prefix: &'e Name) -> impl Iterator<Item = (&'e str, &'e Name)> {
+        self.members
+            .iter()
+            .filter(move |member| member.prefix == *prefix)
+            .map(|member| (member.key.as_str(), &member.name))
     }
 
     /// Returns the mode the values were checked in.
@@ -76,8 +136,9 @@ impl Environment {
         }
     }
 
-    /// Sets each declared variable that has a value in `command`'s
-    /// environment, and removes each declared variable that stays unset.
+    /// Sets each declared variable that has a value, and each member of a
+    /// family that has one, in `command`'s environment, and removes each
+    /// declared variable that stays unset.
     /// It leaves every other variable of `command` as it was, so the caller
     /// decides whether the child inherits the rest of the environment.
     ///

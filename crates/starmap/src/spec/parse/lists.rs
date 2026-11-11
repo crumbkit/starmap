@@ -38,7 +38,7 @@ impl Parser {
 
     /// Parses each element of the field's array as a `T`, or reports each
     /// element that is not text or that `T` refuses.
-    fn texts<T: FromStr>(&mut self, field: &Field<'_>) -> Option<Vec<T>>
+    pub(super) fn texts<T: FromStr>(&mut self, field: &Field<'_>) -> Option<Vec<T>>
     where
         T::Err: Display,
     {
@@ -95,5 +95,18 @@ impl Parser {
         };
         self.report(at, Kind::EmptyEnumeration, message);
         None
+    }
+}
+
+/// Joins `words`, each wrapped in `quote`, as "a, b and c".
+pub(super) fn list(words: &[&str], quote: &str) -> String {
+    let quoted: Vec<String> = words
+        .iter()
+        .map(|word| format!("{quote}{word}{quote}"))
+        .collect();
+    match quoted.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
     }
 }

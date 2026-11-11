@@ -13,6 +13,8 @@ use crate::{ByteLength, Cache, Mode, Name, SecretBind, SecretRef, Type, Value};
 
 /// Writes `spec` as TOML: the `[mode]` table, then one table per named
 /// enumeration in name order, then one table per group in name order, then
+/// one table per family in prefix order with its listed keys in key order
+/// after its other fields, then
 /// one table per variable in the spec's order, each with its fields in the order of the field rules.
 pub(super) fn to_toml(spec: &Spec) -> String {
     let mut document = DocumentMut::new();
@@ -49,6 +51,19 @@ pub(super) fn to_toml(spec: &Spec) -> String {
     }
     if !groups.is_empty() {
         document.insert("groups", Item::Table(groups));
+    }
+    let mut families = Table::new();
+    families.set_implicit(true);
+    for family in spec.families() {
+        let mut table = variable(family.variable());
+        if let Some(keys) = family.keys() {
+            let keys: Array = keys.iter().map(String::as_str).collect();
+            table.insert("keys", value(keys));
+        }
+        families.insert(family.prefix().as_str(), Item::Table(table));
+    }
+    if !families.is_empty() {
+        document.insert("families", Item::Table(families));
     }
     let mut variables = Table::new();
     variables.set_implicit(true);

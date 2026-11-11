@@ -604,6 +604,11 @@ impl Bindings {
     pub fn get(&self, name: &Name) -> Option<&Bound> {
         self.0.get(name)
     }
+
+    /// Returns each bound name with its value, in name order.
+    pub fn iter(&self) -> impl Iterator<Item = (&Name, &Bound)> {
+        self.0.iter()
+    }
 }
 
 /// A value bound to one variable. [`check`](crate::check) refuses a

@@ -144,23 +144,24 @@ pub(crate) fn read(file: &Path, spec: &Spec) -> Result<DotEnv, Vec<DotEnvFailure
         };
         let key = key.to_owned();
         let value = Zeroizing::new(value.to_owned());
-        let declared = key
-            .parse::<Name>()
-            .ok()
-            .and_then(|name| spec.variable(&name).map(|variable| (name, variable)));
+        // A member of a family is declared by its family, whose source is
+        // never a secret.
+        let declared = key.parse::<Name>().ok().and_then(|name| {
+            let secret = matches!(
+                spec.declared(&name)?.variable().source(),
+                Source::Secret { .. } | Source::Generated { .. }
+            );
+            Some((name, secret))
+        });
         match declared {
             None => dotenv.undeclared.push(key),
-            Some((name, variable)) => match variable.source() {
-                Source::Secret { .. } | Source::Generated { .. } => {
-                    secrets.push(DotEnvFailure::Secret {
-                        name,
-                        file: shown.clone(),
-                    });
-                }
-                _ => dotenv
-                    .values
-                    .push((OsString::from(key), OsString::from(value.as_str()))),
-            },
+            Some((name, true)) => secrets.push(DotEnvFailure::Secret {
+                name,
+                file: shown.clone(),
+            }),
+            Some((_, false)) => dotenv
+                .values
+                .push((OsString::from(key), OsString::from(value.as_str()))),
         }
     }
     if secrets.is_empty() {

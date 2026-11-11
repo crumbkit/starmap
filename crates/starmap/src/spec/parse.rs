@@ -12,27 +12,34 @@ use toml_edit::{Document, Item, Key, TableLike};
 use super::{
     ENCODING_WORDS, SHOW_WORDS, SOURCE_WORDS, Show, Source, SourceKind, Spec, SpecError,
     SpecProblem, SpecProblemKind as Kind, TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule, Variable,
-    word_of,
 };
 use crate::bind::BIND_KINDS;
 use crate::{
-    ByteRule, Cache, Encoding, IntegerRange, ModeRule, Name, OnePasswordRef, PathTemplate,
-    PathTemplateError, Pattern, ProvidedRef, ProviderKind, SecretBind, SecretRef, Type, Value,
+    ByteRule, Cache, Encoding, IntegerRange, Name, OnePasswordRef, PathTemplate, PathTemplateError,
+    Pattern, ProvidedRef, ProviderKind, SecretBind, SecretRef, Type, Value,
 };
 
 mod bytes;
 mod enumerations;
+mod families;
 mod groups;
 mod lists;
+mod mode;
 mod pointer;
 mod tool;
 
+use lists::list;
 pub(super) use pointer::parse_pointer;
 
 /// The keys of the file's top-level table.
-const ROOT_FIELDS: &[&str] = &["mode", "enumerations", "groups", "variables", "tool"];
-/// The keys of the `[mode]` table.
-const MODE_FIELDS: &[&str] = &["variable", "production"];
+const ROOT_FIELDS: &[&str] = &[
+    "mode",
+    "enumerations",
+    "groups",
+    "families",
+    "variables",
+    "tool",
+];
 /// The keys of a variable's table.
 const VARIABLE_FIELDS: &[&str] = &[
     "purpose", "effect", "check", "type", "unset", "show", "source", "bind", "bytes", "tool",
@@ -152,6 +159,7 @@ impl Parser {
             mode: None,
             enumerations: Vec::new(),
             groups: Vec::new(),
+            families: Vec::new(),
             variables: Vec::new(),
             tools: Vec::new(),
         };
@@ -168,6 +176,9 @@ impl Parser {
             self.enumerations = self.enumerations(&field);
             spec.enumerations = self.enumerations.values().flatten().cloned().collect();
         }
+        if let Some(field) = root_field(root, "families") {
+            spec.families = self.families(&field);
+        }
         let mut declared = Vec::new();
         if let Some(field) = root_field(root, "variables")
             && let Some(table) = self.table(&field)
@@ -179,7 +190,8 @@ impl Parser {
                     item,
                 };
                 let name = self.name(&field);
-                let (kind, variable) = self.variable(&field);
+                let (kind, variable) = self.variable(&field, VARIABLE_FIELDS);
+                self.not_a_member(&field, name.as_ref(), &spec.families);
                 if let Some(name) = name {
                     declared.push((name.clone(), kind));
                     if let Some(variable) = variable {
@@ -192,7 +204,7 @@ impl Parser {
             spec.mode = self.mode(&field, &declared, &spec.variables);
         }
         if let Some(field) = root_field(root, "groups") {
-            spec.groups = self.groups(&field, &declared, &spec.variables);
+            spec.groups = self.groups(&field, &declared, &spec.variables, &spec.families);
         }
         if let Some(field) = root_field(root, "tool") {
             spec.tools = self.tools(&field).unwrap_or_default();
@@ -362,14 +374,19 @@ impl Parser {
         }
     }
 
-    /// Parses one variable's table. It returns the variable's source word,
-    /// when that parsed, even when the variable as a whole did not, so that
-    /// the mode rule can still be checked against it.
-    fn variable(&mut self, field: &Field<'_>) -> (Option<SourceKind>, Option<Variable>) {
+    /// Parses one variable's table, or a family's, whose table takes the
+    /// `known` keys. It returns the variable's source word, when that
+    /// parsed, even when the variable as a whole did not, so that the mode
+    /// rule can still be checked against it.
+    fn variable(
+        &mut self,
+        field: &Field<'_>,
+        known: &[&str],
+    ) -> (Option<SourceKind>, Option<Variable>) {
         let Some(table) = self.table(field) else {
             return (None, None);
         };
-        self.known(table, &field.path, VARIABLE_FIELDS);
+        self.known(table, &field.path, known);
         let purpose = self
             .required(field, table, "purpose")
             .and_then(|purpose| self.purpose(&purpose));
@@ -835,69 +852,6 @@ impl Parser {
         bytes?;
         Some(source)
     }
-
-    /// Parses the `[mode]` table and checks its variable against the
-    /// declared ones, their sources and their shows.
-    fn mode(
-        &mut self,
-        field: &Field<'_>,
-        declared: &[(Name, Option<SourceKind>)],
-        variables: &[(Name, Variable)],
-    ) -> Option<ModeRule> {
-        let table = self.table(field)?;
-        self.known(table, "mode", MODE_FIELDS);
-        let variable = self.required(field, table, "variable");
-        let name = variable.as_ref().and_then(|variable| {
-            let text = self.string(variable)?;
-            let name = text.parse::<Name>();
-            self.checked(variable.span(), &variable.path, text, Kind::BadName, name)
-        });
-        let production = self
-            .required(field, table, "production")
-            .and_then(|production| self.choices(&production));
-        let (name, variable) = (name?, variable?);
-        let (kind, message) = match declared.iter().find(|(declared, _)| *declared == name) {
-            None => (
-                Kind::ModeUndeclared,
-                format!(
-                    "`mode.variable` is {:?}, which the file does not declare",
-                    name.as_str()
-                ),
-            ),
-            Some((_, Some(kind)))
-                if !matches!(kind, SourceKind::Setting | SourceKind::Inherited) =>
-            {
-                (
-                    Kind::ModeSource,
-                    format!(
-                        "`mode.variable` is {:?}, which is a {} variable, and the mode variable \
-                         is a setting or inherited variable",
-                        name.as_str(),
-                        word_of(SOURCE_WORDS, kind)
-                    ),
-                )
-            }
-            // The mode is never decided from a secret, so the mode variable
-            // is shown.
-            Some(_)
-                if variables.iter().any(|(declared, variable)| {
-                    *declared == name && variable.show() == Show::Withheld
-                }) =>
-            {
-                (
-                    Kind::ModeSource,
-                    format!(
-                        "`mode.variable` is {:?}, which is withheld, and the mode variable is \
-                         shown",
-                        name.as_str()
-                    ),
-                )
-            }
-            Some(_) => return Some(ModeRule::new(name, production?)),
-        };
-        self.report(variable.span(), kind, message);
-        None
-    }
 }
 
 /// Returns the top-level field `name`, whose path is its name.
@@ -915,17 +869,4 @@ fn entries(table: &dyn TableLike) -> impl Iterator<Item = (&Key, &Item)> {
     table
         .iter()
         .filter_map(|(name, _)| table.get_key_value(name))
-}
-
-/// Joins `words`, each wrapped in `quote`, as "a, b and c".
-fn list(words: &[&str], quote: &str) -> String {
-    let quoted: Vec<String> = words
-        .iter()
-        .map(|word| format!("{quote}{word}{quote}"))
-        .collect();
-    match quoted.split_last() {
-        None => String::new(),
-        Some((last, [])) => last.clone(),
-        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
-    }
 }

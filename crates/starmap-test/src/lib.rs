@@ -67,7 +67,12 @@ pub fn check<E: Env>() {
 /// The check compares the names the struct reads with the names the spec
 /// declares, each field's shape with its variable's type, each field's
 /// presence with the variable's unset rule in both modes, and each field's
-/// show with the variable's show. An [`Allow`] entry that excuses nothing,
+/// show with the variable's show. A field that reads a family into a
+/// `starmap::Family<T>` is compared with the family's declaration: its
+/// prefix must name a family, and its value type must fit the family's
+/// type and show. A declared family that no field reads is a disagreement,
+/// as a declared variable is, and an [`Allow`] entry may name its prefix.
+/// An [`Allow`] entry that excuses nothing,
 /// because the struct reads the variable or the spec does not declare it,
 /// is a disagreement too.
 ///
@@ -99,30 +104,47 @@ fn compare(
     let spec = Spec::parse(text).map_err(|error| format!("{file} does not parse: {error}"))?;
     let mut found: Vec<(&str, String)> = Vec::new();
     for field in fields {
-        let variable = field
-            .name
-            .parse()
-            .ok()
-            .and_then(|name| spec.variable(&name));
-        match variable {
-            Some(variable) => {
-                let messages = disagreements(file, field, variable, spec.mode().is_some());
-                found.extend(messages.into_iter().map(|message| (field.name, message)));
+        let name = field.name.parse().ok();
+        let messages = if field.family {
+            match name.as_ref().and_then(|prefix| spec.family(prefix)) {
+                Some(family) => kinds(file, field, family.variable()),
+                None => vec![
+                    "the struct reads it as a family, and starmap.toml declares no family with that prefix"
+                        .to_owned(),
+                ],
             }
-            None => found.push((
-                field.name,
-                "the struct reads it, and starmap.toml does not declare it".to_owned(),
-            )),
-        }
+        } else {
+            match name.as_ref().and_then(|name| spec.variable(name)) {
+                Some(variable) => disagreements(file, field, variable, spec.mode().is_some()),
+                None => {
+                    vec!["the struct reads it, and starmap.toml does not declare it".to_owned()]
+                }
+            }
+        };
+        found.extend(messages.into_iter().map(|message| (field.name, message)));
     }
-    let read: BTreeSet<&str> = fields.iter().map(|field| field.name).collect();
+    let read_by = |family: bool| -> BTreeSet<&str> {
+        fields
+            .iter()
+            .filter(|field| field.family == family)
+            .map(|field| field.name)
+            .collect()
+    };
+    let (read, read_families) = (read_by(false), read_by(true));
     let allowed: BTreeSet<&str> = allow.iter().map(|entry| entry.name).collect();
-    for (name, _) in spec.variables() {
-        let name = name.as_str();
-        if !read.contains(name) && !allowed.contains(name) {
+    let unread_variables = spec
+        .variables()
+        .map(|(name, _)| (name.as_str(), "it", &read))
+        .filter(|(name, _, read)| !read.contains(name));
+    let unread_families = spec
+        .families()
+        .map(|family| (family.prefix().as_str(), "the family", &read_families))
+        .filter(|(prefix, _, read)| !read.contains(prefix));
+    for (name, what, _) in unread_variables.chain(unread_families) {
+        if !allowed.contains(name) {
             found.push((
                 name,
-                format!("{file} declares it, and the struct neither reads it nor has an Allow entry for it"),
+                format!("{file} declares {what}, and the struct neither reads it nor has an Allow entry for it"),
             ));
         }
     }
@@ -130,8 +152,8 @@ fn compare(
         let declared = entry
             .name
             .parse()
-            .is_ok_and(|name| spec.variable(&name).is_some());
-        let why = if read.contains(entry.name) {
+            .is_ok_and(|name| spec.variable(&name).is_some() || spec.family(&name).is_some());
+        let why = if read.contains(entry.name) || read_families.contains(entry.name) {
             "the struct reads it".to_owned()
         } else if !declared {
             format!("{file} does not declare it")
@@ -165,17 +187,7 @@ fn compare(
 /// which the variable is only ever read in local mode.
 fn disagreements(file: &str, field: &Field, variable: &Variable, has_mode: bool) -> Vec<String> {
     let rust_type = field.rust_type;
-    let mut found = Vec::new();
-    match (variable.show(), field.show) {
-        (Show::Withheld, Show::Shown) => found.push(format!(
-            "{file} withholds it, and the field type {rust_type} is not starmap::Secret or starmap::SecretBytes"
-        )),
-        (Show::Shown, Show::Withheld) => found.push(format!(
-            "{file} shows it, and the field type {rust_type} holds a withheld value"
-        )),
-        _ => {}
-    }
-    found.extend(shape(file, field, variable.value_type()));
+    let mut found = kinds(file, field, variable);
     let modes: &[Mode] = if has_mode {
         &[Mode::Local, Mode::Production]
     } else {
@@ -196,6 +208,26 @@ fn disagreements(file: &str, field: &Field, variable: &Variable, has_mode: bool)
         )),
         _ => {}
     }
+    found
+}
+
+/// Returns each way the show and the shape of `field` disagree with
+/// `variable`, which `file` declares, or with the fields every member of a
+/// family shares. A family field's type holds each member's value, so
+/// these are the only disagreements a family field can have.
+fn kinds(file: &str, field: &Field, variable: &Variable) -> Vec<String> {
+    let rust_type = field.rust_type;
+    let mut found = Vec::new();
+    match (variable.show(), field.show) {
+        (Show::Withheld, Show::Shown) => found.push(format!(
+            "{file} withholds it, and the field type {rust_type} is not starmap::Secret or starmap::SecretBytes"
+        )),
+        (Show::Shown, Show::Withheld) => found.push(format!(
+            "{file} shows it, and the field type {rust_type} holds a withheld value"
+        )),
+        _ => {}
+    }
+    found.extend(shape(file, field, variable.value_type()));
     found
 }
 

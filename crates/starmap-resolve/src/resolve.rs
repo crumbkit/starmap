@@ -6,7 +6,8 @@ use std::fmt;
 use std::time::Instant;
 
 use starmap::{
-    Bindings, Bound, Mode, Name, NoPlace, Placeholder, ProviderKind, Source, Spec, Unset, Variable,
+    Bindings, Bound, Declaration, Mode, Name, NoPlace, Placeholder, ProviderKind, Source, Spec,
+    Unset, Variable,
 };
 
 use crate::{Lookup, Places, Provider, ProviderError, Resolver, SecretError, expand};
@@ -200,7 +201,9 @@ impl ResolveProblem {
 /// when no provider of that kind is registered. A secret with a bind asks
 /// the resolvers for its reference, and a generated variable asks them
 /// with [`Lookup::Generated`]. A caller value for either is ignored and
-/// listed in [`Resolution::ignored`].
+/// listed in [`Resolution::ignored`]. Each member of a family that the
+/// caller gives a value keeps that value, because a family's source is a
+/// setting without a bind or inherited.
 ///
 /// A missing provider, resolver or place fails only a variable that is
 /// required in `mode`. Every provider and resolver is asked under the
@@ -237,6 +240,13 @@ pub fn resolve(spec: &Spec, mode: Mode, context: &Context<'_>) -> Resolution {
                 name: name.clone(),
                 problem,
             }),
+        }
+    }
+    for (name, bound) in context.caller.iter() {
+        if let Some(Declaration::Member { family, .. }) = spec.declared(name)
+            && let Some(bound) = copy(family.variable(), bound)
+        {
+            bindings.bind(name.clone(), bound);
         }
     }
     Resolution {

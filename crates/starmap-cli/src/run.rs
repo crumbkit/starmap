@@ -31,8 +31,8 @@ use starmap_resolve::{
 
 use crate::cli::{Assignment, RunArgs, SpecFile};
 use crate::codes::{
-    BIND_NO_PLACE, BIND_NO_PROVIDER, GROUP_INCOMPLETE, SECRET_UNBOUND, SECRET_UNREADABLE,
-    VARIABLE_INVALID, VARIABLE_MISSING, VARIABLE_SECRET, VARIABLE_UNKNOWN,
+    BIND_NO_PLACE, BIND_NO_PROVIDER, FAMILY_UNLISTED_KEY, GROUP_INCOMPLETE, SECRET_UNBOUND,
+    SECRET_UNREADABLE, VARIABLE_INVALID, VARIABLE_MISSING, VARIABLE_SECRET, VARIABLE_UNKNOWN,
 };
 use crate::dotenv::{self, DotEnvFailure};
 use crate::spec::{self, SpecFailure};
@@ -425,7 +425,11 @@ fn assignments(
     let mut failures = Vec::new();
     for assignment in set {
         let name = &assignment.name;
-        match spec.variable(name).map(starmap::Variable::source) {
+        let declared = spec.declared(name);
+        match declared
+            .as_ref()
+            .map(|declared| declared.variable().source())
+        {
             None => failures.push(RunFailure::Unknown { name: name.clone() }),
             Some(Source::Secret { .. } | Source::Generated { .. }) => {
                 failures.push(RunFailure::SetSecret { name: name.clone() });
@@ -446,6 +450,11 @@ fn assignments(
 /// Returns `names` as `A`, `A and B`, or `A, B and C`.
 fn names(names: &[Name]) -> String {
     let texts: Vec<&str> = names.iter().map(Name::as_str).collect();
+    self::texts(&texts)
+}
+
+/// Returns `texts` as `A`, `A and B`, or `A, B and C`.
+fn texts(texts: &[&str]) -> String {
     match texts.split_last() {
         None => String::new(),
         Some((last, [])) => (*last).to_owned(),
@@ -530,6 +539,26 @@ pub(crate) enum RunFailure {
         value: Option<Quote>,
         /// The spec file, as the caller gave it.
         file: String,
+    },
+    /// A variable's name is the prefix of a listed family and a key that
+    /// the family does not list.
+    #[failure(
+        code = FAMILY_UNLISTED_KEY,
+        hint = "unset {name} in this shell, in .env and in --set",
+        alternative = Recovery::Hint(format!(
+            "add {key} to keys in [families.{family}] in starmap.toml"
+        )),
+        field(key = name.as_str()),
+    )]
+    UnlistedKey {
+        /// The variable.
+        name: Name,
+        /// The family's prefix.
+        family: Name,
+        /// The variable's key, the part of its name after the prefix.
+        key: String,
+        /// The keys the family lists.
+        keys: Vec<String>,
     },
     /// A variable is unset, and other members of its group are set.
     #[failure(
@@ -665,6 +694,16 @@ impl RunFailure {
                 group: group.clone(),
                 set: set.clone(),
             },
+            Problem::UnlistedKey { family, keys } => Self::UnlistedKey {
+                key: name
+                    .as_str()
+                    .get(family.as_str().len() + 1..)
+                    .unwrap_or_default()
+                    .to_owned(),
+                name,
+                family: family.clone(),
+                keys: keys.clone(),
+            },
             // A problem that a later starmap adds reads as an invalid
             // value, until this command learns it.
             _ => invalid("the value does not fit the variable".to_owned()),
@@ -711,6 +750,17 @@ impl fmt::Display for RunFailure {
                     formatter,
                     "{name} is unset, and the group {group} needs it because {} {verb} set",
                     names(set)
+                )
+            }
+            Self::UnlistedKey {
+                name, family, keys, ..
+            } => {
+                let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
+                let noun = if keys.len() == 1 { "key" } else { "keys" };
+                write!(
+                    formatter,
+                    "{name} is set, and the family {family} lists only the {noun} {}",
+                    texts(&keys)
                 )
             }
             Self::NoProvider { name, kind } => write!(

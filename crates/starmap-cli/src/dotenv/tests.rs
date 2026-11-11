@@ -43,6 +43,36 @@ fn a_missing_file_gives_no_values() {
 }
 
 #[test]
+fn a_member_of_a_family_is_read_and_a_name_outside_it_is_listed() {
+    let spec = Spec::parse(
+        r#"
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+"#,
+    )
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(".env");
+    std::fs::write(
+        &file,
+        "SHELF_DB_URL_EU=https://eu.example/\nSHELF_DB_URLS=x\n",
+    )
+    .unwrap();
+
+    let dotenv = read(&file, &spec).unwrap();
+
+    assert_eq!(
+        dotenv.values,
+        [("SHELF_DB_URL_EU".into(), "https://eu.example/".into())]
+    );
+    assert_eq!(dotenv.undeclared, ["SHELF_DB_URLS"]);
+}
+
+#[test]
 fn a_declared_setting_is_read_and_an_undeclared_key_is_listed() {
     let dotenv = read_text(b"# a comment\nSHELF_DEBUG=true\nSHELF_THEME='dark'\n").unwrap();
     assert_eq!(dotenv.values, [("SHELF_DEBUG".into(), "true".into())]);

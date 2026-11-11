@@ -2,6 +2,7 @@
 //! form and digest, and the problems that stop a file from parsing.
 
 mod canonical;
+mod family;
 mod group;
 mod parse;
 
@@ -15,6 +16,7 @@ use crate::{
     SecretBind, Type, Value,
 };
 
+pub use family::{Declaration, FamilyDeclaration};
 pub use group::{Group, GroupName, GroupNameError};
 
 #[cfg(test)]
@@ -48,6 +50,8 @@ pub struct Spec {
     enumerations: Vec<Choices>,
     /// The file's groups of variables, in name order.
     groups: Vec<Group>,
+    /// The file's families of variables, in prefix order.
+    families: Vec<FamilyDeclaration>,
     variables: Vec<(Name, Variable)>,
     /// The file's top-level tool tables, in name order.
     tools: Vec<ToolTable>,
@@ -114,6 +118,56 @@ impl Spec {
             .find(|group| group.variables().contains(variable))
     }
 
+    /// Returns each family of variables the spec declares, in prefix order.
+    pub fn families(&self) -> impl Iterator<Item = &FamilyDeclaration> {
+        self.families.iter()
+    }
+
+    /// Returns the family whose prefix is `prefix`, if the spec declares it
+    /// in a `[families.<PREFIX>]` table.
+    #[must_use]
+    pub fn family(&self, prefix: &Name) -> Option<&FamilyDeclaration> {
+        self.families
+            .iter()
+            .find(|family| family.prefix() == prefix)
+    }
+
+    /// Returns the declaration that `name` has: the variable the spec
+    /// declares with that name, or the family whose prefix, an underscore
+    /// and a key make the name. A name with the prefix of a listed family
+    /// and a key the family does not list is a member too, so a check
+    /// refuses its value instead of ignoring it.
+    ///
+    /// ```
+    /// let spec = starmap::Spec::parse(
+    ///     r#"
+    /// [families.SHELF_DB_URL]
+    /// purpose = "The database of one region, keyed by the region's code."
+    /// type = "url"
+    /// unset = "optional"
+    /// show = "shown"
+    /// source = "setting"
+    /// "#,
+    /// )?;
+    /// let name: starmap::Name = "SHELF_DB_URL_EU".parse()?;
+    /// let Some(starmap::Declaration::Member { family, key }) = spec.declared(&name) else {
+    ///     return Err("SHELF_DB_URL_EU is a member".into());
+    /// };
+    /// assert_eq!((family.prefix().as_str(), key), ("SHELF_DB_URL", "EU"));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[must_use]
+    pub fn declared<'s>(&'s self, name: &'s Name) -> Option<Declaration<'s>> {
+        if let Some(variable) = self.variable(name) {
+            return Some(Declaration::Variable(variable));
+        }
+        self.families.iter().find_map(|family| {
+            family
+                .key_of(name)
+                .map(|key| Declaration::Member { family, key })
+        })
+    }
+
     /// Returns the variable called `name`, if the spec declares it.
     #[must_use]
     pub fn variable(&self, name: &Name) -> Option<&Variable> {
@@ -156,7 +210,8 @@ impl Spec {
     /// Returns the spec's canonical form: TOML that lists the mode table,
     /// then each named enumeration in name order with its values in the
     /// file's order, then each group in name order with its variables in
-    /// the file's order, and then each variable in order, with each field in a fixed order, each
+    /// the file's order, then each family in prefix order with its listed
+    /// keys in key order, and then each variable in order, with each field in a fixed order, each
     /// value in one spelling, and no comments. It leaves out every tool
     /// table, so parsing it returns a spec equal to this one without its
     /// tool tables.
@@ -641,7 +696,7 @@ pub enum SpecProblemKind {
     /// The mode variable is not a setting or inherited variable.
     ModeSource,
     /// A file has `spec`, which makes it a [`Pointer`], and declares
-    /// variables, enumerations, groups or a mode too.
+    /// variables, enumerations, groups, families or a mode too.
     PointerDeclares,
     /// A [`Pointer`] is read where a file that declares variables belongs,
     /// such as the file that another pointer names.
@@ -653,8 +708,14 @@ pub enum SpecProblemKind {
     GroupUndeclared,
     /// A group lists fewer than two variables or repeats one, or lists a
     /// variable that another group lists, that has a default or that is
-    /// generated.
+    /// generated, or names a family or a member of one.
     BadGroup,
+    /// A family has a default, is open and may be required, lists no keys
+    /// or repeats one, has a key that makes a member name too long, has a
+    /// source other than a setting without a bind or inherited, or shares
+    /// a member with a declared variable, another family or the mode
+    /// variable.
+    BadFamily,
 }
 
 impl SpecProblemKind {
@@ -686,6 +747,7 @@ impl SpecProblemKind {
             Self::EnumerationUndeclared => "starmap::spec::enumeration_undeclared",
             Self::GroupUndeclared => "starmap::spec::group_undeclared",
             Self::BadGroup => "starmap::spec::bad_group",
+            Self::BadFamily => "starmap::spec::bad_family",
         }
     }
 }

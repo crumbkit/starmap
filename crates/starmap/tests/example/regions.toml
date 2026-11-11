@@ -1,0 +1,28 @@
+# A spec of families, for the struct tests of a family field: the open
+# family of one database url per region, and the listed family of one
+# withheld token per tenant, which production requires.
+[mode]
+variable = "SHELF_STAGE"
+production = ["prod"]
+
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[families.SHELF_TOKEN]
+purpose = "The API token of one tenant."
+type = "string"
+unset = { local = "optional", production = "required" }
+show = "withheld"
+source = "setting"
+keys = ["ACME", "GLOBEX"]
+
+[variables.SHELF_STAGE]
+purpose = "Selects local or production behaviour."
+type = { enumeration = ["dev", "prod"] }
+unset = { default = "dev" }
+show = "shown"
+source = "setting"
