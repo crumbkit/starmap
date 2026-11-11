@@ -4,7 +4,7 @@ check counts a literal name passed to var or var_os, a #[starmap("NAME")] field,
 
 A read whose name format! builds from a name, an underscore and one trailing placeholder, such as format!("SHELF_DB_URL_{region}"), reads a member of that family, and check fails when the file declares no such family. check passes on any other format! name and names the place of each one it cannot resolve.
 
-check also fails when the clippy.toml that Clippy reads for a crate whose source directory holds a .rs file lacks a disallowed-methods entry for std::env::var, var_os, vars or vars_os. starmap init --clippy adds the entries.
+check also fails when the clippy.toml that Clippy reads for the crate of a .rs file that check reads lacks a disallowed-methods entry for std::env::var, var_os, vars or vars_os. starmap init --clippy adds the entries.
 
 Usage: starmap check [OPTIONS]
 

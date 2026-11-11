@@ -56,11 +56,12 @@ where
     match cli.verb {
         Verb::Init(args) => {
             let dry_run = output.is_dry_run();
-            if args.clippy {
-                crumbkit::finish(output, init::BAN, init::ban(&args, dry_run))
+            let listing = if args.clippy {
+                init::ban(&args, dry_run)
             } else {
-                crumbkit::finish(output, init::INIT, init::init(&args, dry_run))
-            }
+                init::init(&args, dry_run)
+            };
+            crumbkit::finish(output, init::INIT, listing)
         }
         Verb::Check(args) => crumbkit::finish(output, check::CHECK, check::check(&args, vars)),
         Verb::Explain(args) => {

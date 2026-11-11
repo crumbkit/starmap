@@ -119,6 +119,7 @@ fn a_file_with_every_entry_is_left_as_it_is() {
 /// Opens the one clippy.toml that Clippy reads for a crate whose source is
 /// in `src` beside the spec in `dir`.
 fn beside(dir: &Path) -> Result<Ban, ClippyFailure> {
+    fs::create_dir_all(dir.join("src")).unwrap();
     let mut bans = open(&dir.join("starmap.toml"), &[dir.join("src")]);
     assert_eq!(bans.len(), 1);
     bans.remove(0)
@@ -173,9 +174,12 @@ fn a_file_over_256_kib_is_refused_and_kept() {
 
 /// Opens the bans for the source directories `sources` and the spec
 /// `spec`, each a path below `root`, and returns each file as a path below
-/// `root` with whether the file exists.
+/// `root` with whether the file exists. It creates each source directory.
 fn found(root: &Path, spec: &str, sources: &[&str]) -> Vec<(String, bool)> {
     let sources: Vec<PathBuf> = sources.iter().map(|src| root.join(src)).collect();
+    for src in &sources {
+        fs::create_dir_all(src).unwrap();
+    }
     open(&root.join(spec), &sources)
         .into_iter()
         .map(|ban| {
@@ -194,10 +198,20 @@ fn root() -> (tempfile::TempDir, PathBuf) {
     (dir, root)
 }
 
+/// Makes each directory of `crates` below `root` a crate, with a
+/// Cargo.toml.
+fn crates(root: &Path, crates: &[&str]) {
+    for krate in crates {
+        fs::create_dir_all(root.join(krate)).unwrap();
+        fs::write(root.join(krate).join("Cargo.toml"), "").unwrap();
+    }
+}
+
 #[test]
-fn the_file_is_the_nearest_one_at_or_above_the_crate_as_clippy_finds_it() {
+fn the_file_is_the_nearest_one_from_the_crate_up_to_the_repository_root() {
     let (_dir, root) = root();
-    fs::create_dir_all(root.join("crates/app")).unwrap();
+    fs::create_dir(root.join(".git")).unwrap();
+    crates(&root, &["crates/app"]);
     let found = || found(&root, "crates/app/starmap.toml", &["crates/app/src"]);
     // No file anywhere: init writes one beside the spec.
     assert_eq!(found(), [("crates/app/clippy.toml".to_owned(), false)]);
@@ -215,9 +229,7 @@ fn the_file_is_the_nearest_one_at_or_above_the_crate_as_clippy_finds_it() {
 #[test]
 fn each_crate_has_its_own_nearest_file_and_a_shared_file_is_listed_once() {
     let (_dir, root) = root();
-    for krate in ["crates/a", "crates/b", "crates/c"] {
-        fs::create_dir_all(root.join(krate)).unwrap();
-    }
+    crates(&root, &["crates/a", "crates/b", "crates/c"]);
     let sources = ["crates/a/src", "crates/b/src", "crates/c/src"];
     // No file anywhere: init writes one beside the spec for every crate.
     assert_eq!(
@@ -238,11 +250,91 @@ fn each_crate_has_its_own_nearest_file_and_a_shared_file_is_listed_once() {
 #[test]
 fn a_crate_outside_the_directory_of_the_spec_gains_a_file_in_its_own_directory() {
     let (_dir, root) = root();
+    fs::create_dir(root.join(".git")).unwrap();
     fs::create_dir_all(root.join("config")).unwrap();
-    fs::create_dir_all(root.join("app")).unwrap();
+    crates(&root, &["app"]);
     assert_eq!(
         found(&root, "config/starmap.toml", &["app/src"]),
         [("app/clippy.toml".to_owned(), false)]
+    );
+}
+
+#[test]
+fn the_crate_of_a_source_file_is_the_nearest_directory_above_it_with_a_cargo_toml() {
+    let (_dir, root) = root();
+    crates(&root, &["crates/a", "crates/b"]);
+    fs::write(root.join("crates/b/clippy.toml"), "").unwrap();
+    // The scan of `src = ["crates"]` reads files in these directories.
+    let sources = ["crates/a/src", "crates/b/src/net", "crates/b/tests"];
+    assert_eq!(
+        found(&root, "starmap.toml", &sources),
+        [
+            ("clippy.toml".to_owned(), false),
+            ("crates/b/clippy.toml".to_owned(), true)
+        ]
+    );
+    // A directory with no Cargo.toml above it is in the crate of the spec.
+    assert_eq!(
+        found(&root, "starmap.toml", &["scripts"]),
+        [("clippy.toml".to_owned(), false)]
+    );
+}
+
+#[test]
+fn a_file_above_the_repository_root_is_not_read() {
+    let (_dir, root) = root();
+    fs::write(root.join("clippy.toml"), "").unwrap();
+    crates(&root, &["repo/app"]);
+    // A worktree and a submodule keep `.git` as a file.
+    fs::write(root.join("repo/.git"), "gitdir: elsewhere\n").unwrap();
+    assert_eq!(
+        found(&root, "repo/app/starmap.toml", &["repo/app/src"]),
+        [("repo/app/clippy.toml".to_owned(), false)]
+    );
+    assert_eq!(
+        found(&root, "repo/starmap.toml", &["repo/app/src"]),
+        [("repo/clippy.toml".to_owned(), false)]
+    );
+}
+
+#[test]
+fn without_a_repository_the_search_stops_at_the_directory_of_the_spec() {
+    let (_dir, root) = root();
+    fs::write(root.join("clippy.toml"), "").unwrap();
+    crates(&root, &["app/core"]);
+    assert_eq!(
+        found(&root, "app/starmap.toml", &["app/core/src"]),
+        [("app/clippy.toml".to_owned(), false)]
+    );
+    fs::write(root.join("app/.clippy.toml"), "").unwrap();
+    assert_eq!(
+        found(&root, "app/starmap.toml", &["app/core/src"]),
+        [("app/.clippy.toml".to_owned(), true)]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symbolic_link_that_leads_to_no_file_or_to_itself_is_refused() {
+    for target in ["missing.toml", "clippy.toml"] {
+        let dir = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(target, dir.path().join("clippy.toml")).unwrap();
+        let failure = beside(dir.path()).unwrap_err();
+        assert_eq!(failure.code(), &CLIPPY_INVALID, "{target}");
+        assert!(failure.to_string().contains("cannot be read"), "{failure}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_that_is_a_symbolic_link_is_named_as_the_file_it_leads_to() {
+    let (_dir, root) = root();
+    fs::create_dir(root.join("shared")).unwrap();
+    fs::write(root.join("shared/lints.toml"), "").unwrap();
+    std::os::unix::fs::symlink("shared/lints.toml", root.join("clippy.toml")).unwrap();
+    assert_eq!(
+        found(&root, "starmap.toml", &["src"]),
+        [("shared/lints.toml".to_owned(), true)]
     );
 }
 

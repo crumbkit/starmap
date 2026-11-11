@@ -29,6 +29,12 @@ const ENTRIES: &str = "disallowed-methods entries for std::env::var, std::env::v
 /// The sentence that init prints when it read no `.rs` file.
 const NO_RUST: &str = "init read no .rs file, so it wrote no clippy.toml.";
 
+/// The column header that init prints, alone when it lists no variable.
+const HEADER: &str = "NAME  TYPE  UNSET  SOURCE  READ_AT\n";
+
+/// The note that init prints when it lists no variable.
+const NO_VARIABLES: &str = "note: init lists no variables\n";
+
 /// Copies every file and directory under `from` to `to`.
 fn copy_tree(from: &Path, to: &Path) {
     fs::create_dir_all(to).unwrap();
@@ -122,14 +128,23 @@ fn init_with_clippy_adds_the_entries_beside_a_spec_that_exists_and_keeps_the_spe
 
     starmap(dir.path(), &["init", "--clippy", "--dry-run"])
         .success()
-        .stdout_eq(format!("init would write clippy.toml with {ENTRIES}.\n"))
-        .stderr_eq("This was a dry run, so nothing changed.\n");
+        .stdout_eq(HEADER)
+        .stderr_eq(format!(
+            "{NO_VARIABLES}init would write clippy.toml with {ENTRIES}.\n\
+             This was a dry run, so nothing changed.\n"
+        ));
     assert!(!dir.path().join("clippy.toml").exists());
 
     starmap(dir.path(), &["init", "--clippy"])
         .success()
-        .stdout_eq(format!("Wrote clippy.toml with {ENTRIES}.\n"))
-        .stderr_eq("");
+        .stdout_eq(HEADER)
+        .stderr_eq(format!("{NO_VARIABLES}Wrote clippy.toml with {ENTRIES}.\n"));
+    // The JSON is the document of init, with no variable.
+    let run = starmap(dir.path(), &["init", "--clippy", "--json"]).success();
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(document["schema"], "starmap/init/v1");
+    assert_eq!(document["data"], serde_json::json!([]));
+    assert_eq!(document["total"], 0);
     let written = fs::read_to_string(dir.path().join("clippy.toml")).unwrap();
     snapbox::assert_data_eq!(written, file!["../../starmap/tests/example/clippy.toml"]);
     assert_eq!(
@@ -144,17 +159,17 @@ fn init_without_rust_source_lists_no_variables_and_writes_no_clippy_toml() {
     let dir = tempfile::tempdir().unwrap();
     starmap(dir.path(), &["init"])
         .success()
-        .stdout_eq("NAME  TYPE  UNSET  SOURCE  READ_AT\n")
+        .stdout_eq(HEADER)
         .stderr_eq(format!(
-            "note: init lists no variables\n\
+            "{NO_VARIABLES}\
              Wrote starmap.toml with 0 variables that src reads. Each value marked ? is a guess.\n\
              {NO_RUST}\n\
              Next: starmap check refuses the file until each guess is confirmed and its ? deleted.\n"
         ));
     starmap(dir.path(), &["init", "--clippy"])
         .success()
-        .stdout_eq(format!("{NO_RUST}\n"))
-        .stderr_eq("");
+        .stdout_eq(HEADER)
+        .stderr_eq(format!("{NO_VARIABLES}{NO_RUST}\n"));
     assert!(!dir.path().join("clippy.toml").exists());
     starmap(dir.path(), &["check"]).success();
 }
@@ -169,11 +184,58 @@ fn init_writes_through_a_clippy_toml_that_is_a_symbolic_link_and_keeps_the_link(
     let link = dir.path().join("clippy.toml");
     std::os::unix::fs::symlink("shared/clippy.toml", &link).unwrap();
 
-    starmap(dir.path(), &["init"]).success();
+    // init names the file that it changed, which the link leads to.
+    let run = starmap(dir.path(), &["init"]).success();
+    let stderr = String::from_utf8_lossy(&run.get_output().stderr).into_owned();
+    assert!(
+        stderr.contains("Added disallowed-methods entries to shared/clippy.toml for "),
+        "{stderr}"
+    );
 
     assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
     let written = fs::read_to_string(&target).unwrap();
     snapbox::assert_data_eq!(written, file!["golden/init/clippy-added.toml"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn init_refuses_a_clippy_toml_that_is_a_symbolic_link_to_no_file_and_writes_nothing() {
+    let dir = checkout();
+    let link = dir.path().join("clippy.toml");
+    std::os::unix::fs::symlink("missing.toml", &link).unwrap();
+
+    let run = starmap(dir.path(), &["init", "--json"]).code(1);
+    let failure: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(failure["code"], "starmap::clippy::invalid");
+    let message = failure["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("clippy.toml cannot be read"),
+        "{message}"
+    );
+    assert!(!dir.path().join("starmap.toml").exists());
+    assert!(!dir.path().join("missing.toml").exists());
+}
+
+#[test]
+fn init_leaves_a_clippy_toml_above_the_repository_as_it_is_and_writes_one_inside() {
+    let above = tempfile::tempdir().unwrap();
+    let lints = "too-many-lines-threshold = 150\n";
+    fs::write(above.path().join("clippy.toml"), lints).unwrap();
+    let repo = above.path().join("repo");
+    copy_tree(Path::new(EXAMPLE_SRC), &repo.join("src"));
+    fs::create_dir(repo.join(".git")).unwrap();
+    fs::write(repo.join("Cargo.toml"), "[package]\nname = \"shelf\"\n").unwrap();
+
+    starmap(&repo, &["init"]).success();
+
+    assert_eq!(
+        fs::read_to_string(above.path().join("clippy.toml")).unwrap(),
+        lints
+    );
+    let written = fs::read_to_string(repo.join("clippy.toml")).unwrap();
+    snapbox::assert_data_eq!(written, file!["../../starmap/tests/example/clippy.toml"]);
+    starmap(&repo, &["check", "--json"]).code(1);
+    starmap(&repo, &["init", "--clippy"]).success();
 }
 
 #[test]

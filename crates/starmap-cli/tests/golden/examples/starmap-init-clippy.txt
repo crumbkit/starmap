@@ -1,1 +1,1 @@
-clippy.toml already disallows std::env::var, std::env::var_os, std::env::vars and std::env::vars_os.
+NAME  TYPE  UNSET  SOURCE  READ_AT

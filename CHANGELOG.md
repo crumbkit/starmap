@@ -19,22 +19,28 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a read of the environment outside the struct that derives `Env`. Clippy
   applies the entries to build scripts and tests as well, so a read there,
   such as `OUT_DIR` in `build.rs`, takes
-  `#[expect(clippy::disallowed_methods, reason = "...")]`. For each source
-  directory in which init reads a `.rs` file, init edits the `.clippy.toml`
-  or `clippy.toml` that Clippy reads for that crate, which is the nearest
-  one in or above the directory that holds the source directory. When
-  there is none, init writes `clippy.toml` beside the spec, or in the
-  crate's directory for a crate outside the spec's directory. It keeps
-  each file's entries, comments, layout and mode, writes through a
-  symbolic link, and adds only the entries that are missing. When init
-  reads no `.rs` file, it writes no `clippy.toml` and says so. starmap
-  does not read `CLIPPY_CONF_DIR`. `starmap init --dry-run` says what it
-  would add. `starmap init --clippy` adds only these entries and leaves
-  the spec as it is, so it serves an application whose `starmap.toml`
-  exists, and prints one line for each `clippy.toml`. init refuses a
-  `clippy.toml` that it cannot read, that is over 256 KiB, that is not
-  UTF-8 text or valid TOML, or whose `disallowed-methods` is not an array,
-  with `starmap::clippy::invalid`, and writes nothing.
+  `#[expect(clippy::disallowed_methods, reason = "...")]`. For each `.rs`
+  file that init reads, the crate's directory is the nearest directory
+  above the file that holds a `Cargo.toml`, and init edits the
+  `.clippy.toml` or `clippy.toml` that Clippy reads for that crate, which
+  is the nearest one in or above the crate's directory. The search stops
+  at the repository's root, the nearest directory that holds `.git`, or at
+  the spec's directory without a repository, so init never reads or edits
+  a `clippy.toml` above it. When there is none inside, init writes
+  `clippy.toml` beside the spec, or in the crate's directory for a crate
+  outside the spec's directory, and Clippy then reads that file in place
+  of one above the repository. It keeps each file's entries, comments,
+  layout and mode, writes through a symbolic link, and adds only the
+  entries that are missing. When init reads no `.rs` file, it writes no
+  `clippy.toml` and says so. starmap does not read `CLIPPY_CONF_DIR`.
+  `starmap init --dry-run` says what it would add. `starmap init --clippy`
+  adds only these entries and leaves the spec as it is, so it serves an
+  application whose `starmap.toml` exists. It lists no variable, and its
+  note has one line for each `clippy.toml`. init refuses a `clippy.toml`
+  that it cannot read, such as a symbolic link that leads to no file, that
+  is over 256 KiB, that is not UTF-8 text or valid TOML, or whose
+  `disallowed-methods` is not an array, with `starmap::clippy::invalid`,
+  and writes nothing.
   `starmap::clippy::unwritable` reports a file it cannot write, and names
   `starmap init --clippy` as the command that finishes the work.
 

@@ -123,31 +123,27 @@ pub(crate) fn list(methods: &[&str]) -> String {
     }
 }
 
-/// Reads the clippy.toml that Clippy uses for each crate of `sources`, the
-/// source directories in which the scan read a `.rs` file, and returns
-/// each file once, with the banned methods it does not disallow. A crate's
-/// directory is the parent of its source directory. Clippy reads
-/// `.clippy.toml` or `clippy.toml` in the crate's directory, or else in
-/// the nearest directory above it that has one, and reads no other file.
-/// starmap does not read `CLIPPY_CONF_DIR`.
+/// Reads the clippy.toml that Clippy uses for the crate of each directory
+/// of `dirs`, the directories that hold a `.rs` file that the scan read,
+/// and returns each file once, with the banned methods it does not
+/// disallow. [`find`] states which file that is. starmap does not read
+/// `CLIPPY_CONF_DIR`.
 ///
-/// When no directory has a file, the result names the `clippy.toml` that
-/// init writes, which does not exist and lacks every entry. That file is
-/// beside `spec` when the crate is in or below the directory of `spec`,
-/// and in the crate's directory otherwise. A file in or below the
-/// directory of `spec` has a path that starts as `spec` does, and any
-/// other file has an absolute path.
+/// When [`find`] finds no file, the result names the `clippy.toml` that
+/// init writes, which does not exist and lacks every entry. A file in or
+/// below the directory of `spec` has a path that starts as `spec` does,
+/// and any other file has an absolute path. A file that is a symbolic
+/// link is named as the file that the link leads to.
 ///
 /// A file is an `Err` when it cannot be read, is over 256 KiB, is not
 /// UTF-8 text or valid TOML, or sets `disallowed-methods` to a value that
-/// is not an array.
-pub(crate) fn open(spec: &Path, sources: &[PathBuf]) -> Vec<Result<Ban, ClippyFailure>> {
+/// is not an array. A symbolic link that leads to no file cannot be read.
+pub(crate) fn open(spec: &Path, dirs: &[PathBuf]) -> Vec<Result<Ban, ClippyFailure>> {
     let beside = spec.parent().unwrap_or(Path::new(""));
     let base = canonical(beside);
     let mut found: Vec<(PathBuf, bool)> = Vec::new();
-    for src in sources {
-        let krate = canonical(src.parent().unwrap_or(Path::new("")));
-        let (file, exists) = find(&krate, &base);
+    for dir in dirs {
+        let (file, exists) = find(&canonical(dir), &base);
         let file = match file.strip_prefix(&base) {
             Ok(below) => beside.join(below),
             Err(_) => file,
@@ -174,20 +170,48 @@ fn canonical(dir: &Path) -> PathBuf {
     files::canonical(dir).unwrap_or_else(|_| dir.to_path_buf())
 }
 
-/// Returns the configuration file that Clippy reads for a crate in
-/// `krate`, and whether it exists: the first of [`NAMES`] in `krate`, or
-/// else in the nearest directory above it that holds one. Clippy skips a
-/// directory that has one of those names, and so does the search. When no
-/// directory holds a file, the file is the `clippy.toml` that init writes:
-/// in `base` when `krate` is in or below it, and in `krate` otherwise.
-fn find(krate: &Path, base: &Path) -> (PathBuf, bool) {
-    let found = krate
+/// Returns the configuration file that Clippy reads for the crate that
+/// holds the source directory `dir`, and whether it exists. `dir` and
+/// `base`, the directory of the spec, have every symbolic link resolved.
+///
+/// The search stays inside the repository, whose root is the nearest
+/// directory at or above `dir` that holds `.git`. Without one, the root is
+/// `base` when `dir` is in or below it, and `dir` otherwise. The crate's
+/// directory is the nearest directory from `dir` up to the root that holds
+/// a Cargo.toml, and `base` when none does. The file is the first of
+/// [`NAMES`] in the crate's directory, or else in the nearest directory
+/// from there up to the root that holds one. Clippy skips a directory that
+/// has one of those names, and so does the search. Clippy also reads a
+/// file above the root, which starmap never reads or edits.
+///
+/// When no directory holds a file, the file is the `clippy.toml` that init
+/// writes: in `base` when the crate's directory is in or below it and
+/// `base` is inside the repository, and in the crate's directory
+/// otherwise. A file that is a symbolic link is returned as the file that
+/// the link leads to, when it leads to one.
+fn find(dir: &Path, base: &Path) -> (PathBuf, bool) {
+    let root = dir
         .ancestors()
+        .find(|above| files::exists(&above.join(".git")))
+        .unwrap_or(if dir.starts_with(base) { base } else { dir });
+    let krate = dir
+        .ancestors()
+        .take_while(|above| above.starts_with(root))
+        .find(|above| files::is_file(&above.join("Cargo.toml")))
+        .unwrap_or(base);
+    let above = krate
+        .ancestors()
+        .skip(1)
+        .take_while(|above| above.starts_with(root));
+    let found = std::iter::once(krate)
+        .chain(above)
         .flat_map(|dir| NAMES.map(|name| dir.join(name)))
         .find(|file| files::is_file(file));
     match found {
-        Some(file) => (file, true),
-        None if krate.starts_with(base) => (base.join("clippy.toml"), false),
+        Some(file) => (files::canonical(&file).unwrap_or(file), true),
+        None if krate.starts_with(base) && base.starts_with(root) => {
+            (base.join("clippy.toml"), false)
+        }
         None => (krate.join("clippy.toml"), false),
     }
 }

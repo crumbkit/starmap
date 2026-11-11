@@ -33,7 +33,7 @@ Write starmap.toml with a guess for each variable that src reads.
 
 The scan skips test code: files named tests.rs or ending in \_tests.rs, a file that begins with #!\[cfg(test)\], and the item after #\[cfg(test)\]. check scans src the same way.
 
-init also adds disallowed-methods entries for std::env::var, var\_os, vars and vars\_os to the clippy.toml that Clippy reads for each crate whose source directory holds a .rs file that init reads. That file is the nearest .clippy.toml or clippy.toml in or above the directory that holds the source directory. init writes clippy.toml when there is none, and keeps a file's other entries and comments. Clippy then reports a read of the environment outside the struct that derives starmap::Env, in build scripts and tests as well. When init reads no .rs file, it writes no clippy.toml.
+init also adds disallowed-methods entries for std::env::var, var\_os, vars and vars\_os to the clippy.toml that Clippy reads for the crate of each .rs file that init reads. The crate's directory is the nearest one above the file that holds a Cargo.toml, and the file is the nearest .clippy.toml or clippy.toml in or above it. The search stops at the directory that holds .git, so init never reads a clippy.toml above the repository. init writes clippy.toml when there is none, and keeps a file's other entries and comments. Clippy then reports a read of the environment outside the struct that derives starmap::Env, in build scripts and tests as well. When init reads no .rs file, it writes no clippy.toml.
 
 ### Arguments
 
@@ -83,7 +83,7 @@ check counts a literal name passed to var or var\_os, a #\[starmap("NAME")\] fie
 
 A read whose name format! builds from a name, an underscore and one trailing placeholder, such as format!("SHELF\_DB\_URL\_{region}"), reads a member of that family, and check fails when the file declares no such family. check passes on any other format! name and names the place of each one it cannot resolve.
 
-check also fails when the clippy.toml that Clippy reads for a crate whose source directory holds a .rs file lacks a disallowed-methods entry for std::env::var, var\_os, vars or vars\_os. starmap init --clippy adds the entries.
+check also fails when the clippy.toml that Clippy reads for the crate of a .rs file that check reads lacks a disallowed-methods entry for std::env::var, var\_os, vars or vars\_os. starmap init --clippy adds the entries.
 
 ### Arguments
 

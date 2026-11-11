@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crumbkit::schemars::{Schema, SchemaGenerator};
 use crumbkit::serde::Serializer;
-use crumbkit::{Document, Listing, Prose, Row, Shown};
+use crumbkit::{Document, Listing, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::Name;
@@ -29,41 +29,6 @@ pub(crate) const INIT: Document<Listing<Guess>> = Document::new(
     "Each variable that src reads, with the guesses that init writes to the spec.",
 )
 .when_empty("init lists no variables");
-
-/// The document that `starmap init --clippy` prints.
-pub(crate) const BAN: Document<Prose<Entries>> = Document::new(
-    "starmap",
-    "init-clippy",
-    1,
-    "Each clippy.toml that Clippy reads for the application, with the entries that init adds to it.",
-);
-
-/// What `starmap init --clippy` did to each clippy.toml.
-#[derive(Debug, Serialize, JsonSchema)]
-pub(crate) struct Entries {
-    /// Each clippy.toml that Clippy reads for a crate of the application; empty when init read no .rs file.
-    files: Vec<Entry>,
-    /// One line for each file, or the line that says init wrote no file.
-    #[serde(skip)]
-    text: String,
-}
-
-/// One clippy.toml and the entries that init adds to it.
-#[derive(Debug, Serialize, JsonSchema)]
-pub(crate) struct Entry {
-    /// The file's path.
-    file: String,
-    /// Whether init creates the file.
-    created: bool,
-    /// Each method whose entry init adds, or would add in a dry run; empty when the file has every entry.
-    added: Vec<&'static str>,
-}
-
-impl fmt::Display for Entries {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.text)
-    }
-}
 
 /// The variables that the shell and the XDG base directories set, which
 /// init guesses are inherited. Every name that starts with `XDG_` is
@@ -147,8 +112,8 @@ crumbkit::shown!(Places);
 /// guesses and writes nothing.
 ///
 /// init also adds the entries of [`clippy::BANNED`] to each clippy.toml
-/// that Clippy reads for a source directory in which the scan read a `.rs`
-/// file, as [`clippy::open`] finds them.
+/// that Clippy reads for a crate whose `.rs` file the scan read, as
+/// [`clippy::open`] finds them.
 ///
 /// # Errors
 ///
@@ -216,43 +181,35 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
 /// Adds the entries of [`clippy::BANNED`] as [`init`] does, for an
 /// application whose spec exists. It reads the file that `--spec` names
 /// only to find the source directories, scans them, and leaves the spec
-/// as it is. A dry run reports the same entries and writes nothing.
+/// as it is. A dry run reports the same entries and writes nothing. The
+/// listing has no variable, and its note says what init did to each
+/// clippy.toml.
 ///
 /// # Errors
 ///
 /// Returns a [`crumbkit::Error`] when the file that `--spec` names cannot be
 /// read, when src cannot be scanned, and when a clippy.toml cannot be
 /// read, parsed or written.
-pub(crate) fn ban(args: &InitArgs, dry_run: bool) -> Result<Prose<Entries>, crumbkit::Error> {
+pub(crate) fn ban(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, crumbkit::Error> {
     let located = spec::locate(&args.spec)?;
     let bans = open(&args.spec, &scan::scan_all(&located.src)?.rust)?;
-    let entries = Entries {
-        files: bans
-            .iter()
-            .map(|ban| Entry {
-                file: ban.file.display().to_string(),
-                created: !ban.exists,
-                added: ban.missing.clone(),
-            })
-            .collect(),
-        text: clippy::sentences(&bans, dry_run),
-    };
+    let banned = clippy::sentences(&bans, dry_run);
     if !dry_run {
         for ban in bans {
             ban.write(&args.spec)?;
         }
     }
-    Ok(Prose::new(entries))
+    Ok(Listing::new(Vec::new(), 0).note(banned))
 }
 
-/// Returns each clippy.toml that Clippy reads for `sources`, as
+/// Returns each clippy.toml that Clippy reads for `dirs`, as
 /// [`clippy::open`] does.
 ///
 /// # Errors
 ///
 /// Returns the failure of the first file that init cannot edit.
-fn open(spec: &Path, sources: &[PathBuf]) -> Result<Vec<clippy::Ban>, ClippyFailure> {
-    clippy::open(spec, sources).into_iter().collect()
+fn open(spec: &Path, dirs: &[PathBuf]) -> Result<Vec<clippy::Ban>, ClippyFailure> {
+    clippy::open(spec, dirs).into_iter().collect()
 }
 
 /// Returns where init writes the spec that `path` names. A file that
