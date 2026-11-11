@@ -223,7 +223,8 @@ fn changes(was: Option<&Spec>, now: &Spec) -> Vec<Change> {
                 now: None,
             }),
             (Some(old), Some(new)) => {
-                for (field, was, now) in changed_fields(old, new) {
+                let group = group_change(was, now, name);
+                for (field, was, now) in changed_fields(old, new).into_iter().chain(group) {
                     changes.push(Change {
                         change: Kind::Changed,
                         name: text.clone(),
@@ -309,6 +310,15 @@ fn changed_fields(old: &Variable, new: &Variable) -> Vec<FieldChange> {
         ));
     }
     changed
+}
+
+/// Returns the change of the group that lists `name`, when it differs
+/// between `was` and `now`, as the field `group`, which diff lists after
+/// the variable's own fields.
+fn group_change(was: Option<&Spec>, now: &Spec, name: &Name) -> Option<FieldChange> {
+    let group = |spec: &Spec| spec.group_of(name).map(|group| group.name().to_string());
+    let (before, after) = (was.and_then(group), group(now));
+    (before != after).then_some(("group", before, after))
 }
 
 /// Returns the type, show and source of a variable that was added or

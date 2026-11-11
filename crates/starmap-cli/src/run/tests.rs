@@ -936,3 +936,68 @@ fn an_unbound_secret_is_not_asked_for_while_a_setting_fails_the_check() {
         Some("secret SHELF_UPSTREAM_TOKEN")
     );
 }
+
+/// A spec with the group `mirror` of two optional settings.
+const MIRROR: &str = r#"
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY"]
+
+[variables.SHELF_MIRROR_ACCOUNT]
+purpose = "The account shelf uses at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_KEY]
+purpose = "The key of the account at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+"#;
+
+#[test]
+fn a_partly_set_group_is_refused_and_offers_to_set_the_rest_or_unset_the_others() {
+    let checkout = Checkout::with_spec(MIRROR, None);
+    let refused = prepared(
+        &checkout.args(&[("SHELF_MIRROR_ACCOUNT", "shelf")]),
+        &[],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+
+    assert_eq!(codes(&refused), [&codes::GROUP_INCOMPLETE]);
+    assert_eq!(
+        refused.failures[0].to_string(),
+        "SHELF_MIRROR_KEY is unset, and the group mirror needs it because SHELF_MIRROR_ACCOUNT \
+         is set"
+    );
+    assert_eq!(
+        repairs(&refused),
+        [(
+            hint(
+                "set SHELF_MIRROR_KEY in this shell, in .env or with --set SHELF_MIRROR_KEY=VALUE"
+            ),
+            vec![hint("unset SHELF_MIRROR_ACCOUNT")]
+        )]
+    );
+}
+
+#[test]
+fn a_fully_set_group_is_admitted() {
+    let checkout = Checkout::with_spec(MIRROR, None);
+    let ready = prepared(
+        &checkout.args(&[
+            ("SHELF_MIRROR_ACCOUNT", "shelf"),
+            ("SHELF_MIRROR_KEY", "k-1"),
+        ]),
+        &[],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap();
+
+    assert_eq!(value(&ready, "SHELF_MIRROR_KEY").as_deref(), Some("k-1"));
+}

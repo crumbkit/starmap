@@ -173,8 +173,6 @@ fn member_problem(
     let (_, other) = members.iter().find(|(listed, _)| listed == member)?;
     Some((
         Kind::BadGroup,
-        format!(
-            ", which the group {other} lists too, and a variable belongs to at most one group"
-        ),
+        format!(", which the group {other} lists too, and a variable belongs to at most one group"),
     ))
 }

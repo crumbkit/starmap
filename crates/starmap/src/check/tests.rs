@@ -850,3 +850,162 @@ fn a_withheld_value_that_does_not_match_is_refused_without_its_text() {
     );
     assert!(!format!("{refusals:?}").contains("pk-live-hidden"));
 }
+
+// Groups
+
+/// A spec with the group `mirror` of three optional settings, of which the
+/// secret is required in production, and a port outside the group.
+const MIRROR: &str = r#"
+[mode]
+variable = "SHELF_ENV"
+production = ["prod"]
+
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY", "SHELF_MIRROR_SECRET"]
+
+[variables.SHELF_ENV]
+purpose = "Selects local or production behaviour."
+type = { enumeration = ["dev", "prod"] }
+unset = { default = "dev" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_ACCOUNT]
+purpose = "The account shelf uses at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_KEY]
+purpose = "The key of the account at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_SECRET]
+purpose = "The secret of the key at the catalogue mirror."
+type = "string"
+unset = { local = "optional", production = "required" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "optional"
+show = "shown"
+source = "setting"
+"#;
+
+/// Captures `pairs` with [`MIRROR`] and checks them in the mode they
+/// decide.
+fn mirror_verdict(pairs: &[(&str, &str)]) -> Verdict {
+    let spec = Spec::parse(MIRROR).unwrap();
+    let bindings = capture(&spec, vars(pairs));
+    check(&spec, &bindings, mode(&spec, &bindings))
+}
+
+/// Returns the text of a refused verdict.
+fn refusal_text(verdict: &Verdict) -> String {
+    match verdict {
+        Verdict::Refused(refusals) => refusals.to_string(),
+        Verdict::Ready(_) => panic!("the check passed"),
+    }
+}
+
+#[test]
+fn a_partly_set_group_gives_each_unset_member_a_finding_that_names_the_set_ones() {
+    let verdict = mirror_verdict(&[
+        ("SHELF_MIRROR_ACCOUNT", "shelf"),
+        ("SHELF_MIRROR_KEY", "k-1"),
+        ("SHELF_PORT", "8080"),
+    ]);
+
+    let text = refusal_text(&verdict);
+    assert_eq!(
+        findings(verdict),
+        [Finding {
+            name: name("SHELF_MIRROR_SECRET"),
+            problem: Problem::GroupIncomplete {
+                group: "mirror".parse().unwrap(),
+                set: vec![name("SHELF_MIRROR_ACCOUNT"), name("SHELF_MIRROR_KEY")],
+            },
+        }]
+    );
+    assert_eq!(
+        text,
+        "SHELF_MIRROR_SECRET is unset, and the group mirror needs it because \
+         SHELF_MIRROR_ACCOUNT and SHELF_MIRROR_KEY are set"
+    );
+}
+
+#[test]
+fn one_set_member_gives_each_other_member_a_finding_in_the_spec_order() {
+    let verdict = mirror_verdict(&[("SHELF_MIRROR_KEY", "k-1")]);
+
+    let text = refusal_text(&verdict);
+    let names: Vec<Name> = findings(verdict).into_iter().map(|f| f.name).collect();
+
+    assert_eq!(
+        names,
+        [name("SHELF_MIRROR_ACCOUNT"), name("SHELF_MIRROR_SECRET")]
+    );
+    assert!(
+        text.ends_with("the group mirror needs it because SHELF_MIRROR_KEY is set"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_fully_unset_group_passes() {
+    assert!(matches!(
+        mirror_verdict(&[("SHELF_PORT", "8080")]),
+        Verdict::Ready(_)
+    ));
+}
+
+#[test]
+fn a_fully_set_group_passes() {
+    assert!(matches!(
+        mirror_verdict(&[
+            ("SHELF_MIRROR_ACCOUNT", "shelf"),
+            ("SHELF_MIRROR_KEY", "k-1"),
+            ("SHELF_MIRROR_SECRET", "s-1"),
+        ]),
+        Verdict::Ready(_)
+    ));
+}
+
+#[test]
+fn an_empty_value_counts_as_unset_for_a_member_of_a_group() {
+    let found = findings(mirror_verdict(&[
+        ("SHELF_MIRROR_ACCOUNT", "shelf"),
+        ("SHELF_MIRROR_KEY", "k-1"),
+        ("SHELF_MIRROR_SECRET", ""),
+    ]));
+
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].name, name("SHELF_MIRROR_SECRET"));
+    assert!(matches!(found[0].problem, Problem::GroupIncomplete { .. }));
+}
+
+#[test]
+fn a_member_missing_in_production_gets_only_its_missing_finding() {
+    let found = findings(mirror_verdict(&[
+        ("SHELF_ENV", "prod"),
+        ("SHELF_MIRROR_ACCOUNT", "shelf"),
+        ("SHELF_MIRROR_KEY", "k-1"),
+    ]));
+
+    assert_eq!(
+        found,
+        [Finding {
+            name: name("SHELF_MIRROR_SECRET"),
+            problem: Problem::Missing {
+                mode: Mode::Production
+            },
+        }]
+    );
+}

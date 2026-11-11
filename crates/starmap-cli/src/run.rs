@@ -21,8 +21,8 @@ use std::time::{Duration, Instant};
 
 use crumbkit::{Failure, Recovery, Run, Sink};
 use starmap::{
-    Bindings, Bound, Environment, Mode, Name, NoPlace, Placeholder, Problem, ProviderKind, Source,
-    Spec, Verdict,
+    Bindings, Bound, Environment, GroupName, Mode, Name, NoPlace, Placeholder, Problem,
+    ProviderKind, Source, Spec, Verdict,
 };
 use starmap_resolve::{
     AppName, Context, Keychain, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError,
@@ -31,8 +31,8 @@ use starmap_resolve::{
 
 use crate::cli::{Assignment, RunArgs, SpecFile};
 use crate::codes::{
-    BIND_NO_PLACE, BIND_NO_PROVIDER, SECRET_UNBOUND, SECRET_UNREADABLE, VARIABLE_INVALID,
-    VARIABLE_MISSING, VARIABLE_SECRET, VARIABLE_UNKNOWN,
+    BIND_NO_PLACE, BIND_NO_PROVIDER, GROUP_INCOMPLETE, SECRET_UNBOUND, SECRET_UNREADABLE,
+    VARIABLE_INVALID, VARIABLE_MISSING, VARIABLE_SECRET, VARIABLE_UNKNOWN,
 };
 use crate::dotenv::{self, DotEnvFailure};
 use crate::spec::{self, SpecFailure};
@@ -443,6 +443,16 @@ fn assignments(
     }
 }
 
+/// Returns `names` as `A`, `A and B`, or `A, B and C`.
+fn names(names: &[Name]) -> String {
+    let texts: Vec<&str> = names.iter().map(Name::as_str).collect();
+    match texts.split_last() {
+        None => String::new(),
+        Some((last, [])) => (*last).to_owned(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 /// Returns the absolute directory of the file at `path`, the checkout. For a
 /// pointer, the checkout is the pointer's directory, wherever the file it
 /// names lies.
@@ -516,6 +526,21 @@ pub(crate) enum RunFailure {
         problem: String,
         /// The spec file, as the caller gave it.
         file: String,
+    },
+    /// A variable is unset, and other members of its group are set.
+    #[failure(
+        code = GROUP_INCOMPLETE,
+        hint = "set {name} in this shell, in .env or with --set {name}=VALUE",
+        alternative = Recovery::Hint(format!("unset {}", names(set))),
+        field(key = name.as_str()),
+    )]
+    GroupIncomplete {
+        /// The variable.
+        name: Name,
+        /// The variable's group.
+        group: GroupName,
+        /// The members of the group that are set.
+        set: Vec<Name>,
     },
     /// No provider of the variable's kind is present.
     #[failure(
@@ -632,6 +657,11 @@ impl RunFailure {
                 problem: format!("the resolved value decides {decided} mode"),
                 file,
             },
+            Problem::GroupIncomplete { group, set } => Self::GroupIncomplete {
+                name,
+                group: group.clone(),
+                set: set.clone(),
+            },
             // A problem that a later starmap adds reads as an invalid
             // value, until this command learns it.
             _ => Self::Invalid {
@@ -665,6 +695,14 @@ impl fmt::Display for RunFailure {
                 )
             }
             Self::Invalid { name, problem, .. } => write!(formatter, "{name}: {problem}"),
+            Self::GroupIncomplete { name, group, set } => {
+                let verb = if set.len() == 1 { "is" } else { "are" };
+                write!(
+                    formatter,
+                    "{name} is unset, and the group {group} needs it because {} {verb} set",
+                    names(set)
+                )
+            }
             Self::NoProvider { name, kind } => write!(
                 formatter,
                 "{name} needs a value from the provider {kind}, and starmap run has no provider of that kind"

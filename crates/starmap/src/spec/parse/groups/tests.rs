@@ -77,7 +77,8 @@ fn a_group_parses_with_its_variables_in_the_file_order() {
         ]
     );
     assert_eq!(
-        spec.group_of(&name("SHELF_MIRROR_KEY")).map(|group| group.name()),
+        spec.group_of(&name("SHELF_MIRROR_KEY"))
+            .map(|group| group.name()),
         Some(&mirror)
     );
     assert_eq!(spec.group_of(&name("SHELF_PORT")), None);
@@ -105,7 +106,10 @@ fn a_bad_group_name_is_refused_as_a_bad_value() {
 
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].0, SpecProblemKind::BadValue);
-    assert!(found[0].1.contains("`groups.Mirror` is not a group name"), "{found:?}");
+    assert!(
+        found[0].1.contains("`groups.Mirror` is not a group name"),
+        "{found:?}"
+    );
 }
 
 #[test]
@@ -170,9 +174,8 @@ fn a_variable_in_two_groups_is_refused() {
 
 #[test]
 fn a_member_with_a_default_is_refused() {
-    let text = with_groups(
-        "[groups.mirror]\nvariables = [\"SHELF_MIRROR_ACCOUNT\", \"SHELF_PORT\"]",
-    );
+    let text =
+        with_groups("[groups.mirror]\nvariables = [\"SHELF_MIRROR_ACCOUNT\", \"SHELF_PORT\"]");
 
     assert_eq!(
         problems(&text),
@@ -256,12 +259,17 @@ fn adding_a_group_changes_the_digest_and_a_file_without_groups_keeps_its_own() {
     let with = Spec::parse(MIRROR).unwrap();
 
     assert_ne!(with.digest(), without.digest());
-    assert!(!without.to_toml().contains("groups"), "{}", without.to_toml());
+    assert!(
+        !without.to_toml().contains("groups"),
+        "{}",
+        without.to_toml()
+    );
 }
 
 #[test]
 fn a_pointer_with_groups_is_refused_as_declaring() {
-    let text = "spec = \"config/environment.toml\"\n\n[groups.mirror]\nvariables = [\"A\", \"B\"]\n";
+    let text =
+        "spec = \"config/environment.toml\"\n\n[groups.mirror]\nvariables = [\"A\", \"B\"]\n";
 
     let kinds: Vec<SpecProblemKind> = Pointer::parse(text)
         .unwrap_err()
