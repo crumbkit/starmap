@@ -12,7 +12,7 @@ fn main() {
     let label = "SHELF_LABEL";
     let name = String::from("SHELF_DYNAMIC");
     let _ = std::env::var(&name);
-    let _ = std::env::var("shelf_lowercase");
+    let _ = std::env::var("shelf-not-a-name");
     println!(
         "{label}: {:?} on port {:?}",
         env,

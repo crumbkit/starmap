@@ -30,6 +30,20 @@ fn a_name_guesses_its_type_from_its_last_word() {
 }
 
 #[test]
+fn a_name_in_lower_case_gets_the_guesses_of_its_upper_case_form() {
+    assert_eq!(
+        fields(&guessed("shelf_port")),
+        ["port?", "required?", "shown?", "setting?"]
+    );
+    assert_eq!(
+        fields(&guessed("shelf_token")),
+        ["string?", "optional?", "withheld?", "secret?"]
+    );
+    assert_eq!(guessed("xdg_config_home").source, "inherited?");
+    assert_eq!(guessed("https_proxy").name, "https_proxy");
+}
+
+#[test]
 fn a_setting_is_guessed_required_and_shown() {
     assert_eq!(
         fields(&guessed("SHELF_PORT")),

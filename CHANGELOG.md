@@ -8,6 +8,12 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A variable name may hold lower-case letters. A name matches
+  `[A-Za-z_][A-Za-z0-9_]*` and keeps the case it is written in, so a file
+  can declare `[variables.https_proxy]`. `HTTPS_PROXY` and `https_proxy`
+  are two variables. `Name::from_str` accepts such a name, and the
+  glossary's new name entry states the rule. Family keys and group names
+  keep their rules.
 - The README and the glossary's new flag override entry show how a
   command-line flag replaces a variable's value without clap's `env`
   argument: the flag is an `Option`, and the application writes
@@ -58,6 +64,12 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   other findings of the run. check requires the entries only for a source
   directory in which it reads a `.rs` file, so an application without Rust
   source needs no `clippy.toml`.
+- The scan of `starmap check` and `starmap init` counts a read of a literal
+  name in lower case, such as `std::env::var("https_proxy")`, which it
+  ignored before. `starmap check` therefore fails with
+  `starmap::variable::undeclared` for such a read until the file declares
+  the name. `starmap init` guesses the type and source of a lower-case name
+  from its upper-case form and writes the name as the code spells it.
 - `starmap init` that finds no variable prints `note: init lists no
   variables` in place of `note: no variables match`.
 

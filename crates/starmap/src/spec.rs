@@ -658,7 +658,7 @@ pub enum SpecProblemKind {
     /// A value has the wrong TOML type, or is not one of the values its key
     /// takes.
     BadValue,
-    /// A variable name is not upper case letters, digits and underscores.
+    /// A variable name is not ASCII letters, digits and underscores.
     BadName,
     /// A value still ends in the `?` that `starmap init` wrote, or a
     /// purpose is `?`.

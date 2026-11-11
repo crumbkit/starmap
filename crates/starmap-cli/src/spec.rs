@@ -493,7 +493,7 @@ fn hint(kind: SpecProblemKind) -> &'static str {
         SpecProblemKind::MissingField => "add the field the failure names",
         SpecProblemKind::BadValue => "set a value the field takes, as the failure lists",
         SpecProblemKind::BadName => {
-            "rename the variable with upper case letters, digits and underscores"
+            "rename the variable with ascii letters, digits and underscores"
         }
         SpecProblemKind::Guess => "confirm or correct each guess and delete its ?",
         SpecProblemKind::BadDefault => "set a default the type accepts",

@@ -9,12 +9,15 @@ mod tests;
 
 /// The name of an environment variable that a `starmap.toml` declares.
 ///
-/// A name matches `[A-Z_][A-Z0-9_]*` and has at most [`Name::MAX_BYTES`]
-/// bytes. [`FromStr`] is the only way to build one.
+/// A name matches `[A-Za-z_][A-Za-z0-9_]*` and has at most
+/// [`Name::MAX_BYTES`] bytes. A name keeps its case, so `HTTP_PROXY` and
+/// `http_proxy` are two names. [`FromStr`] is the only way to build one.
 ///
 /// ```
 /// let name: starmap::Name = "SHELF_PORT".parse()?;
 /// assert_eq!(name.as_str(), "SHELF_PORT");
+/// let lower: starmap::Name = "https_proxy".parse()?;
+/// assert_eq!(lower.as_str(), "https_proxy");
 /// # Ok::<(), starmap::NameError>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,8 +37,8 @@ impl Name {
 impl FromStr for Name {
     type Err = NameError;
 
-    /// Accepts a string exactly when it matches `[A-Z_][A-Z0-9_]*` and has at
-    /// most [`Name::MAX_BYTES`] bytes.
+    /// Accepts a string exactly when it matches `[A-Za-z_][A-Za-z0-9_]*` and
+    /// has at most [`Name::MAX_BYTES`] bytes.
     ///
     /// # Errors
     ///
@@ -50,7 +53,7 @@ impl FromStr for Name {
         }
         for (at, character) in text.char_indices() {
             let allowed = character == '_'
-                || character.is_ascii_uppercase()
+                || character.is_ascii_alphabetic()
                 || (at > 0 && character.is_ascii_digit());
             if !allowed {
                 return Err(NameError::Character { character, at });
@@ -78,7 +81,7 @@ pub enum NameError {
         bytes: usize,
     },
     /// The string holds a character the pattern does not allow at that
-    /// place, such as a lower case letter, or a digit at the start.
+    /// place, such as a hyphen, or a digit at the start.
     Character {
         /// The first character that does not fit.
         character: char,
@@ -99,7 +102,7 @@ impl fmt::Display for NameError {
             Self::Character { character, at } => write!(
                 formatter,
                 "a variable name holds {character:?} at byte {at}, and a name holds only \
-                 upper case letters, digits and underscores and does not start with a digit"
+                 ascii letters, digits and underscores and does not start with a digit"
             ),
         }
     }

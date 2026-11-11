@@ -3,6 +3,19 @@
 This page names each starmap concept once. Where a `starmap.toml` and the
 Rust API spell a concept differently, the entry gives both spellings.
 
+## name
+
+A variable's name is the key of its table in `starmap.toml`, as in
+`[variables.SHELF_PORT]`. A name starts with an ASCII letter or an
+underscore and holds only ASCII letters, digits and underscores, so it
+matches `[A-Za-z_][A-Za-z0-9_]*`. A name keeps the case it is written in,
+which lets a file declare a variable that tools read in lower case, such as
+`[variables.https_proxy]`. `HTTPS_PROXY` and `https_proxy` are two
+variables, and a file may declare both. The parser refuses any other name
+with `starmap::spec::bad_name`. The Rust API names it `starmap::Name`. A
+family key and a group name have their own rules, which the `family` and
+`group` entries give.
+
 ## type
 
 The `type` field of a variable in `starmap.toml` states what the variable's
