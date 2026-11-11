@@ -430,3 +430,83 @@ fn a_url_whose_scheme_is_not_listed_is_marked_invalid() {
 
     assert_eq!(row["value"]["state"], "invalid");
 }
+
+/// A spec with a named enumeration `log-level`, which `SHELF_LOG_LEVEL`
+/// uses, and an inline one, which `SHELF_STAGE` uses.
+const LOG_LEVEL: &str = r#"
+[enumerations.log-level]
+debug = "Logs every request and its timing."
+info = "Logs each request once."
+warn = "Logs only failures and slow requests."
+
+[variables.SHELF_LOG_LEVEL]
+purpose = "How much the api process logs."
+type = { enumeration = "log-level" }
+unset = { default = "info" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_STAGE]
+purpose = "The stage."
+type = { enumeration = ["dev", "prod"] }
+unset = "required"
+show = "shown"
+source = "setting"
+"#;
+
+/// Returns the row of `name` in [`LOG_LEVEL`] with no value in the shell.
+fn log_level_row(name: &str) -> super::Explained {
+    let spec = Spec::parse(LOG_LEVEL).unwrap();
+    let bindings = starmap::capture(&spec, Vec::<(OsString, OsString)>::new());
+    row(&spec, "starmap.toml", &bindings, name.parse().unwrap()).unwrap()
+}
+
+#[test]
+fn a_named_enumeration_shows_its_name_before_its_values_in_the_type() {
+    assert_eq!(
+        log_level_row("SHELF_LOG_LEVEL").kind,
+        "log-level: one of debug, info, warn"
+    );
+}
+
+#[test]
+fn the_values_column_lists_each_value_with_its_description() {
+    let values = log_level_row("SHELF_LOG_LEVEL").values.unwrap();
+
+    assert_eq!(
+        values.to_string(),
+        "debug: Logs every request and its timing.; info: Logs each request once.; warn: Logs \
+         only failures and slow requests."
+    );
+}
+
+#[test]
+fn json_holds_the_enumeration_name_and_each_value_with_its_description() {
+    let json = serde_json::to_value(log_level_row("SHELF_LOG_LEVEL")).unwrap();
+
+    assert_eq!(json["enumeration"], "log-level");
+    assert_eq!(
+        json["values"],
+        serde_json::json!([
+            { "value": "debug", "description": "Logs every request and its timing." },
+            { "value": "info", "description": "Logs each request once." },
+            { "value": "warn", "description": "Logs only failures and slow requests." },
+        ])
+    );
+}
+
+#[test]
+fn a_variable_without_a_named_enumeration_has_no_enumeration_or_values_in_json() {
+    let json = serde_json::to_value(log_level_row("SHELF_STAGE")).unwrap();
+
+    assert_eq!(json["type"], "one of dev, prod");
+    assert!(json.get("enumeration").is_none(), "{json}");
+    assert!(json.get("values").is_none(), "{json}");
+}
+
+#[test]
+fn the_values_are_the_last_long_column() {
+    use crumbkit::Row;
+
+    assert_eq!(super::Explained::LONG_COLUMNS.last(), Some(&"values"));
+}

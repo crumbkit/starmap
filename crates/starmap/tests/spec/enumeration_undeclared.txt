@@ -1,0 +1,4 @@
+starmap::spec::enumeration_undeclared: `variables.SHELF_LOG_LEVEL.type.enumeration` is "log-levels", which the file does not declare as an enumeration
+  at: 8:24 to 8:36, bytes 259..271
+   8 | type = { enumeration = "log-levels" }
+     |                        ^^^^^^^^^^^^

@@ -11,9 +11,9 @@ use super::{
 };
 use crate::{ByteLength, Cache, Mode, SecretBind, SecretRef, Type, Value};
 
-/// Writes `spec` as TOML: the `[mode]` table, then one table per variable
-/// in the spec's order, each with its fields in the order of the field
-/// rules.
+/// Writes `spec` as TOML: the `[mode]` table, then one table per named
+/// enumeration in name order, then one table per variable in the spec's
+/// order, each with its fields in the order of the field rules.
 pub(super) fn to_toml(spec: &Spec) -> String {
     let mut document = DocumentMut::new();
     if let Some(mode) = spec.mode() {
@@ -22,6 +22,22 @@ pub(super) fn to_toml(spec: &Spec) -> String {
         let production: Array = mode.production().iter().map(|c| c.as_str()).collect();
         table.insert("production", value(production));
         document.insert("mode", Item::Table(table));
+    }
+    let mut enumerations = Table::new();
+    enumerations.set_implicit(true);
+    for choices in spec.enumerations() {
+        let Some(name) = choices.name() else {
+            continue;
+        };
+        let mut table = Table::new();
+        for choice in choices.iter() {
+            let description = choices.description(choice).unwrap_or_default();
+            table.insert(choice.as_str(), value(description));
+        }
+        enumerations.insert(name.as_str(), Item::Table(table));
+    }
+    if !enumerations.is_empty() {
+        document.insert("enumerations", Item::Table(enumerations));
     }
     let mut variables = Table::new();
     variables.set_implicit(true);
@@ -68,10 +84,13 @@ fn value_type(value_type: &Type) -> Toml {
             "integer",
             inline([("min", range.min().into()), ("max", range.max().into())]),
         )]),
-        Type::Enumeration(choices) => {
-            let values: Array = choices.iter().map(|choice| choice.as_str()).collect();
-            inline([("enumeration", Toml::Array(values))])
-        }
+        Type::Enumeration(choices) => match choices.name() {
+            Some(name) => inline([("enumeration", name.as_str().into())]),
+            None => {
+                let values: Array = choices.iter().map(|choice| choice.as_str()).collect();
+                inline([("enumeration", Toml::Array(values))])
+            }
+        },
         Type::Bytes(rule) => {
             let (key, count) = match rule.length() {
                 ByteLength::Exactly(count) => ("length", count),
