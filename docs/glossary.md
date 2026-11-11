@@ -35,8 +35,9 @@ digits per byte in upper or lower case. `base64` is RFC 4648 section 4 with
 its padding required, and `base64url` is RFC 4648 section 5 with all its
 padding or none, and partly padded text is refused. Each encoding
 refuses whitespace. A length runs from 1 to 1024 bytes, and the parser
-refuses one outside that range with `starmap::spec::bad_bytes`. A value that does not decode fails with the text
-`the value is not base64`, and one of the wrong size with
+refuses one outside that range with `starmap::spec::bad_bytes`. A value
+that does not decode fails with the text `the value is not base64`, and
+one of the wrong size with
 `the value does not decode to 32 bytes` or
 `the value does not decode to at least 16 bytes`. Neither text holds the
 value or its decoded size. A shown value is held decoded, as

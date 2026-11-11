@@ -35,6 +35,22 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `starmap::Encoding`, `Value::Bytes`, `TypeError::NotEncoded` and
   `TypeError::WrongLength`. `Type::check_secret` checks a withheld bytes
   value too.
+- `starmap skills install` writes starmap's agent skill into each agent skills
+  directory that exists, `~/.claude/skills`, `~/.agents/skills` and
+  `$CODEX_HOME/skills`, or into the directory that `--dir` names.
+  `starmap skills check` exits with 1 when an installed copy is missing or
+  differs from the installed starmap's, and `starmap skills print` prints the
+  skill. The skill is crates/starmap-cli/skill/SKILL.md, embedded in the
+  binary.
+- `starmap completion install` writes starmap's shell completion where the
+  shell loads it, for bash, zsh and fish, with `--shell` naming the shell when
+  `SHELL` does not. `starmap completion check` exits with 1 when the installed
+  file is missing or differs, and `starmap completion print` prints the
+  registration script. starmap also answers a shell's completion request,
+  which a shell makes by running starmap with `COMPLETE` set to its name, and
+  writes no usage line for it. starmap now builds on crumbkit 0.3.1, so a
+  failure's JSON recovery can have the kind `terminal`, which names a command
+  that a person must run in a terminal.
 - A starmap-resolve `Provider` can check a provided bind without resolving
   a value, with `Provider::check`, whose default accepts every bind, so an
   existing provider needs no change. `starmap_resolve::check_binds` runs
