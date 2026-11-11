@@ -616,6 +616,44 @@ fn a_withheld_value_that_does_not_fit_is_not_quoted_in_the_failure() {
     assert!(!format!("{refused:?}").contains("pk-live-hidden"));
 }
 
+/// A spec whose secret without a bind is 4 bytes of base64.
+const BYTES_SPEC: &str = r#"
+[variables.SHELF_UPSTREAM_TOKEN]
+purpose = "The key shelf signs upstream requests with."
+type = { bytes = { encoding = "base64", length = 4 } }
+unset = "required"
+show = "withheld"
+source = "secret"
+"#;
+
+#[test]
+fn a_withheld_bytes_value_that_does_not_fit_is_not_quoted_in_the_failure() {
+    let checkout = Checkout::with_spec(BYTES_SPEC, None);
+    for raw in ["hunter2!", "c2VjcmV0LWtleS12YWx1ZQ=="] {
+        let refused = prepared(
+            &checkout.args(&[]),
+            &[("SHELF_UPSTREAM_TOKEN", raw)],
+            &FakeResolver::default(),
+            &mut Person::absent(),
+        )
+        .unwrap_err();
+        let failure = &refused.failures[0];
+
+        assert_eq!(codes(&refused), [&codes::VARIABLE_INVALID]);
+        assert_eq!(
+            failure.fields(),
+            [
+                Field::new("key", "SHELF_UPSTREAM_TOKEN"),
+                Field::new("value", FieldValue::Null),
+            ]
+        );
+        for text in [failure.to_string(), format!("{refused:?}")] {
+            assert!(!text.contains(raw), "{text}");
+            assert!(!text.contains("(the value is"), "{text}");
+        }
+    }
+}
+
 /// Returns the recovery and the alternatives of each failure of `refused`.
 fn repairs(refused: &Refused) -> Vec<(Recovery, Vec<Recovery>)> {
     refused

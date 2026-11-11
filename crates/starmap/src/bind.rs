@@ -490,29 +490,48 @@ impl fmt::Display for OnePasswordRefError {
 
 impl Error for OnePasswordRefError {}
 
-/// The number of random bytes in a generated value, from 16 to 1024. The
-/// value is written as base64url whatever its size.
+/// A number of bytes from 1 to 1024. It is the length of a bytes type
+/// after decoding, and the number of random bytes in a generated value,
+/// which runs from 16 to 1024 and is written as base64url whatever its
+/// size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SecretBytes(u16);
+pub struct ByteCount(u16);
 
-impl SecretBytes {
+impl ByteCount {
+    /// The fewest bytes a count may have.
+    pub const MIN: u16 = 1;
     /// The fewest bytes a generated value may have.
-    pub const MIN: u16 = 16;
-    /// The most bytes a generated value may have.
+    pub const GENERATED_MIN: u16 = 16;
+    /// The most bytes a count may have.
     pub const MAX: u16 = 1024;
     /// The size of a generated value whose variable does not set `bytes`.
     pub const DEFAULT: Self = Self(32);
 
-    /// Builds the size of `bytes` bytes.
+    /// Builds the count of `bytes` bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BytesError`] when `bytes` lies outside 1 to 1024.
+    pub fn new(bytes: u16) -> Result<Self, BytesError> {
+        Self::within(bytes, Self::MIN)
+    }
+
+    /// Builds the size of a generated value of `bytes` bytes.
     ///
     /// # Errors
     ///
     /// Returns [`BytesError`] when `bytes` lies outside 16 to 1024.
-    pub fn new(bytes: u16) -> Result<Self, BytesError> {
-        if (Self::MIN..=Self::MAX).contains(&bytes) {
+    pub fn generated(bytes: u16) -> Result<Self, BytesError> {
+        Self::within(bytes, Self::GENERATED_MIN)
+    }
+
+    /// Builds the count of `bytes` bytes when it lies from `min` to
+    /// [`ByteCount::MAX`].
+    fn within(bytes: u16, min: u16) -> Result<Self, BytesError> {
+        if (min..=Self::MAX).contains(&bytes) {
             Ok(Self(bytes))
         } else {
-            Err(BytesError(()))
+            Err(BytesError { min })
         }
     }
 
@@ -523,23 +542,40 @@ impl SecretBytes {
     }
 }
 
-impl Default for SecretBytes {
+impl Default for ByteCount {
     fn default() -> Self {
         Self::DEFAULT
     }
 }
 
-/// The reason a number is not [`SecretBytes`].
+impl fmt::Display for ByteCount {
+    /// Writes the count with its unit, such as `1 byte` or `32 bytes`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let unit = if self.0 == 1 { "byte" } else { "bytes" };
+        write!(formatter, "{} {unit}", self.0)
+    }
+}
+
+/// The reason a number is not a [`ByteCount`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BytesError(());
+pub struct BytesError {
+    /// The fewest bytes the count takes: [`ByteCount::MIN`], or
+    /// [`ByteCount::GENERATED_MIN`] for a generated value.
+    min: u16,
+}
 
 impl fmt::Display for BytesError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let what = if self.min == ByteCount::GENERATED_MIN {
+            "a generated value takes"
+        } else {
+            "a byte length runs"
+        };
         write!(
             formatter,
-            "a generated value takes from {} to {} bytes",
-            SecretBytes::MIN,
-            SecretBytes::MAX
+            "{what} from {} to {} bytes",
+            self.min,
+            ByteCount::MAX
         )
     }
 }

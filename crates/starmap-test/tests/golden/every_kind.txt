@@ -10,5 +10,5 @@ starmap.toml and starmap_test::tests::EveryKind disagree in 13 places:
   SHELF_PORT          starmap.toml types it as a port, and the field type PathBuf holds a path
   SHELF_PORT          its Allow entry excuses nothing, because the struct reads it
   SHELF_THEME         the struct reads it, and starmap.toml does not declare it
-  SHELF_TOKEN         starmap.toml withholds it, and the field type String is not starmap::Secret
+  SHELF_TOKEN         starmap.toml withholds it, and the field type String is not starmap::Secret or starmap::SecretBytes
   SHELF_TOKEN         starmap.toml lets it stay unset in local mode and production mode, and the field type String is not inside an Option

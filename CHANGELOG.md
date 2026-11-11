@@ -8,6 +8,58 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A variable can have a bytes type, such as
+  `type = { bytes = { encoding = "base64", length = 32 } }`, which declares
+  the encoding of its text (`hex`, `base64` or `base64url`) and its length
+  after decoding, exact with `length` or smallest with `min-length`, from 1
+  to 1024 bytes. `hex` takes either case, `base64` needs its padding,
+  `base64url` takes all of its padding or none, and no encoding takes
+  whitespace. `starmap run` refuses a value that does not decode or has the
+  wrong size, naming the variable, the encoding and the length and never the
+  value or its size, and this covers a withheld value too. `starmap explain`
+  marks such a value invalid and never prints a withheld one; `starmap check`
+  reads only the spec and the source, so it does not see values. A withheld
+  variable may have a bytes type, and a shown one's default must decode and
+  fit. A length outside 1 to 1024 fails with `starmap::spec::bad_bytes`, and
+  so does a generated variable with a bytes type. `starmap explain` prints
+  the type as `32 bytes as base64` or `at least 16 bytes as hex`, and
+  `starmap diff` names it `bytes` and reports a changed encoding or length as
+  a change of `type`. The digest of an existing file does not change.
+- `#[derive(Env)]` reads a shown bytes variable into `Vec<u8>` and a
+  withheld one into `starmap::SecretBytes`, which holds the decoded bytes,
+  prints only dots in `Debug` and zeroes them on drop.
+  `Environment::secret_bytes` returns them. starmap-test matches the new
+  `Shape::Bytes` against a bytes type.
+- `Type::Bytes`, `starmap::ByteRule`, `starmap::ByteLength`,
+  `starmap::Encoding`, `Value::Bytes`, `TypeError::NotEncoded` and
+  `TypeError::WrongLength`. `Type::check_secret` checks a withheld bytes
+  value too.
+
+### Changed
+
+- A refusal of a shown variable's value quotes the value after its reason,
+  as in `SHELF_PORT: the value is not a port from 1 to 65535 (the value is
+  "80a")`. This covers the text of `starmap::Refusals`, of
+  `ReadError::Refused` from `Env::load` and `Env::from_vars`, and of
+  `starmap run`'s failures. The quote holds the first 64 characters of the
+  value, counted as Unicode scalar values, then `…` when the value is
+  longer, and is written as a JSON string. A withheld variable's value, and
+  any value held as a secret, is never quoted. `Finding` gains a `value`
+  field that holds the new `starmap::Quote`, and `starmap run`'s JSON
+  failure for an invalid value gains a `value` field, which is null for a
+  withheld variable. The reason's wording is unchanged, and the digest of an
+  existing file does not change.
+
+- **Breaking:** `starmap::SecretBytes`, the number of random bytes in a
+  generated value, is renamed `starmap::ByteCount`, and the name
+  `SecretBytes` now holds the decoded bytes of a withheld bytes value.
+  `ByteCount::new` accepts 1 to 1024 bytes, and `ByteCount::generated`
+  accepts the 16 to 1024 bytes of a generated value, as `SecretBytes::new`
+  did.
+
+## [0.2.0](https://github.com/crumbkit/starmap/compare/v0.1.0...v0.2.0) - 2026-11-11
+### Added
+
 - `starmap skills install` writes starmap's agent skill into each agent skills
   directory that exists, `~/.claude/skills`, `~/.agents/skills` and
   `$CODEX_HOME/skills`, or into the directory that `--dir` names.
@@ -104,19 +156,6 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   much.
 
 ### Changed
-
-- A refusal of a shown variable's value quotes the value after its reason,
-  as in `SHELF_PORT: the value is not a port from 1 to 65535 (the value is
-  "80a")`. This covers the text of `starmap::Refusals`, of
-  `ReadError::Refused` from `Env::load` and `Env::from_vars`, and of
-  `starmap run`'s failures. The quote holds the first 64 characters of the
-  value, counted as Unicode scalar values, then `…` when the value is
-  longer, and is written as a JSON string. A withheld variable's value, and
-  any value held as a secret, is never quoted. `Finding` gains a `value`
-  field that holds the new `starmap::Quote`, and `starmap run`'s JSON
-  failure for an invalid value gains a `value` field, which is null for a
-  withheld variable. The reason's wording is unchanged, and the digest of an
-  existing file does not change.
 
 - **Breaking:** `Type::Url` has the field `schemes: Option<Schemes>`, as
   `Type::Path` has `absolute`. Code that matches it writes

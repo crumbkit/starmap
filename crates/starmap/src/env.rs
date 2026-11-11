@@ -3,7 +3,7 @@
 
 use std::process::Command;
 
-use crate::{Mode, Name, Secret, Value};
+use crate::{Mode, Name, Secret, SecretBytes, Value};
 
 #[cfg(test)]
 mod tests;
@@ -26,6 +26,8 @@ pub(crate) enum Held {
     Shown(Value),
     /// The value of a withheld variable.
     Withheld(Secret),
+    /// The text of a withheld bytes variable, and the bytes it decodes to.
+    WithheldBytes(Secret, SecretBytes),
 }
 
 impl Environment {
@@ -48,17 +50,29 @@ impl Environment {
     pub fn value(&self, name: &Name) -> Option<&Value> {
         match self.held(name)? {
             Held::Shown(value) => Some(value),
-            Held::Withheld(_) => None,
+            Held::Withheld(_) | Held::WithheldBytes(..) => None,
         }
     }
 
-    /// Returns the value of the withheld variable `name`. It returns `None`
-    /// when the variable stays unset, is not declared, or is shown.
+    /// Returns the value of the withheld variable `name`, as the text the
+    /// environment holds. It returns `None` when the variable stays unset,
+    /// is not declared, or is shown.
     #[must_use]
     pub fn secret(&self, name: &Name) -> Option<&Secret> {
         match self.held(name)? {
-            Held::Withheld(secret) => Some(secret),
+            Held::Withheld(secret) | Held::WithheldBytes(secret, _) => Some(secret),
             Held::Shown(_) => None,
+        }
+    }
+
+    /// Returns the bytes that the withheld bytes variable `name` decodes
+    /// to. It returns `None` when the variable stays unset, is not
+    /// declared, is shown, or does not have a bytes type.
+    #[must_use]
+    pub fn secret_bytes(&self, name: &Name) -> Option<&SecretBytes> {
+        match self.held(name)? {
+            Held::WithheldBytes(_, bytes) => Some(bytes),
+            Held::Withheld(_) | Held::Shown(_) => None,
         }
     }
 
@@ -78,7 +92,9 @@ impl Environment {
         for (name, held) in &self.entries {
             match held {
                 Some(Held::Shown(value)) => command.env(name.as_str(), value.to_os_string()),
-                Some(Held::Withheld(secret)) => command.env(name.as_str(), secret.expose()),
+                Some(Held::Withheld(secret) | Held::WithheldBytes(secret, _)) => {
+                    command.env(name.as_str(), secret.expose())
+                }
                 None => command.env_remove(name.as_str()),
             };
         }
