@@ -432,6 +432,13 @@
       "description": "A spec that follows every rule of the file.",
       "type": "object",
       "properties": {
+        "checks_without_sentence": {
+          "description": "The declared variables whose field in src names a check and that have no check sentence, each of which is also a note.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "digest": {
           "description": "The SHA-256 digest of the spec's canonical form, as `sha256:<hex>`.",
           "type": "string"
@@ -445,6 +452,13 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "sentences_without_check": {
+          "description": "The declared variables that have a check sentence and whose field in src names no check, each of which is also a note; empty when no source directory is scanned.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "spec": {
           "description": "The path of the file that declares the variables: the file the caller gave, or the file its pointer names.",
@@ -470,6 +484,8 @@
         "variables",
         "read",
         "undeclared",
+        "checks_without_sentence",
+        "sentences_without_check",
         "mode"
       ]
     },

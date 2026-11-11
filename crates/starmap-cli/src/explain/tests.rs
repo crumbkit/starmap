@@ -396,6 +396,29 @@ fn the_effect_is_the_long_column_after_the_purpose() {
     assert_eq!(effect, purpose.map(|purpose| purpose + 1));
 }
 
+#[test]
+fn a_variable_with_a_check_sentence_shows_it_in_json_and_one_without_leaves_it_out() {
+    let with = optional_bucket("check = \"The bucket is in eu-west-1.\"\n");
+    let without = optional_bucket("");
+
+    assert_eq!(
+        with["check"],
+        serde_json::json!("The bucket is in eu-west-1.")
+    );
+    assert!(without.get("check").is_none(), "{without}");
+}
+
+#[test]
+fn the_check_sentence_is_the_long_column_after_the_values() {
+    use crumbkit::Row;
+
+    let long = super::Explained::LONG_COLUMNS;
+    let values = long.iter().position(|column| *column == "values");
+    let check = long.iter().position(|column| *column == "check");
+
+    assert_eq!(check, values.map(|values| values + 1));
+}
+
 /// A database url setting that allows the schemes postgres and postgresql.
 const DATABASE: &str = r#"
 [variables.SHELF_DATABASE_URL]

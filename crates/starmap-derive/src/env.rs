@@ -2,8 +2,11 @@
 
 use proc_macro2::TokenStream;
 use quote::{ToTokens as _, quote, quote_spanned};
+use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned as _;
-use syn::{Data, DeriveInput, Fields, GenericArgument, LitStr, PathArguments, Type, TypePath};
+use syn::{
+    Data, DeriveInput, Fields, GenericArgument, LitStr, Path, PathArguments, Token, Type, TypePath,
+};
 
 /// The spec file when the struct names none, relative to the crate root.
 const DEFAULT_SPEC: &str = "starmap.toml";
@@ -41,8 +44,9 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
     });
     let mut described = Vec::new();
     let mut reads = Vec::new();
+    let mut rules = Vec::new();
     for field in fields {
-        let name = variable_name(field)?;
+        let FieldAttribute { name, check } = field_attribute(field)?;
         let (inner, presence, method) = match option_inner(&field.ty) {
             Some(inner) => (inner, quote!(Maybe), quote!(read)),
             None => (&field.ty, quote!(Always), quote!(require)),
@@ -60,6 +64,16 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
         reads.push(quote! {
             #member: #description.#method::<#inner>(environment)?
         });
+        if let Some(check) = check {
+            // The check's path is spanned at the attribute, so rustc
+            // names it when the function's signature does not fit.
+            let check = quote_spanned! {check.span()=>
+                ::starmap::__private::run_check::<#inner>(environment, name, #check)
+            };
+            rules.push(quote! {
+                ::starmap::__private::Rule::new(#name, |environment, name| #check)
+            });
+        }
         described.push(description);
     }
     Ok(quote! {
@@ -69,6 +83,7 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
             const SPEC: &'static str = ::core::include_str!(#embedded);
             const SPEC_FILE: &'static str = #file;
             const FIELDS: &'static [::starmap::Field] = &[#(#described),*];
+            const RULES: &'static [::starmap::__private::Rule] = &[#(#rules),*];
 
             // rustc does not report an unfulfilled expectation in an external
             // macro's output, so an app whose clippy.toml allows vars_os builds clean.
@@ -131,18 +146,47 @@ fn spec_path(input: &DeriveInput) -> syn::Result<LitStr> {
     Ok(spec.unwrap_or_else(|| LitStr::new(DEFAULT_SPEC, input.ident.span())))
 }
 
-/// Returns the variable name of `#[starmap("NAME")]` on `field`.
-fn variable_name(field: &syn::Field) -> syn::Result<LitStr> {
+/// What a field's `#[starmap(...)]` attribute says: the variable's name,
+/// and the path of the application's check, when it names one.
+struct FieldAttribute {
+    /// The name of the variable the field reads.
+    name: LitStr,
+    /// The function that `check = <path>` names.
+    check: Option<Path>,
+}
+
+/// The message for a field attribute that does not parse.
+const FIELD_ATTRIBUTE: &str = "each field names its variable with one #[starmap(\"NAME\")] or #[starmap(\"NAME\", check = path)]";
+
+impl Parse for FieldAttribute {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
+        let name = input.parse::<LitStr>()?;
+        let mut check = None;
+        if input.parse::<Option<Token![,]>>()?.is_some() && !input.is_empty() {
+            let key = input.parse::<syn::Ident>()?;
+            if key != "check" {
+                return Err(syn::Error::new(key.span(), FIELD_ATTRIBUTE));
+            }
+            input.parse::<Token![=]>()?;
+            check = Some(input.parse::<Path>()?);
+            input.parse::<Option<Token![,]>>()?;
+        }
+        if !input.is_empty() {
+            return Err(input.error(FIELD_ATTRIBUTE));
+        }
+        Ok(Self { name, check })
+    }
+}
+
+/// Returns what the one `#[starmap(...)]` attribute on `field` says.
+fn field_attribute(field: &syn::Field) -> syn::Result<FieldAttribute> {
     let mut attributes = field
         .attrs
         .iter()
         .filter(|attribute| attribute.path().is_ident("starmap"));
     match (attributes.next(), attributes.next()) {
-        (Some(attribute), None) => attribute.parse_args::<LitStr>(),
-        _ => Err(syn::Error::new(
-            field.span(),
-            "each field names its variable with one #[starmap(\"NAME\")]",
-        )),
+        (Some(attribute), None) => attribute.parse_args::<FieldAttribute>(),
+        _ => Err(syn::Error::new(field.span(), FIELD_ATTRIBUTE)),
     }
 }
 

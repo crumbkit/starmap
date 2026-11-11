@@ -468,6 +468,13 @@
             "null"
           ]
         },
+        "check": {
+          "description": "The sentence that states the check the application's own code makes of the value, which starmap never runs; empty, and left out of `--json`, when the spec states none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "effect": {
           "description": "The sentence that says what the application does when the variable is unset; empty, and left out of `--json`, when the spec states none.",
           "type": [

@@ -256,6 +256,40 @@ and `starmap explain --json` leaves the field out when the variable has
 none. `starmap diff` reports an effect that was added, changed or removed
 as a change of the field `effect`.
 
+## check
+
+A check is a rule of the application that its own code decides, such as a
+port above 1024. A field of a struct that derives `Env` names its check
+function with `#[starmap("SHELF_PORT", check = unprivileged)]`. The
+function takes a reference to the field's type without its `Option`. A
+shown field's check returns `Result<(), String>`, and a withheld field's
+check returns `Result<(), &'static str>`, so the reason it gives cannot
+hold the secret. A function of another signature fails to compile.
+
+`Env::from_vars` runs each check inside the same pass as the built-in
+checks, on every variable that holds a value after its type and its unset
+rule pass, a default included. A variable that stays unset, or whose value
+its type refuses, is not passed to its check. A refused value is the
+finding `Problem::Rejected` with the check's reason, among the other
+findings in the spec's order, and is written as `SHELF_PORT: the port must
+be above 1024`. A shown variable's value is quoted after the reason, as an
+invalid value is, and a withheld variable's value never is.
+
+The optional `check` field of a variable in `starmap.toml` is one sentence
+that states the check for a reader, such as
+`check = "The port must be above 1024."`. starmap never runs it, and other
+implementations only display it. Its text follows the rules of `purpose`.
+It counts toward the canonical form and the digest, as the effect does: the
+canonical form writes it right after `effect`, and only when the variable
+has one, so a file without check sentences keeps its digest.
+`starmap explain --long` prints it in the `check` column, `starmap explain
+--json` leaves the field out when the variable has none, and `starmap diff`
+reports a change of the field `check`.
+
+`starmap check` notes a field whose attribute names a check for a variable
+without a check sentence, and a check sentence whose variable no field in
+src checks. Each is a note on standard error and a list in the JSON
+document, and neither fails the command.
 ## group
 
 A group is a set of variables that must be set together or not at all,

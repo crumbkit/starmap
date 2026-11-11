@@ -127,6 +127,7 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
         return Err(exists().into());
     }
     let guesses: Vec<Guess> = scan::scan_all(&located.src)?
+        .reads
         .into_iter()
         .map(|(name, places)| guess(name, places))
         .collect();

@@ -135,6 +135,7 @@ starmap explain SHELF_MIRROR_TOKEN --json
 - `purpose`: The sentence that says what the variable is for.
 - `effect`: The sentence that says what the application does when the variable is unset; empty, and left out of `--json`, when the spec states none.
 - `values`: Each value of a named enumeration with its description; empty, and left out of `--json`, for any other type.
+- `check`: The sentence that states the check the application's own code makes of the value, which starmap never runs; empty, and left out of `--json`, when the spec states none.
 - `group`: The name of the group of variables that are set together or not at all, which the variable belongs to; empty, and left out of `--json`, when it belongs to none.
 
 Effects: read-only, closed-world.

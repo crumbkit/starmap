@@ -4,7 +4,7 @@ error: starmap::Env derives only for a struct with named fields
 3 | struct Tuple(String);
   |        ^^^^^
 
-error: each field names its variable with one #[starmap("NAME")]
+error: each field names its variable with one #[starmap("NAME")] or #[starmap("NAME", check = path)]
  --> tests/compile_fail/misuse.rs:7:5
   |
 7 |     port: starmap::Port,
@@ -16,38 +16,44 @@ error: the struct takes one #[starmap(spec = "path")]
 11 | #[starmap(path = "starmap.toml")]
    |           ^^^^
 
-error: starmap::Env derives only for a struct without generic parameters
-  --> tests/compile_fail/misuse.rs:18:15
+error: each field names its variable with one #[starmap("NAME")] or #[starmap("NAME", check = path)]
+  --> tests/compile_fail/misuse.rs:19:29
    |
-18 | struct Generic<T> {
+19 |     #[starmap("SHELF_PORT", validate = unprivileged)]
+   |                             ^^^^^^^^
+
+error: starmap::Env derives only for a struct without generic parameters
+  --> tests/compile_fail/misuse.rs:24:15
+   |
+24 | struct Generic<T> {
    |               ^
 
 error: starmap::Enumeration derives only for an enum of unit variants
-  --> tests/compile_fail/misuse.rs:25:5
+  --> tests/compile_fail/misuse.rs:31:5
    |
-25 |     Dev(String),
+31 |     Dev(String),
    |     ^^^
 
 error: starmap::Enumeration derives only for an enum of unit variants
-  --> tests/compile_fail/misuse.rs:29:8
+  --> tests/compile_fail/misuse.rs:35:8
    |
-29 | struct NotAnEnum;
+35 | struct NotAnEnum;
    |        ^^^^^^^^^
 
 error: two variants read as the value "dev", and each value must be distinct
-  --> tests/compile_fail/misuse.rs:34:15
+  --> tests/compile_fail/misuse.rs:40:15
    |
-34 |     #[starmap("dev")]
+40 |     #[starmap("dev")]
    |               ^^^^^
 
 error: an enumeration value is not empty and holds no whitespace
-  --> tests/compile_fail/misuse.rs:40:15
+  --> tests/compile_fail/misuse.rs:46:15
    |
-40 |     #[starmap("local dev")]
+46 |     #[starmap("local dev")]
    |               ^^^^^^^^^^^
 
 error: each variant takes at most one #[starmap("value")]
-  --> tests/compile_fail/misuse.rs:47:5
+  --> tests/compile_fail/misuse.rs:53:5
    |
-47 |     #[starmap("development")]
+53 |     #[starmap("development")]
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^

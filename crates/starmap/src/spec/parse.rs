@@ -35,8 +35,12 @@ const ROOT_FIELDS: &[&str] = &["mode", "enumerations", "groups", "variables", "t
 const MODE_FIELDS: &[&str] = &["variable", "production"];
 /// The keys of a variable's table.
 const VARIABLE_FIELDS: &[&str] = &[
-    "purpose", "effect", "type", "unset", "show", "source", "bind", "bytes", "tool",
+    "purpose", "effect", "check", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
+/// What an effect sentence says, as a refusal of one names it.
+const EFFECT_SAYS: &str = "what the application does when the variable is unset";
+/// What a check sentence says, as a refusal of one names it.
+const CHECK_SAYS: &str = "what the application's own code checks of the value";
 /// The keys of a type table.
 const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "string", "url", "bytes"];
 /// The keys of an unset table.
@@ -371,7 +375,11 @@ impl Parser {
             .and_then(|purpose| self.purpose(&purpose));
         let effect = match field.child(table, "effect") {
             None => Some(None),
-            Some(effect) => self.effect(&effect).map(Some),
+            Some(effect) => self.sentence(&effect, "an effect", EFFECT_SAYS).map(Some),
+        };
+        let check = match field.child(table, "check") {
+            None => Some(None),
+            Some(check) => self.sentence(&check, "a check", CHECK_SAYS).map(Some),
         };
         let ty = self
             .required(field, table, "type")
@@ -425,10 +433,11 @@ impl Parser {
         let source = kind
             .as_ref()
             .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes));
-        let variable = match (purpose, effect, ty, unset, show, source, tools) {
+        let variable = match (purpose, effect, check, ty, unset, show, source, tools) {
             (
                 Some(purpose),
                 Some(effect),
+                Some(check),
                 Some((ty, _)),
                 Some(unset),
                 Some((show, _)),
@@ -437,6 +446,7 @@ impl Parser {
             ) => Some(Variable {
                 purpose,
                 effect,
+                check,
                 value_type: ty,
                 unset,
                 show,
@@ -451,15 +461,6 @@ impl Parser {
     /// Parses the purpose sentence.
     fn purpose(&mut self, field: &Field<'_>) -> Option<String> {
         self.sentence(field, "a purpose", "what the variable is for")
-    }
-
-    /// Parses the effect sentence, which follows the rules of the purpose.
-    fn effect(&mut self, field: &Field<'_>) -> Option<String> {
-        self.sentence(
-            field,
-            "an effect",
-            "what the application does when the variable is unset",
-        )
     }
 
     /// Parses a sentence field, which is text that is neither blank nor

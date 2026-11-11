@@ -15,6 +15,12 @@ struct UnknownKey {
 }
 
 #[derive(starmap::Env)]
+struct UnknownFieldKey {
+    #[starmap("SHELF_PORT", validate = unprivileged)]
+    port: starmap::Port,
+}
+
+#[derive(starmap::Env)]
 struct Generic<T> {
     #[starmap("SHELF_PORT")]
     port: T,
