@@ -1266,6 +1266,44 @@ proptest! {
 }
 
 #[test]
+fn encode_writes_each_encoding_at_its_final_length_and_the_text_passes_check_secret() {
+    let bytes: Vec<u8> = (0..=255).cycle().take(33).collect();
+    for (encoding, length) in [
+        (Encoding::Hex, 66),
+        (Encoding::Base64, 44),
+        (Encoding::Base64Url, 44),
+    ] {
+        let text = encoding.encode(&bytes);
+
+        assert_eq!(text.len(), length, "{encoding}");
+        // The buffer was sized to the final length, so it never grew and
+        // left an unzeroed copy behind.
+        assert_eq!(text.capacity(), length, "{encoding}");
+        let secret = Secret::new(text.to_string());
+        assert_eq!(
+            exactly(encoding, 33).check_secret(&secret),
+            Ok(()),
+            "{encoding}"
+        );
+    }
+    assert!(Encoding::Hex.encode(&[0xbe, 0xef]).as_str() == "beef");
+    assert!(Encoding::Base64.encode(&[0xff]).as_str() == "/w==");
+    assert!(Encoding::Base64Url.encode(&[0xff]).as_str() == "_w");
+}
+
+#[test]
+fn a_stored_value_in_another_encoding_fails_check_secret_without_its_text() {
+    let bytes = [0x5a_u8; 32];
+    let stored = Encoding::Base64Url.encode(&bytes).to_string();
+    let error = exactly(Encoding::Hex, 32)
+        .check_secret(&Secret::new(stored.clone()))
+        .unwrap_err();
+
+    assert_eq!(error, TypeError::NotEncoded(Encoding::Hex));
+    assert!(!error.to_string().contains(&stored), "{error}");
+}
+
+#[test]
 fn check_secret_refuses_a_withheld_bytes_value_that_does_not_fit_without_its_text() {
     let ty = exactly(Encoding::Base64, 4);
 

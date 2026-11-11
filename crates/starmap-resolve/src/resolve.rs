@@ -391,7 +391,7 @@ fn find(
             }
         }
         Source::Secret { bind: Some(bind) } => context.ask(Lookup::of_bind(bind, mode)),
-        Source::Generated { bytes } => {
+        Source::Generated { bytes, encoding } => {
             let workspace = context
                 .places
                 .workspace
@@ -400,6 +400,7 @@ fn find(
             context.ask(Lookup::Generated {
                 slot: workspace.slot(name),
                 bytes: *bytes,
+                encoding: *encoding,
             })
         }
         // A source that a later version of starmap adds resolves to

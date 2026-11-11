@@ -17,8 +17,8 @@ provider that does not check accepts every bind. The `one-password` feature adds
 reads all of a resolution's `op://` references with one `op inject`, so one
 1Password prompt covers them, and reads a reference that a template would
 change, such as one holding `$`, with its own `op read`. The `keychain` feature adds
-`Keychain`, which creates each generated value on first use and returns it
-unchanged afterwards, keeps a secret without a bind that a host saves with
+`Keychain`, which creates each generated value on first use in the encoding
+that `Lookup::Generated` names and returns it unchanged afterwards, keeps a secret without a bind that a host saves with
 `Resolver::save`, and `Keychain::forget` deletes a workspace's values.
 On a platform other than macOS, every call of `Keychain` returns
 `SecretError::Unsupported`. The `agent` feature, on macOS and Linux, adds

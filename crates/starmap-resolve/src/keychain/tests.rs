@@ -56,6 +56,7 @@ fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
     let lookup = Lookup::Generated {
         slot: crate::Slot::new(&unsupported, &shelf, &key),
         bytes: starmap::ByteCount::DEFAULT,
+        encoding: starmap::Encoding::Base64Url,
     };
     assert!(matches!(
         keychain.resolve(lookup, deadline()),
@@ -81,14 +82,11 @@ fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use base64::Engine as _;
-    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
     use security_framework::base::Error;
-    use starmap::{ByteCount, Name, Secret};
+    use starmap::{ByteCount, ByteLength, ByteRule, Encoding, Name, Secret, Type, TypeError};
     use zeroize::Zeroizing;
 
-    use super::super::macos::{problem, store};
+    use super::super::macos::{create, problem, store};
     use super::super::service;
     use super::{Keychain, app, deadline, name, workspace};
     use crate::{AppName, Lookup, Resolver, SecretError, Slot, WorkspaceName};
@@ -117,7 +115,15 @@ mod macos {
         secret.expose().to_owned()
     }
 
-    /// Returns the generated value of `name` as text.
+    /// Returns the bytes type of exactly `count` bytes in `encoding`.
+    fn exactly(encoding: Encoding, count: u16) -> Type {
+        Type::Bytes(ByteRule::new(
+            encoding,
+            ByteLength::Exactly(ByteCount::new(count).unwrap()),
+        ))
+    }
+
+    /// Returns the generated value of `name` as base64url text.
     fn generated(
         keychain: &Keychain,
         workspace: &WorkspaceName,
@@ -128,8 +134,36 @@ mod macos {
         let lookup = Lookup::Generated {
             slot: Slot::new(workspace, app, name),
             bytes,
+            encoding: Encoding::Base64Url,
         };
         Ok(text(&keychain.resolve(lookup, deadline())?))
+    }
+
+    #[test]
+    fn a_new_value_is_written_in_each_encoding_at_the_declared_length_and_passes_its_check() {
+        for encoding in [Encoding::Hex, Encoding::Base64, Encoding::Base64Url] {
+            for count in [16, 33, 1024] {
+                let value = Secret::new(create(bytes(count), encoding).unwrap().to_string());
+
+                assert_eq!(
+                    exactly(encoding, count).check_secret(&value),
+                    Ok(()),
+                    "{count} bytes as {encoding}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_stored_value_in_another_encoding_fails_its_check_without_its_text() {
+        let stored = create(bytes(32), Encoding::Base64Url).unwrap().to_string();
+
+        let error = exactly(Encoding::Hex, 32)
+            .check_secret(&Secret::new(stored.clone()))
+            .unwrap_err();
+
+        assert_eq!(error, TypeError::NotEncoded(Encoding::Hex));
+        assert!(!error.to_string().contains(&stored), "{error}");
     }
 
     #[test]
@@ -144,9 +178,12 @@ mod macos {
         let again = generated(&keychain, &shelf, &app("shelf"), &session, bytes(48)).unwrap();
         let other = generated(&keychain, &shelf, &app("shelf"), &cookie, bytes(16)).unwrap();
 
-        assert_eq!(URL_SAFE_NO_PAD.decode(&first).unwrap().len(), 48);
+        let check = |count, value: &str| {
+            exactly(Encoding::Base64Url, count).check_secret(&Secret::new(value.to_owned()))
+        };
+        assert_eq!(check(48, &first), Ok(()));
         assert_eq!(again, first);
-        assert_eq!(URL_SAFE_NO_PAD.decode(&other).unwrap().len(), 16);
+        assert_eq!(check(16, &other), Ok(()));
     }
 
     #[test]
@@ -210,6 +247,7 @@ mod macos {
         let lookup = Lookup::Generated {
             slot: Slot::new(&late, &shelf, &key),
             bytes: ByteCount::DEFAULT,
+            encoding: Encoding::Base64Url,
         };
 
         let result = keychain.resolve(lookup, std::time::Instant::now());

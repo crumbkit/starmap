@@ -283,7 +283,8 @@ fn a_generated_variable_reads_its_bytes() {
     assert_eq!(
         spec.variable(&name("SHELF_SESSION_KEY")).unwrap().source(),
         &Source::Generated {
-            bytes: ByteCount::generated(48).unwrap()
+            bytes: ByteCount::generated(48).unwrap(),
+            encoding: Encoding::Base64Url,
         }
     );
 }
@@ -298,7 +299,8 @@ fn a_generated_variable_without_bytes_has_32() {
     assert_eq!(
         spec.variable(&name("SHELF_X")).unwrap().source(),
         &Source::Generated {
-            bytes: ByteCount::DEFAULT
+            bytes: ByteCount::DEFAULT,
+            encoding: Encoding::Base64Url,
         }
     );
 }
@@ -1804,17 +1806,103 @@ fn a_withheld_variable_may_have_a_bytes_type() {
     spec(&text);
 }
 
+/// Returns a spec with one generated variable whose type is `ty` and whose
+/// other fields include `extra`.
+fn generated_bytes(ty: &str, extra: &str) -> String {
+    one(&format!(
+        "purpose = \"The key that signs session cookies.\"\ntype = {ty}\n\
+         unset = \"required\"\nshow = \"withheld\"\nsource = \"generated\"\n{extra}"
+    ))
+}
+
 #[test]
-fn a_generated_variable_with_a_bytes_type_is_bad_bytes() {
-    let text = one("purpose = \"The key that signs session cookies.\"\n\
-         type = { bytes = { encoding = \"base64\", length = 32 } }\nunset = \"required\"\n\
-         show = \"withheld\"\nsource = \"generated\"");
+fn a_generated_variable_with_each_encoding_takes_its_length_and_encoding_from_the_type() {
+    for (word, encoding) in [
+        ("hex", Encoding::Hex),
+        ("base64", Encoding::Base64),
+        ("base64url", Encoding::Base64Url),
+    ] {
+        for (field, length) in [("length", 32), ("min-length", 24)] {
+            let ty = format!("{{ bytes = {{ encoding = \"{word}\", {field} = {length} }} }}");
+            let spec = spec(&generated_bytes(&ty, ""));
+
+            assert_eq!(
+                spec.variable(&name("SHELF_X")).unwrap().source(),
+                &Source::Generated {
+                    bytes: ByteCount::generated(length).unwrap(),
+                    encoding,
+                },
+                "{ty}"
+            );
+        }
+    }
+}
+
+#[test]
+fn bytes_beside_a_bytes_type_on_a_generated_variable_are_bad_bytes() {
+    let text = generated_bytes(
+        "{ bytes = { encoding = \"hex\", length = 32 } }",
+        "bytes = 32",
+    );
 
     assert_eq!(kinds(&text), [SpecProblemKind::BadBytes]);
     assert_eq!(
         messages(&text),
-        ["`variables.SHELF_X.type` is a bytes type, and a generated variable has the type string"]
+        [
+            "`variables.SHELF_X.bytes` is set, and a generated variable with a bytes type takes \
+             its length from the type"
+        ]
     );
+}
+
+#[test]
+fn a_generated_bytes_type_under_16_bytes_is_bad_bytes_for_length_and_min_length() {
+    for field in ["length", "min-length"] {
+        let text = generated_bytes(
+            &format!("{{ bytes = {{ encoding = \"hex\", {field} = 8 }} }}"),
+            "",
+        );
+
+        assert_eq!(kinds(&text), [SpecProblemKind::BadBytes], "{field}");
+        assert_eq!(
+            messages(&text),
+            [
+                "`variables.SHELF_X.type` asks for 8 bytes, and a generated value takes from 16 \
+                 to 1024 bytes"
+            ],
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn a_generated_string_variable_keeps_its_bytes_and_base64url() {
+    let text = generated_bytes("\"string\"", "bytes = 24");
+
+    assert_eq!(
+        spec(&text).variable(&name("SHELF_X")).unwrap().source(),
+        &Source::Generated {
+            bytes: ByteCount::generated(24).unwrap(),
+            encoding: Encoding::Base64Url,
+        }
+    );
+    assert!(spec(&text).to_toml().contains("bytes = 24"));
+}
+
+#[test]
+fn the_canonical_form_round_trips_a_generated_bytes_variable_without_a_bytes_field() {
+    let text = generated_bytes("{ bytes = { encoding = \"base64\", min-length = 32 } }", "");
+    let parsed = spec(&text);
+    let canonical = parsed.to_toml();
+
+    assert!(
+        canonical.contains("type = { bytes = { encoding = \"base64\", min-length = 32 } }"),
+        "{canonical}"
+    );
+    assert!(!canonical.contains("\nbytes ="), "{canonical}");
+    let reparsed = spec(&canonical);
+    assert_eq!(reparsed, parsed);
+    assert_eq!(reparsed.digest(), parsed.digest());
 }
 
 #[test]

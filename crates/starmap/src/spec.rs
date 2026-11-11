@@ -424,8 +424,14 @@ pub enum Source {
     },
     /// A random value that the host creates on first use and keeps.
     Generated {
-        /// How many random bytes the value has.
+        /// How many random bytes the value has. For a variable with a
+        /// bytes type it is the type's length, or its smallest length, and
+        /// otherwise it is the `bytes` field, or 32 without one.
         bytes: ByteCount,
+        /// The encoding the host writes the bytes in: the bytes type's
+        /// encoding, or [`Encoding::Base64Url`] for a variable with the
+        /// type string.
+        encoding: Encoding,
     },
     /// A value the application inherits from the environment it starts in,
     /// such as `HOME`.

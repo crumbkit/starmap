@@ -16,11 +16,11 @@ use super::{
 };
 use crate::bind::BIND_KINDS;
 use crate::{
-    ByteCount, ByteLength, ByteRule, BytesError, Cache, IntegerRange, ModeRule, Name,
-    OnePasswordRef, PathTemplate, PathTemplateError, Pattern, ProvidedRef, ProviderKind,
-    SecretBind, SecretRef, Type, Value,
+    ByteRule, Cache, Encoding, IntegerRange, ModeRule, Name, OnePasswordRef, PathTemplate,
+    PathTemplateError, Pattern, ProvidedRef, ProviderKind, SecretBind, SecretRef, Type, Value,
 };
 
+mod bytes;
 mod enumerations;
 mod groups;
 mod lists;
@@ -420,19 +420,13 @@ impl Parser {
             );
             self.report(type_field.span(), Kind::WithheldType, message);
         }
-        if let (Some((SourceKind::Generated, _)), Some((Type::Bytes(_), type_field))) = (&kind, &ty)
-        {
-            // A generated value is written as base64url text, which no
-            // bytes type's encoding and length describe yet.
-            let message = format!(
-                "`{}` is a bytes type, and a generated variable has the type string",
-                type_field.path
-            );
-            self.report(type_field.span(), Kind::BadBytes, message);
-        }
+        let rule = match &ty {
+            Some((Type::Bytes(rule), type_field)) => Some((*rule, type_field)),
+            _ => None,
+        };
         let source = kind
             .as_ref()
-            .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes));
+            .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes, rule));
         let variable = match (purpose, effect, check, ty, unset, show, source, tools) {
             (
                 Some(purpose),
@@ -587,36 +581,6 @@ impl Parser {
             self.report(field.span(), Kind::BadRange, message);
         }
         range.map(Type::Integer)
-    }
-
-    /// Parses `{ bytes = { encoding = .., length = .. } }`, which takes
-    /// exactly one of `length` and `min-length`.
-    fn bytes_type(&mut self, field: &Field<'_>) -> Option<Type> {
-        let table = self.table(field)?;
-        self.known(table, &field.path, &["encoding", "length", "min-length"]);
-        let encoding = self
-            .required(field, table, "encoding")
-            .and_then(|encoding| self.word(&encoding, ENCODING_WORDS));
-        let length = match (
-            field.child(table, "length"),
-            field.child(table, "min-length"),
-        ) {
-            (Some(length), None) => self.count(&length, ByteCount::new).map(ByteLength::Exactly),
-            (None, Some(length)) => self.count(&length, ByteCount::new).map(ByteLength::AtLeast),
-            (length, _) => {
-                let (kind, count) = match length {
-                    Some(_) => (Kind::BadValue, "both"),
-                    None => (Kind::MissingField, "neither"),
-                };
-                let message = format!(
-                    "`{}` sets {count} length and min-length, and it takes one of them",
-                    field.path
-                );
-                self.report(field.span(), kind, message);
-                None
-            }
-        };
-        Some(Type::Bytes(ByteRule::new(encoding?, length?)))
     }
 
     /// Parses the `unset` field: a word, or a table with `local` or
@@ -801,7 +765,9 @@ impl Parser {
     }
 
     /// Merges the source word with its bind and its `bytes`, or reports a
-    /// combination the rules forbid (BASE-45).
+    /// combination the rules forbid (BASE-45). `rule` is the variable's
+    /// bytes type and its field, when it has one, which gives a generated
+    /// value its length and encoding.
     fn source(
         &mut self,
         variable: &Field<'_>,
@@ -809,8 +775,9 @@ impl Parser {
         kind: SourceKind,
         bind: Option<Option<(Bind, Range<usize>)>>,
         bytes: Option<Field<'_>>,
+        rule: Option<(ByteRule, &Field<'_>)>,
     ) -> Option<Source> {
-        let bytes = self.bytes(variable, kind, bytes);
+        let bytes = self.bytes(variable, kind, bytes, rule.is_some());
         let bind = match bind {
             None => None,
             // The bind's own problem was reported.
@@ -828,8 +795,18 @@ impl Parser {
                     bind: Some(SecretBind::new(SecretRef::OnePassword(reference), cache)),
                 }
             }
-            (SourceKind::Generated, None) => Source::Generated {
-                bytes: bytes?.unwrap_or_default(),
+            (SourceKind::Generated, None) => match rule {
+                Some((rule, type_field)) => {
+                    let count = self.generated_length(rule, type_field);
+                    Source::Generated {
+                        bytes: count?,
+                        encoding: rule.encoding(),
+                    }
+                }
+                None => Source::Generated {
+                    bytes: bytes?.unwrap_or_default(),
+                    encoding: Encoding::Base64Url,
+                },
             },
             (SourceKind::Inherited, None) => Source::Inherited,
             (SourceKind::Provided, Some((Bind::Provided(reference), _))) => {
@@ -857,48 +834,6 @@ impl Parser {
         };
         bytes?;
         Some(source)
-    }
-
-    /// Parses `bytes`, which only a generated variable takes. It returns
-    /// `Some(None)` when the field is absent and `None` after a problem.
-    fn bytes(
-        &mut self,
-        variable: &Field<'_>,
-        kind: SourceKind,
-        field: Option<Field<'_>>,
-    ) -> Option<Option<ByteCount>> {
-        let Some(field) = field else {
-            return Some(None);
-        };
-        if kind != SourceKind::Generated {
-            let message = format!(
-                "`{}` sets bytes, and only a generated variable takes bytes",
-                variable.path
-            );
-            self.report(field.key_span(), Kind::BadBytes, message);
-            return None;
-        }
-        self.count(&field, ByteCount::generated).map(Some)
-    }
-
-    /// Parses a whole number of bytes through `build`, which refuses a
-    /// number outside its range.
-    fn count(
-        &mut self,
-        field: &Field<'_>,
-        build: fn(u16) -> Result<ByteCount, BytesError>,
-    ) -> Option<ByteCount> {
-        let Some(number) = field.item.as_integer() else {
-            self.wrong_type(field, "a whole number");
-            return None;
-        };
-        // A number beyond u16 is above ByteCount::MAX too, so u16::MAX
-        // stands in for it and `build` refuses it. The clamp only serves
-        // that refusal: it never admits a bad value, and the report still
-        // names the BadBytes problem with the number as written.
-        let count = build(u16::try_from(number).unwrap_or(u16::MAX));
-        let text = number.to_string();
-        self.checked(field.span(), &field.path, &text, Kind::BadBytes, count)
     }
 
     /// Parses the `[mode]` table and checks its variable against the
