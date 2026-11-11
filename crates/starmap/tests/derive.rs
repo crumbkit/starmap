@@ -216,6 +216,81 @@ fn an_empty_value_reads_as_none_for_an_optional_field_and_as_its_default_for_a_d
     assert!(env.mirror_token.is_none());
 }
 
+/// The flags of the example application, as a command-line parser hands
+/// them over: each value flag is an `Option`, and a switch is a `bool`.
+struct Flags {
+    port: Option<Port>,
+    page_size: Option<u8>,
+    catalogue: Option<url::Url>,
+    debug: bool,
+}
+
+/// Returns the port, page size, catalogue and debug switch that the
+/// application uses, as the README's section on command-line flags writes
+/// them.
+fn settle(flags: Flags, env: ShelfEnv) -> (Port, u8, Option<url::Url>, bool) {
+    (
+        flags.port.unwrap_or(env.port),
+        flags.page_size.unwrap_or(env.page_size),
+        flags.catalogue.or(env.catalogue),
+        flags.debug || env.debug,
+    )
+}
+
+/// Returns variables that set a port and a catalogue, and leave the page
+/// size and the debug switch to their defaults.
+fn shelf_vars() -> Vec<(OsString, OsString)> {
+    vars(&[
+        ("SHELF_PORT", "8080"),
+        ("SHELF_CATALOGUE_URL", "https://shelf.example.org/"),
+        ("SHELF_SESSION_KEY", "session-key"),
+    ])
+}
+
+#[test]
+fn a_flag_that_is_given_wins_over_a_required_a_defaulted_and_an_optional_field() {
+    let port = Port::try_from(9090).expect("9090 is a port");
+    let catalogue = url::Url::parse("https://flag.example.org/").expect("the text is a url");
+    let env = ShelfEnv::from_vars(shelf_vars()).expect("the variables fit the spec");
+
+    let settled = settle(
+        Flags {
+            port: Some(port),
+            page_size: Some(50),
+            catalogue: Some(catalogue.clone()),
+            debug: true,
+        },
+        env,
+    );
+
+    assert_eq!(settled, (port, 50, Some(catalogue), true));
+}
+
+#[test]
+fn a_flag_that_is_not_given_leaves_the_value_or_the_default_of_its_field() {
+    let env = ShelfEnv::from_vars(shelf_vars()).expect("the variables fit the spec");
+
+    let settled = settle(
+        Flags {
+            port: None,
+            page_size: None,
+            catalogue: None,
+            debug: false,
+        },
+        env,
+    );
+
+    assert_eq!(
+        settled,
+        (
+            Port::try_from(8080).expect("8080 is a port"),
+            20,
+            Some(url::Url::parse("https://shelf.example.org/").expect("the text is a url")),
+            false
+        )
+    );
+}
+
 #[test]
 fn an_empty_value_refuses_the_read_of_a_required_field() {
     let error = ShelfEnv::from_vars(vars(&[("SHELF_PORT", "8080"), ("SHELF_SESSION_KEY", "")]))

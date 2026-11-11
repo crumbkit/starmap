@@ -28,6 +28,36 @@ binaries for Apple silicon macOS, Linux and Windows.
 An application depends on `starmap` with its `derive` feature, and on
 `starmap-test` as a dev-dependency.
 
+## Command-line flags
+
+An application that takes a value from a flag or a variable often lets clap
+read the variable:
+
+```rust
+#[arg(long, env = "SHELF_PORT")]
+port: u16,
+```
+
+That read happens outside the struct, so the variable's declared type, its
+default and its check do not apply to it. Remove `env` from the argument,
+make the flag an `Option`, and use the struct's field when the flag is not
+given:
+
+```rust
+#[arg(long)]
+port: Option<starmap::Port>,
+
+let env = ShelfEnv::load()?;
+let port = cli.port.unwrap_or(env.port);
+```
+
+`unwrap_or` fits a field of a required variable or one with a default, and
+`cli.catalogue.or(env.catalogue)` fits an `Option` field. A switch is
+`cli.debug || env.debug`. starmap adds no function for this, because the
+methods of `Option` cover every kind of field. The glossary's
+[flag override](docs/glossary.md#flag-override) entry covers a variable
+that is required only when its flag is not given.
+
 ## Contributing
 
 [AGENTS.md](AGENTS.md) lists the checks that a change must pass, and

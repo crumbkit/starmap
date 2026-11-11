@@ -43,7 +43,8 @@ the file that declares the variables.
 
 The scan counts `var` and `var_os` with a literal name, `#[starmap("NAME")]`
 fields and clap's `#[arg(env = "NAME")]`, reads a bare clap `env` as the
-upper-case field name, and misses a name in a constant.
+upper-case field name, and misses a name in a constant. To let a flag replace
+a variable, drop clap's `env` and write `cli.port.unwrap_or(env.port)`.
 
 `--json` makes any command print JSON: `starmap check --json` gives
 `starmap/check/v1`, `starmap explain --json` gives `starmap/explain/v1`, and a

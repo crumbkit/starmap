@@ -304,6 +304,35 @@ without a check sentence, and a check sentence whose variable no field in
 src checks. Each is a note on standard error and a list in the JSON
 document, and neither fails the command.
 
+## flag override
+
+A flag override is a command-line flag that replaces a variable's value for
+one run. The application reads the variable only through its struct that
+derives `Env`, and the flag wins when it is given. starmap has no function
+for this, because the methods of `Option` say it for every kind of field:
+
+| The field | The flag | The value the application uses |
+| --- | --- | --- |
+| `port: Port`, a required variable or one with a default | `Option<Port>` | `cli.port.unwrap_or(env.port)` |
+| `catalogue: Option<Url>`, an optional variable | `Option<Url>` | `cli.catalogue.or(env.catalogue)` |
+| `debug: bool` | a switch, `bool` | `cli.debug \|\| env.debug` |
+
+`Env::load` refuses a required variable that is unset before the
+application looks at any flag. A variable that is required only when its
+flag is not given is therefore declared `unset = "optional"`, and the
+application reports the missing value itself, as in
+`cli.port.or(env.port).ok_or("pass --port or set SHELF_PORT")?`.
+
+The flag's value does not pass through the variable's declared type or its
+field's check. Giving the flag the field's type, such as `starmap::Port`,
+makes the command-line parser refuse the same values where that type
+implements `FromStr`.
+
+A flag override replaces clap's `env` argument, as in
+`#[arg(env = "SHELF_PORT")]`, which reads the variable outside the struct.
+clap's help then no longer names the variable, so the flag's help text
+names it where a reader needs it.
+
 ## family
 
 A family is a set of variables whose names are chosen at run time, such as
