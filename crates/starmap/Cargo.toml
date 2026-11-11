@@ -30,6 +30,9 @@ zeroize.workspace = true
 # generate strings from a regular expression. The default features add
 # forking, timeouts and bit-set strategies, which the tests do not use.
 proptest = { workspace = true, features = ["std"] }
+# The quote tests compare a refusal's quote of a value with serde_json's
+# encoding of the same text as a JSON string.
+serde_json = { workspace = true, features = ["std"] }
 snapbox.workspace = true
 trybuild.workspace = true
 

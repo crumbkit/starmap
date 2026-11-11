@@ -5,7 +5,7 @@ use std::ffi::OsString;
 
 use proptest::prelude::*;
 
-use super::{Finding, Problem, Verdict, capture, check, mode};
+use super::{Finding, Problem, Quote, Verdict, capture, check, mode};
 use crate::{Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, TypeError, Value};
 
 /// A spec with a mode variable, a required port, a defaulted boolean, an
@@ -98,6 +98,7 @@ fn finding(text: &str, problem: Problem) -> Finding {
     Finding {
         name: name(text),
         problem,
+        value: None,
     }
 }
 
@@ -326,7 +327,10 @@ fn a_variable_that_production_requires_is_missing_only_in_production() {
 fn a_value_that_does_not_fit_its_type_is_invalid() {
     assert_eq!(
         findings(verdict(&[("SHELF_PORT", "0")])),
-        [finding("SHELF_PORT", Problem::Invalid(TypeError::NotPort))]
+        [Finding {
+            value: Some(Quote::new(&OsString::from("0"))),
+            ..finding("SHELF_PORT", Problem::Invalid(TypeError::NotPort))
+        }]
     );
 }
 
@@ -382,8 +386,8 @@ fn an_empty_value_in_the_environment_leaves_a_required_variable_missing() {
 fn an_empty_value_leaves_a_required_string_missing() {
     let spec = Spec::parse(
         r#"
-[variables.SHELF_NAME]
-purpose = "The name shelf shows in its title."
+[variables.SHELF_WORKERS]
+purpose = "How many catalogue workers shelf starts."
 type = "string"
 unset = "required"
 show = "shown"
@@ -391,12 +395,12 @@ source = "setting"
 "#,
     )
     .unwrap();
-    let bindings = capture(&spec, vars(&[("SHELF_NAME", "")]));
+    let bindings = capture(&spec, vars(&[("SHELF_WORKERS", "")]));
 
     assert_eq!(
         findings(check(&spec, &bindings, Mode::Local)),
         [finding(
-            "SHELF_NAME",
+            "SHELF_WORKERS",
             Problem::Missing { mode: Mode::Local }
         )]
     );
@@ -525,7 +529,10 @@ fn a_refusal_lists_every_finding_in_the_spec_order() {
                     mode: Mode::Production
                 }
             ),
-            finding("SHELF_DEBUG", Problem::Invalid(TypeError::NotBoolean)),
+            Finding {
+                value: Some(Quote::new(&OsString::from("maybe"))),
+                ..finding("SHELF_DEBUG", Problem::Invalid(TypeError::NotBoolean))
+            },
             finding(
                 "SHELF_MIRROR_TOKEN",
                 Problem::Missing {
@@ -665,7 +672,8 @@ fn refusals_name_each_variable_and_the_mode_a_missing_one_is_required_in() {
     assert_eq!(
         refusals.to_string(),
         "SHELF_PORT is required in local mode and has no value; \
-         SHELF_DEBUG: the value is not one of the words 1, 0, true, false, yes, no, on and off"
+         SHELF_DEBUG: the value is not one of the words 1, 0, true, false, yes, no, on and off \
+         (the value is \"maybe\")"
     );
 }
 
@@ -762,6 +770,36 @@ fn a_withheld_bytes_value_is_checked_without_its_text_in_any_message() {
 }
 
 #[test]
+fn a_withheld_bytes_value_that_does_not_fit_is_never_quoted() {
+    for raw in ["hunter2!", "AAAA", "c2VjcmV0LWtleS12YWx1ZQ=="] {
+        let refusals = refused(bytes_verdict(&[("SHELF_COOKIE_KEY", raw)]));
+        let finding = refusals.iter().next().unwrap();
+
+        assert_eq!(finding.value, None);
+        for text in [
+            refusals.to_string(),
+            format!("{refusals:?}"),
+            format!("{refusals:#?}"),
+            format!("{finding:?}"),
+        ] {
+            assert!(!text.contains(raw), "{text}");
+            assert!(!text.contains("(the value is"), "{text}");
+        }
+    }
+}
+
+#[test]
+fn a_shown_bytes_value_that_does_not_decode_is_quoted() {
+    let refusals = refused(bytes_verdict(&[
+        ("SHELF_COOKIE_KEY", "3q2+7w=="),
+        ("SHELF_SALT", "xyz"),
+    ]));
+
+    assert_eq!(first_quote(&refusals).as_deref(), Some("xyz"), "{refusals}");
+    assert!(refusals.to_string().ends_with("(the value is \"xyz\")"));
+}
+
+#[test]
 fn a_shown_bytes_value_is_held_decoded_and_its_default_applies() {
     let environment = ready(bytes_verdict(&[("SHELF_COOKIE_KEY", "3q2+7w==")]));
 
@@ -828,7 +866,7 @@ fn a_shown_value_that_does_not_match_names_the_variable_and_the_pattern() {
 
     assert_eq!(
         refusals.to_string(),
-        "SHELF_REVISION: the value does not match the pattern [0-9a-f]{40}"
+        "SHELF_REVISION: the value does not match the pattern [0-9a-f]{40} (the value is \"main\")"
     );
 }
 
@@ -849,4 +887,244 @@ fn a_withheld_value_that_does_not_match_is_refused_without_its_text() {
         "SHELF_MIRROR_KEY: the value does not match the pattern sk-[a-z0-9]+"
     );
     assert!(!format!("{refusals:?}").contains("pk-live-hidden"));
+}
+
+// Quotes of refused values
+
+/// Returns the refusals of a verdict that is refused.
+fn refused(verdict: Verdict) -> super::Refusals {
+    match verdict {
+        Verdict::Refused(refusals) => refusals,
+        Verdict::Ready(_) => panic!("the check passed"),
+    }
+}
+
+/// Returns the quoted text of the first finding of `refusals`.
+fn first_quote(refusals: &super::Refusals) -> Option<String> {
+    let finding = refusals.iter().next()?;
+    finding
+        .value
+        .as_ref()
+        .map(|quote| quote.as_str().to_owned())
+}
+
+/// A spec with two shown variables: a required port and an optional
+/// integer from 1 to 9.
+const QUOTES: &str = r#"
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_WORKERS]
+purpose = "How many catalogue workers shelf starts."
+type = { integer = { min = 1, max = 9 } }
+unset = "optional"
+show = "shown"
+source = "setting"
+"#;
+
+/// Checks `bindings` against [`QUOTES`] in local mode.
+fn quote_verdict(bindings: &Bindings) -> Verdict {
+    check(&Spec::parse(QUOTES).unwrap(), bindings, Mode::Local)
+}
+
+/// Returns bindings that bind each of `pairs` as a plain value.
+fn plain(pairs: &[(&str, OsString)]) -> Bindings {
+    let mut bindings = Bindings::new();
+    for (key, value) in pairs {
+        bindings.bind(name(key), Bound::Plain(value.clone()));
+    }
+    bindings
+}
+
+#[test]
+fn a_shown_variables_invalid_value_is_quoted_in_its_finding_and_the_refusals_text() {
+    let refusals = refused(verdict(&[("SHELF_PORT", "80a")]));
+
+    let port = refusals
+        .iter()
+        .find(|finding| finding.name == name("SHELF_PORT"))
+        .unwrap();
+    assert_eq!(port.value.as_ref().map(Quote::as_str), Some("80a"));
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_PORT: the value is not a port from 1 to 65535 (the value is \"80a\")"
+    );
+}
+
+#[test]
+fn a_withheld_value_that_does_not_match_its_pattern_is_not_quoted_anywhere() {
+    let refusals = refused(pattern_verdict(&[
+        ("SHELF_REVISION", "0123456789abcdef0123456789abcdef01234567"),
+        ("SHELF_MIRROR_KEY", "pk-live-hidden"),
+    ]));
+
+    let finding = refusals.iter().next().unwrap();
+    assert_eq!(finding.value, None);
+    for text in [
+        refusals.to_string(),
+        format!("{refusals:?}"),
+        format!("{refusals:#?}"),
+        format!("{finding:?}"),
+    ] {
+        assert!(!text.contains("pk-live-hidden"), "{text}");
+        assert!(!text.contains("the value is \""), "{text}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_withheld_value_that_is_not_unicode_is_not_quoted() {
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let spec = spec();
+    let bindings = capture(
+        &spec,
+        [
+            (OsString::from("SHELF_PORT"), OsString::from("8080")),
+            (
+                OsString::from("SHELF_MIRROR_TOKEN"),
+                OsString::from_vec(vec![b'k', 0xff, 0xfe]),
+            ),
+        ],
+    );
+    let refusals = refused(check(&spec, &bindings, Mode::Local));
+
+    assert!(refusals.iter().all(|finding| finding.value.is_none()));
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_MIRROR_TOKEN: the value is not unicode text"
+    );
+}
+
+#[test]
+fn a_missing_variable_and_a_mode_mismatch_have_no_quote() {
+    let refusals = refused(verdict(&[("SHELF_ENV", "prod")]));
+    let spec = spec();
+    let mut bindings = capture(&spec, vars(&[("SHELF_PORT", "8080")]));
+    bindings.bind(name("SHELF_ENV"), Bound::Plain("prod".into()));
+    let mismatch = refused(check(&spec, &bindings, Mode::Local));
+
+    assert!(
+        refusals
+            .iter()
+            .chain(mismatch.iter())
+            .all(|finding| finding.value.is_none())
+    );
+    assert!(!refusals.to_string().contains("(the value is"));
+    assert!(!mismatch.to_string().contains("(the value is"));
+}
+
+#[test]
+fn a_secret_bound_to_a_shown_variable_is_not_quoted() {
+    let bindings = {
+        let mut bindings = Bindings::new();
+        bindings.bind(
+            name("SHELF_PORT"),
+            Bound::Secret(Secret::new("hidden-80a".into())),
+        );
+        bindings
+    };
+    let refusals = refused(quote_verdict(&bindings));
+
+    assert_eq!(refusals.iter().next().unwrap().value, None);
+    assert!(!refusals.to_string().contains("hidden-80a"));
+    assert!(!format!("{refusals:?}").contains("hidden-80a"));
+}
+
+#[test]
+fn a_quote_longer_than_64_characters_is_cut_and_ends_with_an_ellipsis() {
+    let long = "9".repeat(65);
+    let refusals = refused(quote_verdict(&plain(&[(
+        "SHELF_PORT",
+        long.clone().into(),
+    )])));
+
+    let cut = format!("{}…", "9".repeat(64));
+    assert_eq!(first_quote(&refusals), Some(cut.clone()));
+    assert!(
+        refusals
+            .to_string()
+            .ends_with(&format!("(the value is \"{cut}\")"))
+    );
+}
+
+#[test]
+fn a_quote_of_exactly_64_characters_is_whole() {
+    let whole = "9".repeat(64);
+    let refusals = refused(quote_verdict(&plain(&[(
+        "SHELF_PORT",
+        whole.clone().into(),
+    )])));
+
+    assert_eq!(first_quote(&refusals), Some(whole));
+}
+
+#[test]
+fn a_cut_quote_never_splits_a_character() {
+    let long = "é".repeat(40) + &"🦀".repeat(40);
+    let refusals = refused(quote_verdict(&plain(&[("SHELF_PORT", long.into())])));
+
+    let cut = format!("{}{}…", "é".repeat(40), "🦀".repeat(24));
+    assert_eq!(first_quote(&refusals), Some(cut));
+}
+
+#[test]
+fn quotes_backslashes_and_control_characters_are_escaped_as_in_a_json_string() {
+    let raw = "a\"b\\c\nSHELF_PORT is fine\td\r\u{1b}[31m\u{7}";
+    let refusals = refused(quote_verdict(&plain(&[("SHELF_PORT", raw.into())])));
+
+    assert_eq!(first_quote(&refusals).as_deref(), Some(raw));
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_PORT: the value is not a port from 1 to 65535 \
+         (the value is \"a\\\"b\\\\c\\nSHELF_PORT is fine\\td\\r\\u001b[31m\\u0007\")"
+    );
+    assert!(!refusals.to_string().contains('\n'));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_shown_value_that_is_not_unicode_is_quoted_with_a_replacement_character() {
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let raw = OsString::from_vec(vec![b'8', 0xff, b'0']);
+    let refusals = refused(quote_verdict(&plain(&[("SHELF_PORT", raw)])));
+
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_PORT: the value is not unicode text (the value is \"8\u{fffd}0\")"
+    );
+}
+
+#[test]
+fn each_invalid_shown_value_is_quoted_after_its_own_reason() {
+    let refusals = refused(quote_verdict(&plain(&[
+        ("SHELF_PORT", "0".into()),
+        ("SHELF_WORKERS", "10".into()),
+    ])));
+
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_PORT: the value is not a port from 1 to 65535 (the value is \"0\"); \
+         SHELF_WORKERS: the value is not a whole number from 1 to 9 (the value is \"10\")"
+    );
+}
+
+proptest! {
+    #[test]
+    fn a_quote_is_the_json_string_of_the_cut_value(text in "\\PC*|[\\x00-\\x1f\"\\\\a]{0,80}") {
+        let quoted = Quote::new(&OsString::from(&text));
+        let cut: String = if text.chars().count() > 64 {
+            text.chars().take(64).chain(['…']).collect()
+        } else {
+            text.clone()
+        };
+
+        prop_assert_eq!(quoted.as_str(), cut.as_str());
+        prop_assert_eq!(quoted.to_string(), serde_json::to_string(&cut).unwrap());
+    }
 }

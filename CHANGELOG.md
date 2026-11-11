@@ -56,6 +56,19 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A refusal of a shown variable's value quotes the value after its reason,
+  as in `SHELF_PORT: the value is not a port from 1 to 65535 (the value is
+  "80a")`. This covers the text of `starmap::Refusals`, of
+  `ReadError::Refused` from `Env::load` and `Env::from_vars`, and of
+  `starmap run`'s failures. The quote holds the first 64 characters of the
+  value, counted as Unicode scalar values, then `…` when the value is
+  longer, and is written as a JSON string. A withheld variable's value, and
+  any value held as a secret, is never quoted. `Finding` gains a `value`
+  field that holds the new `starmap::Quote`, and `starmap run`'s JSON
+  failure for an invalid value gains a `value` field, which is null for a
+  withheld variable. The reason's wording is unchanged, and the digest of an
+  existing file does not change.
+
 - **Breaking:** `starmap::SecretBytes`, the number of random bytes in a
   generated value, is renamed `starmap::ByteCount`, and the name
   `SecretBytes` now holds the decoded bytes of a withheld bytes value.
