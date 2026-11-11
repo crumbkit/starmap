@@ -80,6 +80,18 @@ jobs:
       # LIB-4: every target builds on the MSRV with every feature.
       - name: msrv
         run: cargo +1.89.0 check --locked --workspace --all-targets --all-features
+      # cargo-crumbkit has no prebuilt binary that install-action offers, so
+      # cargo builds the pinned version from its published, locked sources.
+      - name: install cargo-crumbkit
+        run: cargo install cargo-crumbkit --version 0.3.1 --locked
+      # The skill check reads each command line in starmap's skill and
+      # fails when the binary no longer accepts one. The draft check fails
+      # when a generated section of the skill differs from what the
+      # binary's commands produce.
+      - name: skill check
+        run: cargo crumbkit skill check --bin starmap
+      - name: skill draft
+        run: cargo crumbkit skill draft --bin starmap --check
       # The xtask checks hold the drift rules that a script can check, such
       # as the file length of BASE-21, and the map's own decisions, such as
       # the AGENTS.md word limit.

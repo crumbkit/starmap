@@ -25,9 +25,13 @@ mod spec;
 use std::ffi::OsString;
 use std::process::ExitCode;
 
+use clap::CommandFactory as _;
+
 #[doc(hidden)]
 pub use crate::cli::{Cli, TOOL};
-use crate::cli::{CommandsCommand, SchemasCommand, SelfCommand, Verb};
+use crate::cli::{
+    CommandsCommand, CompletionCommand, SKILL, SchemasCommand, SelfCommand, SkillsCommand, Verb,
+};
 
 /// Parses `args`, runs the command and returns the process's exit code. The
 /// first argument is the program's name. `vars` is the process environment,
@@ -93,5 +97,33 @@ where
                 Ok::<_, crumbkit::Error>(crumbkit_usage::findings(&mut output, &TOOL, &args));
             crumbkit::finish(output, crumbkit_usage::SELF_USAGE, result)
         }
+        Verb::Skills { command } => match command {
+            SkillsCommand::Install(args) => {
+                let result = Ok::<_, crumbkit::Error>(crumbkit_skills::install(&SKILL, &args));
+                crumbkit::finish(output, crumbkit_skills::SKILLS_INSTALL, result)
+            }
+            SkillsCommand::Check(args) => {
+                let result = Ok::<_, crumbkit::Error>(crumbkit_skills::check(&SKILL, &args));
+                crumbkit::finish(output, crumbkit_skills::SKILLS_CHECK, result)
+            }
+            SkillsCommand::Print => {
+                let result = Ok::<_, crumbkit::Error>(crumbkit_skills::print(&SKILL));
+                crumbkit::finish(output, crumbkit_skills::SKILLS_PRINT, result)
+            }
+        },
+        Verb::Completion { command } => match command {
+            CompletionCommand::Install(args) => {
+                let result = crumbkit::completion::install(Cli::command, &args);
+                crumbkit::finish(output, crumbkit::completion::COMPLETION_INSTALL, result)
+            }
+            CompletionCommand::Check(args) => {
+                let result = crumbkit::completion::check(Cli::command, &args);
+                crumbkit::finish(output, crumbkit::completion::COMPLETION_CHECK, result)
+            }
+            CompletionCommand::Print(args) => {
+                let result = crumbkit::completion::print(Cli::command, &args);
+                crumbkit::finish(output, crumbkit::completion::COMPLETION_PRINT, result)
+            }
+        },
     }
 }

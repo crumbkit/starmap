@@ -6,10 +6,17 @@ use std::path::PathBuf;
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Args, Parser, Subcommand};
 use crumbkit::commands::{COMMANDS_LIST, CommandsList};
+use crumbkit::completion::{
+    COMPLETION_CHECK, COMPLETION_INSTALL, COMPLETION_PRINT, CompletionCheck, CompletionInstall,
+    CompletionPrint,
+};
 use crumbkit::help::{Effects, Example, Goal, Group, Help, Leaf};
 use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
 use crumbkit::tool::{Exit, Failures};
 use crumbkit::{Call, DryRun, NoInput, Tool, ViewFlags};
+use crumbkit_skills::{
+    SKILLS_CHECK, SKILLS_INSTALL, SKILLS_PRINT, Skill, SkillsCheck, SkillsInstall,
+};
 use crumbkit_usage::{SELF_USAGE, SelfUsage};
 use starmap::Name;
 use starmap_resolve::WorkspaceName;
@@ -53,6 +60,8 @@ const HELP: Help = Help::new()
             Goal::new("Run a program with its environment", &["run"]),
             Goal::new("Read the variables", &["explain", "diff"]),
             Goal::new("Explore commands", &["commands", "schemas", "self"]),
+            Goal::new("Install starmap's skill", &["skills"]),
+            Goal::new("Set up shell completion", &["completion"]),
         ],
     )])
     .root_verbs(
@@ -129,7 +138,66 @@ const HELP: Help = Help::new()
             .examples(&[Example::new(&[], "Report the findings of the last 7 days")])
             .effects(Effects::read_only())
             .document(SELF_USAGE),
+        Leaf::new(&["skills", "install"])
+            .examples(&[
+                Example::new(
+                    &[],
+                    "Install starmap's skill into each agent skills directory that exists",
+                ),
+                Example::new(
+                    &["--force"],
+                    "Install it, replacing a file or a link that install did not write",
+                ),
+            ])
+            .effects(Effects::additive().idempotent())
+            .document(SKILLS_INSTALL),
+        Leaf::new(&["skills", "check"])
+            .examples(&[Example::new(
+                &[],
+                "Report each agent skills directory whose copy is missing or differs",
+            )])
+            .effects(Effects::read_only())
+            .document(SKILLS_CHECK),
+        Leaf::new(&["skills", "print"])
+            .examples(&[Example::new(&[], "Print starmap's skill")])
+            .effects(Effects::read_only())
+            .document(SKILLS_PRINT),
+        Leaf::new(&["completion", "install"])
+            .examples(&[
+                Example::new(
+                    &["--shell", "fish"],
+                    "Install starmap's completion for fish",
+                ),
+                Example::new(
+                    &["--shell", "zsh", "--force"],
+                    "Install it for zsh, replacing a file or a link that install did not write",
+                ),
+            ])
+            .effects(Effects::additive().idempotent())
+            .document(COMPLETION_INSTALL),
+        Leaf::new(&["completion", "check"])
+            .examples(&[Example::new(
+                &["--shell", "zsh"],
+                "Report zsh's completion file when it is missing or differs",
+            )])
+            .effects(Effects::read_only())
+            .document(COMPLETION_CHECK),
+        Leaf::new(&["completion", "print"])
+            .examples(&[Example::new(
+                &["--shell", "fish"],
+                "Print the registration script for fish",
+            )])
+            .effects(Effects::read_only())
+            .document(COMPLETION_PRINT),
     ]);
+
+/// starmap's agent skill, which `starmap skills install` writes into the
+/// agent skills directories.
+pub(crate) const SKILL: Skill = Skill::new(
+    "starmap",
+    env!("CARGO_PKG_VERSION"),
+    include_str!("../skill/SKILL.md"),
+);
 
 /// The exit codes that `starmap run` passes on from its program.
 const FAILURES: Failures = Failures::new().exits(&[Exit::range(
@@ -188,6 +256,18 @@ pub(crate) enum Verb {
         #[command(subcommand)]
         command: SelfCommand,
     },
+    /// Give coding agents starmap's skill.
+    Skills {
+        /// What to do with the skill.
+        #[command(subcommand)]
+        command: SkillsCommand,
+    },
+    /// Set up starmap's completion in a shell.
+    Completion {
+        /// What to do with the completion.
+        #[command(subcommand)]
+        command: CompletionCommand,
+    },
 }
 
 /// The commands for starmap's own commands.
@@ -211,6 +291,28 @@ pub(crate) enum SchemasCommand {
 pub(crate) enum SelfCommand {
     /// Report the patterns in starmap's usage log where callers waste effort.
     Usage(SelfUsage),
+}
+
+/// The commands for starmap's agent skill.
+#[derive(Debug, Subcommand)]
+pub(crate) enum SkillsCommand {
+    /// Install starmap's skill into each agent skills directory that exists.
+    Install(SkillsInstall),
+    /// Check that each installed copy of starmap's skill matches this starmap.
+    Check(SkillsCheck),
+    /// Print starmap's skill.
+    Print,
+}
+
+/// The commands for starmap's shell completion.
+#[derive(Debug, Subcommand)]
+pub(crate) enum CompletionCommand {
+    /// Install starmap's completion where the shell loads it.
+    Install(CompletionInstall),
+    /// Check that starmap's installed completion file matches this starmap.
+    Check(CompletionCheck),
+    /// Print starmap's completion registration script for a shell.
+    Print(CompletionPrint),
 }
 
 /// The file that a command reads.

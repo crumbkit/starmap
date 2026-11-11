@@ -1,0 +1,14 @@
+Set up starmap's completion in a shell
+
+Usage: starmap completion [OPTIONS] <COMMAND>
+
+Commands:
+  install  Install starmap's completion where the shell loads it
+  check    Check that starmap's installed completion file matches this starmap
+  print    Print starmap's completion registration script for a shell
+
+Options:
+  -h, --help  Print help (see more with '--help')
+
+Global flags: --json, --fields <FIELD>, --long, --full, --no-input. `starmap completion --help` describes them.
+Next: starmap completion <COMMAND> -h

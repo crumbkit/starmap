@@ -1,0 +1,13 @@
+Print starmap's completion registration script for a shell
+
+Usage: starmap completion print [OPTIONS]
+
+Options:
+      --shell <SHELL>  Print the script of this shell in place of the one that SHELL names [possible values: bash, elvish, fish, powershell, zsh]
+  -h, --help           Print help (see more with '--help')
+
+Examples:
+  starmap completion print --shell fish
+
+Effects: read-only, closed-world.
+Global flags: --json, --no-input. `starmap completion print --help` describes them.
