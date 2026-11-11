@@ -109,6 +109,30 @@ fn the_mode_note_names_the_production_value_that_decides_it() {
     starmap(state.path(), &["explain"], &[("SHELF_ENV", "prod")])
         .success()
         .stderr_eq(
-            "Mode: production, because SHELF_ENV is prod. Values come from this shell, and explain resolves no bind.\n",
+            "Mode: production, because SHELF_ENV is prod. Values come from this shell, and explain resolves no bind. starmap run --only-declared also passes these built-in variables from the shell: PATH, HOME, USER, LOGNAME, SHELL, TMPDIR, LANG, LC_*, TERM, TZ.\n",
         );
+}
+
+#[test]
+fn explain_of_every_variable_lists_the_built_in_names_that_only_declared_passes() {
+    let state = tempfile::tempdir().unwrap();
+    let run = starmap(state.path(), &["explain"], &[]).success();
+    let stderr = String::from_utf8_lossy(&run.get_output().stderr).into_owned();
+    let names: Vec<&str> = starmap::BuiltIns::current()
+        .iter()
+        .map(starmap::BuiltIn::pattern)
+        .collect();
+    let sentence = format!(
+        "starmap run --only-declared also passes these built-in variables from the shell: {}.",
+        names.join(", ")
+    );
+    assert!(stderr.contains(&sentence), "{stderr}");
+}
+
+#[test]
+fn explain_of_named_variables_leaves_the_built_in_names_out() {
+    let state = tempfile::tempdir().unwrap();
+    let run = starmap(state.path(), &["explain", "SHELF_PORT"], &[]).success();
+    let stderr = String::from_utf8_lossy(&run.get_output().stderr).into_owned();
+    assert!(!stderr.contains("--only-declared"), "{stderr}");
 }

@@ -286,3 +286,95 @@ fn a_shown_value_that_does_not_fit_is_quoted_and_a_withheld_one_is_not() {
     );
     assert!(!stderr.contains("pk-live-hidden"), "{stderr}");
 }
+
+/// The script that prints an undeclared variable, two built-in ones and a
+/// declared setting.
+const PRINT_ONLY_DECLARED: &str =
+    r#"printf '%s %s %s %s' "${SHELF_THEME-unset}" "$LANG" "$LC_ALL" "$SHELF_PAGE_SIZE""#;
+
+/// The shell of the tests of `--only-declared`: an undeclared variable, two
+/// built-in ones and a declared setting.
+const ONLY_DECLARED_SHELL: &[(&str, &str)] = &[
+    ("SHELF_THEME", "dark"),
+    ("LANG", "C"),
+    ("LC_ALL", "POSIX"),
+    ("SHELF_PAGE_SIZE", "40"),
+];
+
+#[test]
+fn without_only_declared_an_undeclared_variable_of_the_shell_reaches_the_program() {
+    starmap(
+        Path::new(FIXTURES),
+        &["run", "--no-input", "--", "sh", "-c", PRINT_ONLY_DECLARED],
+        ONLY_DECLARED_SHELL,
+    )
+    .code(0)
+    .stdout_eq("dark C POSIX 40");
+}
+
+#[test]
+fn only_declared_passes_declared_values_and_built_in_variables_and_nothing_else() {
+    starmap(
+        Path::new(FIXTURES),
+        &[
+            "run",
+            "--no-input",
+            "--only-declared",
+            "--",
+            "sh",
+            "-c",
+            PRINT_ONLY_DECLARED,
+        ],
+        ONLY_DECLARED_SHELL,
+    )
+    .code(0)
+    .stdout_eq("unset C POSIX 40");
+}
+
+#[test]
+fn only_declared_finds_the_program_on_the_path_of_the_shell() {
+    // The harness sets PATH, and the program `sh` has no directory, so the
+    // run starts only when PATH reaches the search for the program.
+    starmap(
+        Path::new(FIXTURES),
+        &[
+            "run",
+            "--no-input",
+            "--only-declared",
+            "--",
+            "sh",
+            "-c",
+            r#"printf '%s' "$PATH""#,
+        ],
+        &[],
+    )
+    .code(0)
+    .stdout_eq("/usr/bin:/bin");
+}
+
+#[test]
+fn only_declared_passes_a_default_and_each_member_of_a_family_that_is_set() {
+    let root = tempfile::tempdir().unwrap();
+    let spec = format!(
+        "{SPEC}\n[families.SHELF_DB_URL]\npurpose = \"The database of one region, keyed by the region's code.\"\ntype = \"url\"\nunset = \"optional\"\nshow = \"shown\"\nsource = \"setting\"\n"
+    );
+    std::fs::write(root.path().join("starmap.toml"), spec).unwrap();
+    starmap(
+        root.path(),
+        &[
+            "run",
+            "--no-input",
+            "--only-declared",
+            "--",
+            "sh",
+            "-c",
+            r#"printf '%s %s %s' "$SHELF_DEBUG" "$SHELF_DB_URL_EU" "${SHELF_DB-unset}""#,
+        ],
+        &[
+            ("SHELF_DB_URL_EU", "https://eu.example/"),
+            ("SHELF_DB", "undeclared"),
+        ],
+    )
+    .code(0)
+    .stdout_eq("false https://eu.example/ unset");
+}

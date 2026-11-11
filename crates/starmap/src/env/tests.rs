@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
 
-use crate::{Environment, Mode, Name, Spec, Verdict, capture, check};
+use crate::{BuiltIns, Environment, Mode, Name, Spec, Verdict, capture, check};
 
 /// A spec with a shown port, a defaulted boolean, an optional path and a
 /// withheld token.
@@ -186,4 +186,103 @@ fn apply_sets_each_member_the_environment_holds_and_members_lists_them_in_key_or
         [("EU", "SHELF_DB_URL_EU"), ("US", "SHELF_DB_URL_US")]
     );
     assert_eq!(environment.members(&name("SHELF_OTHER")).count(), 0);
+}
+
+/// Returns `pairs` as the variables of a process.
+fn vars(pairs: &[(&str, &str)]) -> Vec<(OsString, OsString)> {
+    pairs
+        .iter()
+        .map(|(key, value)| (OsString::from(key), OsString::from(value)))
+        .collect()
+}
+
+#[test]
+fn apply_only_declared_clears_the_command_and_sets_the_declared_values_and_the_built_ins() {
+    let mut command = command();
+    command.env("SHELF_THEME", "dark");
+    let inherited = vars(&[
+        ("PATH", "/usr/bin"),
+        ("LC_ALL", "C"),
+        ("SHELF_THEME", "dark"),
+        ("AWS_PROFILE", "shelf"),
+    ]);
+
+    environment(&[("SHELF_PORT", "9000"), ("SHELF_MIRROR_TOKEN", "hunter2")]).apply_only_declared(
+        &mut command,
+        &BuiltIns::UNIX,
+        inherited,
+    );
+
+    let expected = BTreeMap::from([
+        ("LC_ALL".to_owned(), Some("C".to_owned())),
+        ("PATH".to_owned(), Some("/usr/bin".to_owned())),
+        ("SHELF_DEBUG".to_owned(), Some("false".to_owned())),
+        ("SHELF_MIRROR_TOKEN".to_owned(), Some("hunter2".to_owned())),
+        ("SHELF_PORT".to_owned(), Some("9000".to_owned())),
+    ]);
+    // The variable that the command set before is gone, which shows that
+    // the command was cleared. tests/run.rs of starmap-cli shows that the
+    // child inherits nothing else.
+    assert_eq!(changes(&command), expected);
+}
+
+/// A spec that declares the built-in name `TZ` with a default, and the
+/// built-in name `TERM` as optional.
+const DECLARED_BUILT_INS: &str = r#"
+[variables.TZ]
+purpose = "The time zone shelf prints dates in."
+type = "string"
+unset = { default = "UTC" }
+show = "shown"
+source = "setting"
+
+[variables.TERM]
+purpose = "The terminal type that decides whether shelf prints colour."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "inherited"
+"#;
+
+#[test]
+fn apply_only_declared_gives_a_declared_built_in_its_checked_value() {
+    let spec = Spec::parse(DECLARED_BUILT_INS).unwrap();
+    let Verdict::Ready(environment) = check(&spec, &capture(&spec, []), Mode::Local) else {
+        panic!("the defaults fit");
+    };
+    let mut command = command();
+
+    // The check ran on an environment without TERM, and the inherited one
+    // sets it, so the checked value, which is unset, wins. A cleared
+    // command does not list a variable that is removed afterwards.
+    environment.apply_only_declared(
+        &mut command,
+        &BuiltIns::UNIX,
+        vars(&[("TERM", "vt100"), ("HOME", "/home/shelf")]),
+    );
+
+    let expected = BTreeMap::from([
+        ("HOME".to_owned(), Some("/home/shelf".to_owned())),
+        ("TZ".to_owned(), Some("UTC".to_owned())),
+    ]);
+    assert_eq!(changes(&command), expected);
+}
+
+#[test]
+fn apply_only_declared_sets_each_member_of_a_family_that_is_set() {
+    let spec = Spec::parse(FAMILY).unwrap();
+    let inherited = vars(&[("SHELF_DB_URL_EU", "https://eu.example/"), ("EDITOR", "vi")]);
+    let Verdict::Ready(environment) = check(&spec, &capture(&spec, inherited.clone()), Mode::Local)
+    else {
+        panic!("the member fits");
+    };
+    let mut command = command();
+
+    environment.apply_only_declared(&mut command, &BuiltIns::UNIX, inherited);
+
+    let expected = BTreeMap::from([(
+        "SHELF_DB_URL_EU".to_owned(),
+        Some("https://eu.example/".to_owned()),
+    )]);
+    assert_eq!(changes(&command), expected);
 }

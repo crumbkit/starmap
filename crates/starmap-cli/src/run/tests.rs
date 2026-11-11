@@ -95,6 +95,7 @@ impl Checkout {
                     value: (*value).to_owned(),
                 })
                 .collect(),
+            only_declared: false,
             program: vec![OsString::from("true")],
         }
     }

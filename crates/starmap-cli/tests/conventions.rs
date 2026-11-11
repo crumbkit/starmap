@@ -88,6 +88,11 @@ const ALLOW: &[Allow] = &[
         &["--set", "SHELF_DEBUG=true", "--", "cargo", "run"],
         RUN_RESOLVES,
     ),
+    Allow::example(
+        "run",
+        &["--only-declared", "--", "cargo", "test"],
+        RUN_RESOLVES,
+    ),
     Allow::untwinned(
         DASH_REVISION,
         "Every revision that diff accepts needs a git repository, and the example directory is not one, so tests/diff.rs pins an accepted revision there.",

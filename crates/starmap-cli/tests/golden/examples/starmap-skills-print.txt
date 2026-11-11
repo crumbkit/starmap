@@ -37,6 +37,9 @@ the file that declares the variables.
 - `starmap run -- COMMAND` resolves every variable, checks the values and
   starts the program with the declared environment. The program's exit code
   becomes starmap's. `--set NAME=VALUE` changes one setting for the run.
+- `starmap run --only-declared -- COMMAND` passes the program only the
+  declared variables and built-in ones such as `PATH`, so a read of an
+  undeclared variable finds it unset.
 
 The scan counts `var` and `var_os` with a literal name, `#[starmap("NAME")]`
 fields and clap's `#[arg(env = "NAME")]`, reads a bare clap `env` as the
@@ -68,10 +71,10 @@ secret or write one to a file.
 - `starmap::variable::undeclared` means `src` reads a variable that starmap.toml
   does not declare. Declare it.
 - `starmap::variable::unknown` means the name given to `starmap explain` is not
-  declared. `starmap explain` with no name lists the declared ones.
+  declared. Run `starmap explain` with no name to list the declared ones.
 - `starmap::variable::missing` and `starmap::variable::invalid` mean `starmap
   run` found a required variable unset or a value of the wrong type.
-  `starmap explain` shows each variable's rule. Pass the value with
+  Run `starmap explain` to see each variable's rule. Pass the value with
   `--set NAME=VALUE`, or set it in the shell.
 - `starmap::spec::exists` means `starmap init` refuses to replace an existing
   starmap.toml. Edit that file, or pass `--spec FILE` with a free path.

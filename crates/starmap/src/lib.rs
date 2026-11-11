@@ -15,7 +15,10 @@
 //! [`mode`] decides the mode, and [`check`] checks the [`Bindings`] in that
 //! mode. Its [`Verdict`] is an [`Environment`] of checked values, which
 //! [`Environment::apply`] sets on a child process, or [`Refusals`] that
-//! name each missing or invalid variable. A withheld value is held as a
+//! name each missing or invalid variable.
+//! [`Environment::apply_only_declared`] gives the child those values and
+//! the [`BuiltIns`], the fixed list of variables that the operating system
+//! and common tools need, and nothing else. A withheld value is held as a
 //! [`Secret`], and the bytes a withheld bytes value decodes to as
 //! [`SecretBytes`], whose `Debug` impls print only dots.
 //!
@@ -42,6 +45,7 @@ use std::ffi::OsString;
 use std::fmt;
 
 mod bind;
+mod built_in;
 mod check;
 mod env;
 mod family;
@@ -57,6 +61,7 @@ pub use bind::{
     PathTemplate, PathTemplateError, Placeholder, ProvidedRef, ProviderKind, ProviderKindError,
     QualifierError, SecretBind, SecretRef,
 };
+pub use built_in::{BuiltIn, BuiltIns};
 pub use check::{Finding, Problem, Quote, Refusals, Verdict, capture, check, mode};
 pub use env::Environment;
 pub use family::Family;
