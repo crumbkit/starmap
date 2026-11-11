@@ -16,6 +16,8 @@ Write, check, explain and run the environment variables that an application decl
 - [`starmap commands`](#starmap-commands): Explore starmap's commands
 - [`starmap schemas`](#starmap-schemas): Explore the JSON documents that starmap prints
 - [`starmap self`](#starmap-self): Review starmap's own use
+- [`starmap skills`](#starmap-skills): Give coding agents starmap's skill
+- [`starmap completion`](#starmap-completion): Set up starmap's completion in a shell
 
 ### Arguments
 
@@ -324,5 +326,177 @@ starmap self usage
 - `runs`: The runs that show the pattern.
 - `command`: The command path below the tool's name, such as `books show`, or the tool's name for its root command.
 - `suggestion`: What the pattern suggests, or the figure that raised it.
+
+Effects: read-only, closed-world.
+
+## `starmap skills`
+
+Give coding agents starmap's skill
+
+### Commands
+
+- [`starmap skills install`](#starmap-skills-install): Install starmap's skill into each agent skills directory that exists
+- [`starmap skills check`](#starmap-skills-check): Check that each installed copy of starmap's skill matches this starmap
+- [`starmap skills print`](#starmap-skills-print): Print starmap's skill
+
+## `starmap skills install`
+
+Install starmap's skill into each agent skills directory that exists
+
+### Arguments
+
+- `--dir <DIR>`: Install into this skills directory in place of the agent skills directories
+- `--force`: Replace a file or a link that install did not write with the skill's own folder
+
+### Examples
+
+Install starmap's skill into each agent skills directory that exists.
+
+```sh
+starmap skills install
+```
+
+Install it, replacing a file or a link that install did not write.
+
+```sh
+starmap skills install --force
+```
+
+### Columns
+
+- `state`: What install did: failed, skipped, written or unchanged.
+- `dirs`: The skills directories that share this copy, as named. Directories that resolve to one place through a symbolic link share one copy.
+- `reason`: Why install skipped or failed, or what it replaced under --force, such as `linked to /src/shelf/skill`, or null.
+
+### Columns that `--long` adds
+
+- `path`: The SKILL.md file that install wrote or left, at its real path.
+
+Effects: additive, idempotent, closed-world.
+
+## `starmap skills check`
+
+Check that each installed copy of starmap's skill matches this starmap
+
+### Arguments
+
+- `--dir <DIR>`: Check this skills directory in place of the agent skills directories
+
+### Examples
+
+Report each agent skills directory whose copy is missing or differs.
+
+```sh
+starmap skills check
+```
+
+### Columns
+
+- `state`: Whether the copy is the binary's: missing, differs, unreadable, linked or current.
+- `dirs`: The skills directories that share this copy, as named. Directories that resolve to one place through a symbolic link share one copy.
+- `reason`: Why the copy differs, cannot be read or is linked, such as `written by shelf 0.2.0` or `linked to /src/shelf/skill`, or null.
+
+### Columns that `--long` adds
+
+- `path`: The SKILL.md file that was checked, at its real path.
+
+Effects: read-only, closed-world.
+
+## `starmap skills print`
+
+Print starmap's skill
+
+### Examples
+
+Print starmap's skill.
+
+```sh
+starmap skills print
+```
+
+Effects: read-only, closed-world.
+
+## `starmap completion`
+
+Set up starmap's completion in a shell
+
+### Commands
+
+- [`starmap completion install`](#starmap-completion-install): Install starmap's completion where the shell loads it
+- [`starmap completion check`](#starmap-completion-check): Check that starmap's installed completion file matches this starmap
+- [`starmap completion print`](#starmap-completion-print): Print starmap's completion registration script for a shell
+
+## `starmap completion install`
+
+Install starmap's completion where the shell loads it
+
+### Arguments
+
+- `--shell <SHELL>`: Install for this shell in place of the one that SHELL names. One of `bash`, `elvish`, `fish`, `powershell`, `zsh`.
+- `--force`: Replace a file or a link that install did not write; a link's target stays as it is
+
+### Examples
+
+Install starmap's completion for fish.
+
+```sh
+starmap completion install --shell fish
+```
+
+Install it for zsh, replacing a file or a link that install did not write.
+
+```sh
+starmap completion install --shell zsh --force
+```
+
+### Columns
+
+- `state`: What install did: failed, skipped, written or unchanged.
+- `shell`: The shell: bash, elvish, fish, powershell or zsh.
+- `path`: The completion file that install wrote or left. When the file is a link to a file that install wrote, the path of that file.
+- `reason`: Why install skipped or failed, or what it replaced under --force, such as `linked to /src/shelf/shelf.fish`, or null.
+
+Effects: additive, idempotent, closed-world.
+
+## `starmap completion check`
+
+Check that starmap's installed completion file matches this starmap
+
+### Arguments
+
+- `--shell <SHELL>`: Check the file of this shell in place of the one that SHELL names. One of `bash`, `elvish`, `fish`, `powershell`, `zsh`.
+
+### Examples
+
+Report zsh's completion file when it is missing or differs.
+
+```sh
+starmap completion check --shell zsh
+```
+
+### Columns
+
+- `state`: Whether the file holds the script that install writes: missing, differs, unreadable, linked or current.
+- `shell`: The shell: bash, elvish, fish, powershell or zsh.
+- `path`: The completion file that was checked. When the file is a link to a file that install wrote, the path of that file.
+- `reason`: Why the file differs, cannot be read or is linked, such as `linked to /src/shelf/shelf.fish`, or null.
+
+Effects: read-only, closed-world.
+
+## `starmap completion print`
+
+Print starmap's completion registration script for a shell
+
+### Arguments
+
+- `--shell <SHELL>`: Print the script of this shell in place of the one that SHELL names. One of `bash`, `elvish`, `fish`, `powershell`, `zsh`.
+
+### Examples
+
+Print the registration script for fish.
+
+```sh
+starmap completion print --shell fish
+```
 
 Effects: read-only, closed-world.

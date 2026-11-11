@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
@@ -55,6 +55,11 @@ secrecy = "0.10.3"
 # and `String`.
 zeroize = "1.9.1"
 
+# base64 reads and writes the base64 and base64url encodings of a bytes
+# variable's value in starmap, and writes a generated value in
+# starmap-resolve. Its `alloc` feature encodes into a `String`.
+base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
+
 # proptest checks the checking constructors and the types against generated
 # inputs, and the lanes decision sets its case counts. Only tests use it.
 proptest = { version = "1.12.0", default-features = false }
@@ -71,9 +76,9 @@ snapbox = { version = "1.2.2", default-features = false }
 # starmap checks. Each entry gives a version beside the path, because
 # cargo-deny treats a path dependency without a version as a wildcard, and
 # the release pull request moves both versions with the workspace version.
-starmap = { version = "0.1.0", path = "crates/starmap" }
-starmap-derive = { version = "0.1.0", path = "crates/starmap-derive" }
-starmap-resolve = { version = "0.1.0", path = "crates/starmap-resolve" }
+starmap = { version = "0.2.0", path = "crates/starmap" }
+starmap-derive = { version = "0.2.0", path = "crates/starmap-derive" }
+starmap-resolve = { version = "0.2.0", path = "crates/starmap-resolve" }
 
 # syn, quote and proc-macro2 build starmap-derive, the `Env` and
 # `Enumeration` derives behind starmap's `derive` feature. The entries enable
@@ -90,12 +95,12 @@ trybuild = "1.0.122"
 # (the cli profile of the Rust standards): `parse` and `finish`, documents,
 # failures with codes and next steps, and the help guide. The workspace entry
 # enables no feature, and starmap-cli enables the ones it uses.
-crumbkit = { version = "0.2", default-features = false }
+crumbkit = { version = "0.3.1", default-features = false }
 
 # crumbkit-child hands the terminal to the program that `starmap run`
 # starts: the child reads and writes the terminal, Ctrl-C reaches only the
 # child, and the command returns the child's exit code.
-crumbkit-child = "0.2"
+crumbkit-child = "0.3"
 
 # rpassword reads a secret that `starmap run` asks a person for from the
 # terminal with echo turned off, so the value never shows on screen.
@@ -104,15 +109,20 @@ rpassword = "7.5.4"
 # crumbkit-process runs git for `starmap diff` with a byte limit on each
 # output stream and a deadline, and kills git's process group when it stops
 # it.
-crumbkit-process = "0.2"
+crumbkit-process = "0.3"
 
 # crumbkit-usage keeps the `starmap` command's local usage log and adds
 # `self usage` (CLI-7).
-crumbkit-usage = "0.2"
+crumbkit-usage = "0.3"
+
+# crumbkit-skills gives the `starmap` command `skills install`, `skills check`
+# and `skills print`, which install the agent skill that starmap embeds into
+# the agent skills directories and check the installed copies.
+crumbkit-skills = "0.3"
 
 # crumbkit-test checks the `starmap` command against crumbkit's conventions
 # (CLI-6). Only tests use it.
-crumbkit-test = "0.2"
+crumbkit-test = "0.3"
 
 # miette describes a spec problem as a diagnostic whose labels point into
 # starmap.toml, which crumbkit's `miette` feature prints with an excerpt of

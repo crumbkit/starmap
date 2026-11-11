@@ -27,6 +27,30 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
   pattern matches as a whole. `{ string = {} }` is the same type as the word
   `string`, which takes any text, including text that is not Unicode.
 
+- `{ bytes = { encoding = "base64", length = 32 } }` is bytes written as
+  text in an encoding, whose length after decoding is exactly `length`, or
+  at least `min-length` when the table sets that key instead. A bytes table
+  takes exactly one of the two lengths.
+
+A bytes type's `encoding` is `hex`, `base64` or `base64url`. `hex` takes two
+digits per byte in upper or lower case. `base64` is RFC 4648 section 4 with
+its padding required, and `base64url` is RFC 4648 section 5 with all its
+padding or none, and partly padded text is refused. Each encoding refuses
+whitespace. A length runs from 1 to 1024 bytes, and the parser refuses one
+outside that range with `starmap::spec::bad_bytes`. A value that does not
+decode fails with the text `the value is not base64`, and one of the wrong
+size with `the value does not decode to 32 bytes` or
+`the value does not decode to at least 16 bytes`. Neither text holds the
+value or its decoded size. A shown value is held decoded, as `Value::Bytes`,
+and is written back in its encoding's one spelling: lower case hex, padded
+base64 or unpadded base64url. A shown value therefore reaches the child
+process in that spelling, so a value written in upper case hex arrives in
+lower case, and padded base64url arrives without its padding. A generated
+variable cannot have a bytes type yet, and the parser refuses one with
+`starmap::spec::bad_bytes`. The Rust API names the rule `starmap::ByteRule`,
+its encoding `starmap::Encoding`, its length `starmap::ByteLength` and the
+count in a length `starmap::ByteCount`.
+
 A pattern is written in the syntax of the Rust `regex` crate, which is close
 to RE2's. It has no look-around and no backreferences, and matching takes
 time linear in the value's length. A pattern that another implementation
@@ -99,9 +123,13 @@ A withheld value is held in a `starmap::Secret`, whose `Debug` prints
 `Secret(••••••••)` whatever the value. `starmap explain` prints eight dots
 in place of a withheld value and gives it no text in JSON. A withheld
 variable has no default, because a default would sit in `starmap.toml` in
-plain text, and its type is `string`, with or without a pattern. A check
-reports a withheld value that does not match its pattern by naming the
-pattern alone. The parser refuses a withheld
+plain text, and its type is `string`, with or without a pattern, or
+`bytes`. A check reports a withheld value that does not match its pattern by
+naming the pattern alone, and one that does not decode or has the wrong size
+by naming the encoding or the length alone. A check holds the bytes that a
+withheld bytes value decodes to in a `starmap::SecretBytes`, whose memory is
+zeroed when it is dropped, beside its text, and `Environment::apply` gives a
+child the text. The parser refuses a withheld
 variable that breaks either rule.
 
 The parser also forces `show = "withheld"` on every variable whose source is

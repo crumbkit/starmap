@@ -7,8 +7,8 @@ use std::path::Path;
 use proptest::prelude::*;
 
 use super::{
-    Bindings, Bound, NoPlace, OnePasswordRef, PathTemplate, PathTemplateError, Placeholder,
-    ProvidedRef, ProviderKind, SecretBytes,
+    Bindings, Bound, ByteCount, NoPlace, OnePasswordRef, PathTemplate, PathTemplateError,
+    Placeholder, ProvidedRef, ProviderKind,
 };
 use crate::Name;
 
@@ -264,19 +264,45 @@ fn a_one_password_ref_refuses_any_other_text() {
     }
 }
 
-// SecretBytes
+// ByteCount
 
 #[test]
-fn secret_bytes_default_to_32() {
-    assert_eq!(SecretBytes::default().get(), 32);
-    assert_eq!(SecretBytes::DEFAULT, SecretBytes::default());
+fn a_generated_byte_count_defaults_to_32() {
+    assert_eq!(ByteCount::default().get(), 32);
+    assert_eq!(ByteCount::DEFAULT, ByteCount::default());
+}
+
+#[test]
+fn a_byte_count_writes_its_unit() {
+    assert_eq!(ByteCount::new(1).unwrap().to_string(), "1 byte");
+    assert_eq!(ByteCount::new(32).unwrap().to_string(), "32 bytes");
+}
+
+#[test]
+fn a_byte_count_refusal_names_its_range() {
+    assert_eq!(
+        ByteCount::new(0).unwrap_err().to_string(),
+        "a byte length runs from 1 to 1024 bytes"
+    );
+    assert_eq!(
+        ByteCount::generated(8).unwrap_err().to_string(),
+        "a generated value takes from 16 to 1024 bytes"
+    );
 }
 
 proptest! {
     #[test]
-    fn secret_bytes_accept_a_number_exactly_when_it_lies_from_16_to_1024(bytes in any::<u16>()) {
+    fn a_byte_count_accepts_a_number_exactly_when_it_lies_from_1_to_1024(bytes in any::<u16>()) {
         prop_assert_eq!(
-            SecretBytes::new(bytes).map(SecretBytes::get).ok(),
+            ByteCount::new(bytes).map(ByteCount::get).ok(),
+            (1..=1024).contains(&bytes).then_some(bytes)
+        );
+    }
+
+    #[test]
+    fn a_generated_byte_count_accepts_a_number_exactly_when_it_lies_from_16_to_1024(bytes in any::<u16>()) {
+        prop_assert_eq!(
+            ByteCount::generated(bytes).map(ByteCount::get).ok(),
             (16..=1024).contains(&bytes).then_some(bytes)
         );
     }

@@ -9,7 +9,7 @@ repository.workspace = true
 readme = "README.md"
 keywords = ["environment", "configuration", "cli"]
 categories = ["command-line-utilities", "config"]
-include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**/*.rs", "skill/SKILL.md", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 # The library holds the whole command, so the integration tests can pass its
 # parser and tool record to crumbkit-test's checks beside the built binary. It is
@@ -30,9 +30,11 @@ doc = false
 # The CLI parses, checks and describes starmap.toml with the core crate.
 starmap = { workspace = true }
 # `derive` writes the `Failure` impls of the CLI's failures from their
-# `#[failure(...)]` attributes, and `miette` prints a spec problem with an
-# excerpt of starmap.toml.
-crumbkit = { workspace = true, features = ["derive", "miette"] }
+# `#[failure(...)]` attributes, `miette` prints a spec problem with an
+# excerpt of starmap.toml, and `complete` answers a shell's completion
+# request and gives `starmap completion install`, `starmap completion check`
+# and `starmap completion print`.
+crumbkit = { workspace = true, features = ["derive", "miette", "complete"] }
 # The CLI is a binary, so it chooses clap's user-facing features: help, usage
 # lines, error context, suggestions for mistyped commands, and colour when the
 # output goes to a terminal. These are clap's default features.
@@ -45,6 +47,9 @@ clap = { workspace = true, features = [
     "color",
 ] }
 crumbkit-usage = { workspace = true }
+# crumbkit-skills installs starmap's embedded agent skill with `starmap
+# skills install` and checks the installed copies with `starmap skills check`.
+crumbkit-skills = { workspace = true }
 crumbkit-child = { workspace = true }
 # `diff` runs git with an output limit and a deadline.
 crumbkit-process = { workspace = true }

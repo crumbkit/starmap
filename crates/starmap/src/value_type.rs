@@ -1,7 +1,7 @@
 //! The type a variable's value has, the checking types that back it
 //! ([`Port`], [`IntegerRange`], [`Choices`], [`Choice`],
-//! [`EnumerationName`], [`Pattern`], [`Schemes`] and [`Scheme`]), and the
-//! value a type reads.
+//! [`EnumerationName`], [`Pattern`], [`Schemes`], [`Scheme`] and
+//! [`ByteRule`]), and the value a type reads.
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -11,8 +11,13 @@ use std::num::{IntErrorKind, NonZeroU16};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
 use regex::Regex;
 use url::Url;
+use zeroize::Zeroize as _;
+
+use crate::ByteCount;
 
 use crate::Secret;
 
@@ -21,7 +26,9 @@ mod scheme;
 #[cfg(test)]
 mod tests;
 
-pub use enumeration::{EnumerationName, EnumerationNameError};
+pub use enumeration::{
+    Choice, ChoiceError, Choices, ChoicesError, EnumerationName, EnumerationNameError,
+};
 pub use scheme::{Scheme, SchemeError, Schemes, SchemesError};
 
 /// The words the boolean type reads as `true`.
@@ -66,6 +73,9 @@ pub enum Type {
         /// The pattern the whole value must match, if the type has one.
         pattern: Option<Pattern>,
     },
+    /// Bytes written as text in an encoding, whose decoded length fits a
+    /// rule.
+    Bytes(ByteRule),
 }
 
 impl Type {
@@ -84,7 +94,9 @@ impl Type {
     ///
     /// # Errors
     ///
-    /// Returns [`TypeError`] when the value does not fit the type.
+    /// Returns [`TypeError`] when the value does not fit the type. A bytes
+    /// value that does not decode fails with [`TypeError::NotEncoded`], and
+    /// one of the wrong size with [`TypeError::WrongLength`].
     pub fn parse(&self, raw: &OsStr) -> Result<Option<Value>, TypeError> {
         let value = match self {
             Self::Path { absolute } => {
@@ -128,6 +140,10 @@ impl Type {
                     .ok_or_else(|| TypeError::NotChoice(choices.clone()))?;
                 Value::Choice(choice.clone())
             }
+            Self::Bytes(rule) => Value::Bytes {
+                bytes: rule.decode(text(raw)?)?,
+                encoding: rule.encoding(),
+            },
         };
         Ok(Some(value))
     }
@@ -136,19 +152,32 @@ impl Type {
 impl Type {
     /// Checks a withheld value against this type without its text leaving
     /// the secret. A string type with a pattern refuses a value the pattern
-    /// does not match as a whole, and the refusal names only the pattern.
-    /// Every other type accepts the secret, because the spec parser gives a
-    /// withheld variable only the string type.
+    /// does not match as a whole, and the refusal names only the pattern. A
+    /// bytes type refuses a value that does not decode or has the wrong
+    /// size, and the refusal names only the encoding or the length; the
+    /// decoded bytes are zeroed when the check ends. The spec parser gives a
+    /// withheld variable only the string and bytes types, so every other
+    /// type accepts the secret.
     ///
     /// # Errors
     ///
-    /// Returns [`TypeError::NoMatch`] when the pattern does not match.
+    /// Returns [`TypeError::NoMatch`] when the pattern does not match,
+    /// [`TypeError::NotEncoded`] when a bytes value does not decode, and
+    /// [`TypeError::WrongLength`] when it decodes to the wrong size.
     pub fn check_secret(&self, secret: &Secret) -> Result<(), TypeError> {
         match self {
             Self::String {
                 pattern: Some(pattern),
             } => secret.check(pattern),
-            _ => Ok(()),
+            Self::Bytes(rule) => secret.decode(*rule).map(drop),
+            Self::String { pattern: None }
+            | Self::Path { .. }
+            | Self::Port
+            | Self::Url { .. }
+            | Self::SocketAddress
+            | Self::Boolean
+            | Self::Integer(_)
+            | Self::Enumeration(_) => Ok(()),
         }
     }
 }
@@ -177,6 +206,7 @@ impl fmt::Display for Type {
             Self::String {
                 pattern: Some(pattern),
             } => write!(formatter, "a string matching {pattern}"),
+            Self::Bytes(rule) => rule.fmt(formatter),
         }
     }
 }
@@ -218,6 +248,14 @@ pub enum Value {
     Choice(Choice),
     /// The value of the string type.
     String(OsString),
+    /// The value of a bytes type of a shown variable, decoded from its
+    /// encoding.
+    Bytes {
+        /// The decoded bytes.
+        bytes: Vec<u8>,
+        /// The encoding the value is written in.
+        encoding: Encoding,
+    },
 }
 
 impl Value {
@@ -233,6 +271,7 @@ impl Value {
             Self::Boolean(boolean) => boolean.to_string().into(),
             Self::Integer(number) => number.to_string().into(),
             Self::Choice(choice) => choice.as_str().into(),
+            Self::Bytes { bytes, encoding } => encoding.encode(bytes).into(),
         }
     }
 }
@@ -275,6 +314,10 @@ pub enum TypeError {
     NotChoice(Choices),
     /// The value is empty, and the type takes one of these choices.
     EmptyChoice(Choices),
+    /// The value is not text in this encoding.
+    NotEncoded(Encoding),
+    /// The value decodes to a number of bytes that this length refuses.
+    WrongLength(ByteLength),
     /// The value does not match the string type's pattern as a whole.
     NoMatch(Pattern),
 }
@@ -306,6 +349,10 @@ impl fmt::Display for TypeError {
                     formatter,
                     "the value is empty, and it must be one of {choices}"
                 )
+            }
+            Self::NotEncoded(encoding) => write!(formatter, "the value is not {encoding}"),
+            Self::WrongLength(length) => {
+                write!(formatter, "the value does not decode to {length}")
             }
             Self::NoMatch(pattern) => {
                 write!(formatter, "the value does not match the pattern {pattern}")
@@ -487,152 +534,6 @@ impl fmt::Display for RangeError {
 
 impl Error for RangeError {}
 
-/// One value of an enumeration type: text that is not empty and holds no
-/// whitespace.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Choice(String);
-
-impl Choice {
-    /// Returns the choice as text.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl FromStr for Choice {
-    type Err = ChoiceError;
-
-    /// Accepts text that is not empty and holds no whitespace, as
-    /// [`char::is_whitespace`] defines it.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ChoiceError`] for empty text or text with whitespace.
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        if text.is_empty() {
-            return Err(ChoiceError::Empty);
-        }
-        if let Some((at, _)) = text.char_indices().find(|(_, c)| c.is_whitespace()) {
-            return Err(ChoiceError::Whitespace { at });
-        }
-        Ok(Self(text.to_owned()))
-    }
-}
-
-impl fmt::Display for Choice {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
-
-/// The reason text is not a [`Choice`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ChoiceError {
-    /// The text is empty.
-    Empty,
-    /// The text holds whitespace.
-    Whitespace {
-        /// The byte offset of the first whitespace character.
-        at: usize,
-    },
-}
-
-impl fmt::Display for ChoiceError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Empty => formatter.write_str("an enumeration value is empty"),
-            Self::Whitespace { at } => write!(
-                formatter,
-                "an enumeration value holds whitespace at byte {at}"
-            ),
-        }
-    }
-}
-
-impl Error for ChoiceError {}
-
-/// The values of an enumeration type: at least one [`Choice`], none of them
-/// repeated, in the order the spec lists them.
-///
-/// The values of a named enumeration, which a spec declares as
-/// `[enumerations.<name>]`, also carry the enumeration's name and a
-/// description of each value. An inline list has neither.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Choices {
-    choices: Vec<Choice>,
-    /// The name and the descriptions of a named enumeration, with one
-    /// description for each choice, in the same order.
-    named: Option<(EnumerationName, Vec<String>)>,
-}
-
-impl Choices {
-    /// Builds the set from `choices`, keeping their order.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ChoicesError`] when there is no choice or one repeats.
-    pub fn new(choices: impl IntoIterator<Item = Choice>) -> Result<Self, ChoicesError> {
-        let kept = distinct(choices).map_err(ChoicesError::Repeated)?;
-        if kept.is_empty() {
-            return Err(ChoicesError::Empty);
-        }
-        Ok(Self {
-            choices: kept,
-            named: None,
-        })
-    }
-
-    /// Builds the named enumeration `name` from `values`, each a choice
-    /// with its description, keeping their order. The spec parser checks
-    /// each description before it calls this.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ChoicesError`] when there is no value or one repeats.
-    pub(crate) fn named(
-        name: EnumerationName,
-        values: impl IntoIterator<Item = (Choice, String)>,
-    ) -> Result<Self, ChoicesError> {
-        let (choices, descriptions): (Vec<Choice>, Vec<String>) = values.into_iter().unzip();
-        let mut built = Self::new(choices)?;
-        built.named = Some((name, descriptions));
-        Ok(built)
-    }
-
-    /// Returns the choices in order.
-    pub fn iter(&self) -> impl Iterator<Item = &Choice> {
-        self.choices.iter()
-    }
-
-    /// Returns the name of the enumeration, or `None` for an inline list.
-    #[must_use]
-    pub fn name(&self) -> Option<&EnumerationName> {
-        self.named.as_ref().map(|(name, _)| name)
-    }
-
-    /// Returns the description of `choice` in a named enumeration, or
-    /// `None` for an inline list or a choice that is not one of these.
-    #[must_use]
-    pub fn description(&self, choice: &Choice) -> Option<&str> {
-        let (_, descriptions) = self.named.as_ref()?;
-        let at = self.choices.iter().position(|listed| listed == choice)?;
-        descriptions.get(at).map(String::as_str)
-    }
-
-    /// Returns the choice that equals `text` exactly, if there is one.
-    pub(crate) fn get(&self, text: &str) -> Option<&Choice> {
-        self.choices.iter().find(|choice| choice.as_str() == text)
-    }
-}
-
-impl fmt::Display for Choices {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_list(formatter, &self.choices)
-    }
-}
-
 /// Returns `items` in their order, or the first item that repeats an
 /// earlier one.
 fn distinct<T: PartialEq>(items: impl IntoIterator<Item = T>) -> Result<Vec<T>, T> {
@@ -657,29 +558,174 @@ fn write_list<T: fmt::Display>(formatter: &mut fmt::Formatter<'_>, items: &[T]) 
     Ok(())
 }
 
-/// The reason a list of values is not [`Choices`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The encoding of a bytes type's text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum ChoicesError {
-    /// The list is empty.
-    Empty,
-    /// The list holds this choice more than once.
-    Repeated(Choice),
+pub enum Encoding {
+    /// Two hexadecimal digits per byte, in upper or lower case. It is
+    /// written in lower case.
+    Hex,
+    /// Base64 as RFC 4648 section 4 defines it, with its padding required.
+    Base64,
+    /// Base64 with the URL and file name alphabet, as RFC 4648 section 5
+    /// defines it, written either with all its padding or with none.
+    /// Partly padded text is refused. It is written without padding.
+    Base64Url,
 }
 
-impl fmt::Display for ChoicesError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Empty => formatter.write_str("an enumeration has no values"),
-            Self::Repeated(choice) => {
-                write!(formatter, "an enumeration lists the value {choice} twice")
+impl Encoding {
+    /// Returns the bytes that `text` decodes to, or `None` when it is not
+    /// text in the encoding. Whitespace is refused in each encoding. The
+    /// buffer is zeroed before it is dropped on a refusal, because the
+    /// text may be a secret.
+    fn decode(self, text: &str) -> Option<Vec<u8>> {
+        let engine = match self {
+            Self::Hex => return hex(text),
+            Self::Base64 => &STANDARD,
+            // Text that ends in `=` must carry all its padding, and other
+            // text none, so partly padded text is refused.
+            Self::Base64Url if text.ends_with('=') => &URL_SAFE,
+            Self::Base64Url => &URL_SAFE_NO_PAD,
+        };
+        // The buffer is allocated once at its largest size, so decoding
+        // into it never moves the bytes and leaves an unzeroed copy.
+        let mut bytes = vec![0; base64::decoded_len_estimate(text.len())];
+        match engine.decode_slice(text, &mut bytes) {
+            Ok(length) => {
+                // The bytes past the decoded length are zeroed before the
+                // Vec forgets them.
+                bytes.get_mut(length..).unwrap_or_default().fill(0);
+                bytes.truncate(length);
+                Some(bytes)
             }
+            Err(_) => {
+                bytes.zeroize();
+                None
+            }
+        }
+    }
+
+    /// Writes `bytes` in the encoding's one spelling: lower case hex, padded
+    /// base64 or unpadded base64url.
+    pub(crate) fn encode(self, bytes: &[u8]) -> String {
+        match self {
+            Self::Hex => bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
+            Self::Base64 => STANDARD.encode(bytes),
+            Self::Base64Url => URL_SAFE_NO_PAD.encode(bytes),
         }
     }
 }
 
-impl Error for ChoicesError {}
+/// Reads hexadecimal digits in pairs, in either case.
+fn hex(text: &str) -> Option<Vec<u8>> {
+    let (pairs, []) = text.as_bytes().as_chunks::<2>() else {
+        return None;
+    };
+    let digit = |byte: u8| char::from(byte).to_digit(16);
+    // The capacity is the final length, so pushing never moves the bytes.
+    let mut bytes = Vec::with_capacity(text.len() / 2);
+    for &[high, low] in pairs {
+        let (Some(high), Some(low)) = (digit(high), digit(low)) else {
+            bytes.zeroize();
+            return None;
+        };
+        // Two hex digits make a number below 256.
+        bytes.push(u8::try_from(high * 16 + low).unwrap_or_default());
+    }
+    Some(bytes)
+}
 
+impl fmt::Display for Encoding {
+    /// Writes the word a `starmap.toml` uses: `hex`, `base64` or
+    /// `base64url`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Hex => "hex",
+            Self::Base64 => "base64",
+            Self::Base64Url => "base64url",
+        })
+    }
+}
+
+/// The length a bytes type allows after decoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ByteLength {
+    /// Exactly this many bytes.
+    Exactly(ByteCount),
+    /// This many bytes or more.
+    AtLeast(ByteCount),
+}
+
+impl ByteLength {
+    /// Returns whether `length` bytes fit.
+    fn fits(self, length: usize) -> bool {
+        match self {
+            Self::Exactly(count) => length == usize::from(count.get()),
+            Self::AtLeast(count) => length >= usize::from(count.get()),
+        }
+    }
+}
+
+impl fmt::Display for ByteLength {
+    /// Writes the length, such as `32 bytes` or `at least 16 bytes`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Exactly(count) => count.fmt(formatter),
+            Self::AtLeast(count) => write!(formatter, "at least {count}"),
+        }
+    }
+}
+
+/// The rule of a bytes type: the encoding its text is written in, and the
+/// length its bytes have after decoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ByteRule {
+    encoding: Encoding,
+    length: ByteLength,
+}
+
+impl ByteRule {
+    /// Builds the rule of `length` bytes written in `encoding`.
+    #[must_use]
+    pub fn new(encoding: Encoding, length: ByteLength) -> Self {
+        Self { encoding, length }
+    }
+
+    /// Returns the encoding.
+    #[must_use]
+    pub fn encoding(self) -> Encoding {
+        self.encoding
+    }
+
+    /// Returns the length after decoding.
+    #[must_use]
+    pub fn length(self) -> ByteLength {
+        self.length
+    }
+
+    /// Returns the bytes that `text` decodes to. On a refusal the decoded
+    /// bytes are zeroed before they are dropped, because the text may be a
+    /// secret.
+    pub(crate) fn decode(self, text: &str) -> Result<Vec<u8>, TypeError> {
+        let mut bytes = self
+            .encoding
+            .decode(text)
+            .ok_or(TypeError::NotEncoded(self.encoding))?;
+        if self.length.fits(bytes.len()) {
+            Ok(bytes)
+        } else {
+            bytes.zeroize();
+            Err(TypeError::WrongLength(self.length))
+        }
+    }
+}
+
+impl fmt::Display for ByteRule {
+    /// Writes the rule, such as `32 bytes as base64`.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{} as {}", self.length, self.encoding)
+    }
+}
 /// The pattern of a string type, in the syntax of the Rust `regex` crate. The
 /// whole value must match it, so `^` and `$` are allowed and unnecessary.
 ///

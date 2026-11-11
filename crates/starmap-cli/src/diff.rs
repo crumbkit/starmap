@@ -334,6 +334,7 @@ fn type_word(ty: &Type) -> &'static str {
         Type::Integer(_) => "integer",
         Type::Enumeration(_) => "enumeration",
         Type::String { .. } => "string",
+        Type::Bytes(_) => "bytes",
         // A type that a later release of starmap adds.
         _ => "another type",
     }

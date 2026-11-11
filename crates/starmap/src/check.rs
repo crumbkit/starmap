@@ -6,7 +6,7 @@ use std::fmt;
 
 use crate::env::Held;
 use crate::{
-    Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, TypeError, Unset, Variable,
+    Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, Type, TypeError, Unset, Variable,
 };
 
 #[cfg(test)]
@@ -103,7 +103,7 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
         }
         // The parser refuses a withheld mode variable, so a withheld value
         // never reaches this arm; an invalid value decides local mode.
-        Some(Ok(Some(Held::Withheld(_))) | Err(_)) => return Mode::Local,
+        Some(Ok(Some(Held::Withheld(_) | Held::WithheldBytes(..))) | Err(_)) => return Mode::Local,
     };
     rule.decide(value.map(|value| value.to_os_string()).as_deref())
 }
@@ -191,17 +191,20 @@ fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
             .parse(raw)
             .map(|value| value.map(Held::Shown))
             .map_err(Problem::Invalid),
-        // A withheld variable has the type string, which the spec parser
-        // checks. A string without a pattern takes any text that a Secret
-        // holds, and the refusal of one with a pattern names only the
-        // pattern.
-        (Show::Withheld, Bound::Secret(secret)) => {
-            variable
-                .value_type()
-                .check_secret(secret)
-                .map_err(Problem::Invalid)?;
-            Ok(Some(Held::Withheld(secret.duplicate())))
-        }
+        // A withheld variable has the type string or bytes, which the spec
+        // parser checks. A bytes value is decoded inside the secret and its
+        // bytes are held beside the text. A string with a pattern is matched
+        // inside the secret. Each refusal names only the rule.
+        (Show::Withheld, Bound::Secret(secret)) => match variable.value_type() {
+            Type::Bytes(rule) => {
+                let bytes = secret.decode(*rule).map_err(Problem::Invalid)?;
+                Ok(Some(Held::WithheldBytes(secret.duplicate(), bytes)))
+            }
+            ty => {
+                ty.check_secret(secret).map_err(Problem::Invalid)?;
+                Ok(Some(Held::Withheld(secret.duplicate())))
+            }
+        },
         (Show::Withheld, Bound::NotUnicode) => Err(Problem::Invalid(TypeError::NotUnicode)),
         (show, _) => Err(Problem::ShowMismatch { show }),
     }

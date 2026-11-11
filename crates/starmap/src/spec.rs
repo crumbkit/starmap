@@ -10,8 +10,8 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    Choices, EnumerationName, Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind,
-    SecretBytes, Type, Value,
+    ByteCount, Choices, Encoding, EnumerationName, Mode, ModeRule, Name, PathTemplate, ProvidedRef,
+    SecretBind, Type, Value,
 };
 
 #[cfg(test)]
@@ -385,7 +385,7 @@ pub enum Source {
     /// A random value that the host creates on first use and keeps.
     Generated {
         /// How many random bytes the value has.
-        bytes: SecretBytes,
+        bytes: ByteCount,
     },
     /// A value the application inherits from the environment it starts in,
     /// such as `HOME`.
@@ -575,7 +575,7 @@ pub enum SpecProblemKind {
     /// A secret or generated variable is shown.
     ShownSecret,
     /// A withheld variable has a type other than string, with or without a
-    /// pattern.
+    /// pattern, and bytes.
     WithheldType,
     /// A withheld variable has a default, which `starmap.toml` would hold in
     /// plain text.
@@ -584,7 +584,8 @@ pub enum SpecProblemKind {
     /// provided bind.
     BindMismatch,
     /// `bytes` lies outside 16 to 1024, or appears on a variable that is
-    /// not generated.
+    /// not generated; a bytes type's length lies outside 1 to 1024; or a
+    /// generated variable has a bytes type.
     BadBytes,
     /// A path template names a placeholder other than `{workspace}`,
     /// `{checkout}` and `{home}`, or has a brace outside one.
@@ -654,6 +655,12 @@ const TYPE_WORDS: &[(&str, Type)] = &[
     ("socket-address", Type::SocketAddress),
     ("boolean", Type::Boolean),
     ("string", Type::String { pattern: None }),
+];
+/// The words a bytes type's `encoding` takes.
+const ENCODING_WORDS: &[(&str, Encoding)] = &[
+    ("hex", Encoding::Hex),
+    ("base64", Encoding::Base64),
+    ("base64url", Encoding::Base64Url),
 ];
 /// The words an unset rule takes in one mode.
 const UNSET_WORDS: &[(&str, Unset)] =

@@ -9,7 +9,7 @@ struct Unsupported {
     #[starmap("SHELF_PAGE_SIZE")]
     page_size: f64,
     #[starmap("SHELF_DATABASE")]
-    database: Option<Vec<u8>>,
+    database: Option<Vec<u16>>,
     #[starmap("SHELF_SESSION_KEY")]
     session_key: Vec<starmap::Secret>,
 }

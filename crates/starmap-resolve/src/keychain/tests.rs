@@ -55,7 +55,7 @@ fn every_call_is_unsupported_on_a_platform_without_a_keychain() {
     let (key, token) = (name("SHELF_SESSION_KEY"), name("SHELF_UPSTREAM_TOKEN"));
     let lookup = Lookup::Generated {
         slot: crate::Slot::new(&unsupported, &shelf, &key),
-        bytes: starmap::SecretBytes::DEFAULT,
+        bytes: starmap::ByteCount::DEFAULT,
     };
     assert!(matches!(
         keychain.resolve(lookup, deadline()),
@@ -85,7 +85,7 @@ mod macos {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
     use security_framework::base::Error;
-    use starmap::{Name, Secret, SecretBytes};
+    use starmap::{ByteCount, Name, Secret};
     use zeroize::Zeroizing;
 
     use super::super::macos::{problem, store};
@@ -105,8 +105,8 @@ mod macos {
         }
     }
 
-    fn bytes(count: u16) -> SecretBytes {
-        SecretBytes::new(count).unwrap()
+    fn bytes(count: u16) -> ByteCount {
+        ByteCount::generated(count).unwrap()
     }
 
     #[expect(
@@ -123,7 +123,7 @@ mod macos {
         workspace: &WorkspaceName,
         app: &AppName,
         name: &Name,
-        bytes: SecretBytes,
+        bytes: ByteCount,
     ) -> Result<String, SecretError> {
         let lookup = Lookup::Generated {
             slot: Slot::new(workspace, app, name),
@@ -157,7 +157,7 @@ mod macos {
         let (gone, kept) = (workspace("forget"), workspace("forget-kept"));
         let _cleanup = Cleanup(&keychain, vec![gone.clone(), kept.clone()]);
         let key = name("SHELF_SESSION_KEY");
-        let size = SecretBytes::DEFAULT;
+        let size = ByteCount::DEFAULT;
 
         let before = generated(&keychain, &gone, &app("shelf"), &key, size).unwrap();
         generated(&keychain, &gone, &app("reader"), &key, size).unwrap();
@@ -209,7 +209,7 @@ mod macos {
         let (shelf, key) = (app("shelf"), name("SHELF_SESSION_KEY"));
         let lookup = Lookup::Generated {
             slot: Slot::new(&late, &shelf, &key),
-            bytes: SecretBytes::DEFAULT,
+            bytes: ByteCount::DEFAULT,
         };
 
         let result = keychain.resolve(lookup, std::time::Instant::now());

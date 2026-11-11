@@ -693,6 +693,88 @@ source = "setting"
     );
 }
 
+// Bytes
+
+/// A spec with a withheld base64 key of 4 bytes and a shown hex salt of at
+/// least 2 bytes with a default.
+const BYTES_SPEC: &str = r#"
+[variables.SHELF_COOKIE_KEY]
+purpose = "The key that signs session cookies."
+type = { bytes = { encoding = "base64", length = 4 } }
+unset = "required"
+show = "withheld"
+source = "secret"
+
+[variables.SHELF_SALT]
+purpose = "The salt of the catalogue's hashes."
+type = { bytes = { encoding = "hex", min-length = 2 } }
+unset = { default = "BEEF" }
+show = "shown"
+source = "setting"
+"#;
+
+/// Checks `pairs` against [`BYTES_SPEC`].
+fn bytes_verdict(pairs: &[(&str, &str)]) -> Verdict {
+    let spec = Spec::parse(BYTES_SPEC).unwrap();
+    check(&spec, &capture(&spec, vars(pairs)), Mode::Local)
+}
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test checks the text and the bytes that the environment holds"
+)]
+fn a_withheld_bytes_value_is_held_as_its_text_and_its_decoded_bytes() {
+    let environment = ready(bytes_verdict(&[("SHELF_COOKIE_KEY", "3q2+7w==")]));
+    let key = name("SHELF_COOKIE_KEY");
+
+    assert_eq!(environment.secret(&key).unwrap().expose(), "3q2+7w==");
+    assert_eq!(
+        environment.secret_bytes(&key).unwrap().expose(),
+        [0xde, 0xad, 0xbe, 0xef]
+    );
+    assert!(environment.value(&key).is_none());
+}
+
+#[test]
+fn a_withheld_bytes_value_is_checked_without_its_text_in_any_message() {
+    for (raw, error) in [
+        ("hunter2!", TypeError::NotEncoded(crate::Encoding::Base64)),
+        (
+            "AAAA",
+            TypeError::WrongLength(crate::ByteLength::Exactly(
+                crate::ByteCount::new(4).unwrap(),
+            )),
+        ),
+    ] {
+        let verdict = bytes_verdict(&[("SHELF_COOKIE_KEY", raw)]);
+        let Verdict::Refused(refusals) = verdict else {
+            panic!("{raw:?} was accepted");
+        };
+        let text = refusals.to_string();
+
+        assert_eq!(
+            refusals.iter().cloned().collect::<Vec<_>>(),
+            [finding("SHELF_COOKIE_KEY", Problem::Invalid(error))]
+        );
+        assert!(!text.contains(raw), "{text}");
+    }
+}
+
+#[test]
+fn a_shown_bytes_value_is_held_decoded_and_its_default_applies() {
+    let environment = ready(bytes_verdict(&[("SHELF_COOKIE_KEY", "3q2+7w==")]));
+
+    assert_eq!(
+        environment.value(&name("SHELF_SALT")),
+        Some(&Value::Bytes {
+            bytes: vec![0xbe, 0xef],
+            encoding: crate::Encoding::Hex,
+        })
+    );
+    assert!(environment.secret_bytes(&name("SHELF_SALT")).is_none());
+}
+
 // patterns
 
 /// A spec with a shown revision and a withheld key, each of whose string

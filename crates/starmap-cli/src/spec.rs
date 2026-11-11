@@ -508,7 +508,9 @@ fn hint(kind: SpecProblemKind) -> &'static str {
             "remove the default: set a secret to unset = \"required\" with a 1Password bind or no bind so that starmap run asks for it, drop it from a generated variable because starmap creates the value, and give a withheld setting its value in the shell"
         }
         SpecProblemKind::BindMismatch => "change the source or the bind, as the failure lists",
-        SpecProblemKind::BadBytes => "set bytes from 16 to 1024 on a generated variable",
+        SpecProblemKind::BadBytes => {
+            "set bytes from 16 to 1024 on a generated variable, give a bytes type a length from 1 to 1024, and give a generated variable the type string"
+        }
         SpecProblemKind::UnknownPlaceholder => "use {workspace}, {checkout} or {home}",
         SpecProblemKind::ModeUndeclared => "declare the mode variable",
         SpecProblemKind::ModeSource => "make the mode variable a setting",

@@ -268,6 +268,46 @@ source = "secret"
     assert_eq!(compare("Shelf", "starmap.toml", &fields, spec, &[]), Ok(()));
 }
 
+/// The spec of [`Keys`], which reads a withheld and a shown bytes value.
+const KEYS: &str = include_str!("../../starmap/tests/example/keys.toml");
+
+/// A struct that agrees with [`KEYS`].
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/keys.toml")]
+struct Keys {
+    #[starmap("SHELF_COOKIE_KEY")]
+    _cookie_key: starmap::SecretBytes,
+    #[starmap("SHELF_SALT")]
+    _salt: Vec<u8>,
+}
+
+/// A struct that reads [`KEYS`]'s withheld key as text and its salt as a
+/// string.
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/keys.toml")]
+struct KeysAsText {
+    #[starmap("SHELF_COOKIE_KEY")]
+    _cookie_key: starmap::Secret,
+    #[starmap("SHELF_SALT")]
+    _salt: String,
+}
+
+#[test]
+fn bytes_fields_agree_with_bytes_variables() {
+    check::<Keys>();
+}
+
+#[test]
+fn text_fields_disagree_with_bytes_variables() {
+    let actual = report::<KeysAsText>(KEYS, &[]);
+    for expected in [
+        "SHELF_COOKIE_KEY  starmap.toml types it as 4 bytes as base64, and the field type starmap::Secret holds a string",
+        "SHELF_SALT        starmap.toml types it as at least 2 bytes as hex, and the field type String holds a string",
+    ] {
+        assert!(actual.contains(expected), "{actual}");
+    }
+}
+
 #[test]
 fn a_url_field_agrees_with_a_url_that_has_schemes() {
     let spec = r#"
