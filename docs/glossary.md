@@ -309,7 +309,10 @@ document, and neither fails the command.
 A flag override is a command-line flag that replaces a variable's value for
 one run. The application reads the variable only through its struct that
 derives `Env`, and the flag wins when it is given. starmap has no function
-for this, because the methods of `Option` say it for every kind of field:
+for this, because the methods of `Option` cover every shown single variable.
+A withheld variable should not get a flag override, because a secret on a
+command line shows in the process list, and a family should not get one,
+because it has no single flag:
 
 | The field | The flag | The value the application uses |
 | --- | --- | --- |
@@ -317,11 +320,21 @@ for this, because the methods of `Option` say it for every kind of field:
 | `catalogue: Option<Url>`, an optional variable | `Option<Url>` | `cli.catalogue.or(env.catalogue)` |
 | `debug: bool` | a switch, `bool` | `cli.debug \|\| env.debug` |
 
+The expression `cli.debug || env.debug` can turn the switch on but never off,
+and `.or` can never clear an optional value. A flag that must be able to turn
+a switch off is an `Option<bool>` with clap's `ArgAction::Set`.
+
 `Env::load` refuses a required variable that is unset before the
 application looks at any flag. A variable that is required only when its
 flag is not given is therefore declared `unset = "optional"`, and the
 application reports the missing value itself, as in
 `cli.port.or(env.port).ok_or("pass --port or set SHELF_PORT")?`.
+
+That choice has a cost. The field becomes an `Option<Port>`, and `starmap
+check`, `starmap run` and `starmap explain` stop reporting the variable as
+missing, so a deployment that sets neither the flag nor the variable fails
+only at the application's own `ok_or`. The variable's purpose text should
+name the flag.
 
 The flag's value does not pass through the variable's declared type or its
 field's check. Giving the flag the field's type, such as `starmap::Port`,
@@ -330,8 +343,8 @@ implements `FromStr`.
 
 A flag override replaces clap's `env` argument, as in
 `#[arg(env = "SHELF_PORT")]`, which reads the variable outside the struct.
-clap's help then no longer names the variable, so the flag's help text
-names it where a reader needs it.
+clap's help then no longer names the variable. Name the variable in the
+flag's help text, because clap no longer adds it.
 
 ## family
 
