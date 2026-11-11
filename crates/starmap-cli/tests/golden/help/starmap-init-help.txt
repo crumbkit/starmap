@@ -2,6 +2,8 @@ Write starmap.toml with a guess for each variable that src reads.
 
 The scan skips test code: files named tests.rs or ending in _tests.rs, a file that begins with #![cfg(test)], and the item after #[cfg(test)]. check scans src the same way.
 
+init also adds disallowed-methods entries for std::env::var, var_os, vars and vars_os to the clippy.toml that Clippy reads for a crate beside the spec, and writes clippy.toml there when no directory at or above it has one. It keeps the file's other entries and comments. Clippy then reports a read of the environment outside the struct that derives starmap::Env.
+
 Usage: starmap init [OPTIONS]
 
 Options:
@@ -9,6 +11,9 @@ Options:
           Write the spec to this file, and scan the src directory beside it; for a pointer, write the file it names and scan the directories it lists
           
           [default: starmap.toml]
+
+      --clippy
+          Add only the Clippy entries to clippy.toml, and leave the spec as it is
 
       --dry-run
           Report what the command would change, and change nothing
@@ -37,6 +42,9 @@ Examples:
 
   starmap init --dry-run
           Print the guesses and write nothing
+
+  starmap init --clippy
+          Add the Clippy entries for an application that has starmap.toml already
 
 Columns:
   name     The variable's name.

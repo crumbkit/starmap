@@ -16,6 +16,13 @@ use tempfile::TempDir;
 /// The example application's source, relative to this package.
 const EXAMPLE_SRC: &str = "../starmap/tests/example/src";
 
+/// The example application's spec, relative to this package.
+const EXAMPLE_SPEC: &str = "../starmap/tests/example/starmap.toml";
+
+/// A clippy.toml that disallows `std::env::var` and none of the other
+/// methods that read the environment, relative to this package.
+const UNBANNED: &str = "../starmap/tests/example/unbanned/clippy.toml";
+
 /// Copies every file and directory under `from` to `to`.
 fn copy_tree(from: &Path, to: &Path) {
     fs::create_dir_all(to).unwrap();
@@ -76,6 +83,72 @@ fn a_dry_run_prints_the_guesses_and_writes_nothing() {
         .stdout_eq(file!["golden/init/starmap-init.txt"])
         .stderr_eq(file!["golden/init/starmap-init-dry-run.stderr"]);
     assert!(!dir.path().join("starmap.toml").exists());
+    assert!(!dir.path().join("clippy.toml").exists());
+}
+
+#[test]
+fn init_writes_a_clippy_toml_that_disallows_each_method_that_reads_the_environment() {
+    let dir = checkout();
+    starmap(dir.path(), &["init"]).success();
+    let written = fs::read_to_string(dir.path().join("clippy.toml")).unwrap();
+    snapbox::assert_data_eq!(written, file!["../../starmap/tests/example/clippy.toml"]);
+}
+
+#[test]
+fn init_adds_the_missing_entries_to_a_clippy_toml_and_keeps_its_entries_and_comments() {
+    let dir = checkout();
+    fs::copy(UNBANNED, dir.path().join("clippy.toml")).unwrap();
+    starmap(dir.path(), &["init"])
+        .success()
+        .stderr_eq(file!["golden/init/starmap-init-clippy-added.stderr"]);
+    let written = fs::read_to_string(dir.path().join("clippy.toml")).unwrap();
+    snapbox::assert_data_eq!(written, file!["golden/init/clippy-added.toml"]);
+}
+
+#[test]
+fn init_with_clippy_adds_the_entries_beside_a_spec_that_exists_and_keeps_the_spec() {
+    let dir = checkout();
+    let spec = fs::read_to_string(EXAMPLE_SPEC).unwrap();
+    fs::write(dir.path().join("starmap.toml"), &spec).unwrap();
+    let run = starmap(dir.path(), &["check", "--json"]).code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(document["failures"][0]["code"], "starmap::clippy::unbanned");
+
+    starmap(dir.path(), &["init", "--clippy", "--dry-run"])
+        .success()
+        .stderr_eq(file!["golden/init/starmap-init-clippy-dry-run.stderr"]);
+    assert!(!dir.path().join("clippy.toml").exists());
+
+    starmap(dir.path(), &["init", "--clippy"])
+        .success()
+        .stdout_eq(file!["golden/init/starmap-init-clippy.txt"])
+        .stderr_eq(file!["golden/init/starmap-init-clippy.stderr"]);
+    let written = fs::read_to_string(dir.path().join("clippy.toml")).unwrap();
+    snapbox::assert_data_eq!(written, file!["../../starmap/tests/example/clippy.toml"]);
+    assert_eq!(
+        fs::read_to_string(dir.path().join("starmap.toml")).unwrap(),
+        spec
+    );
+    starmap(dir.path(), &["check"]).success();
+}
+
+#[test]
+fn init_refuses_a_clippy_toml_whose_disallowed_methods_is_not_an_array_and_writes_nothing() {
+    let dir = checkout();
+    let text = "disallowed-methods = \"std::env::var\"\n";
+    fs::write(dir.path().join("clippy.toml"), text).unwrap();
+    starmap(dir.path(), &["init"])
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/init/starmap-init-clippy-invalid.stderr"]);
+    let run = starmap(dir.path(), &["init", "--clippy", "--json"]).code(1);
+    let failure: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(failure["code"], "starmap::clippy::invalid");
+    assert!(!dir.path().join("starmap.toml").exists());
+    assert_eq!(
+        fs::read_to_string(dir.path().join("clippy.toml")).unwrap(),
+        text
+    );
 }
 
 #[test]

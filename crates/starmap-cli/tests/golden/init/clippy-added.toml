@@ -1,0 +1,10 @@
+# This file lacks the entries for std::env::var_os, std::env::vars and
+# std::env::vars_os, which starmap init --clippy adds after the two below.
+disallowed-methods = [
+    # Exit by returning from main.
+    { path = "std::process::exit", reason = "return the exit code from main" },
+    "std::env::var", # Clippy reads a string as a path without a reason.
+    { path = "std::env::var_os", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+    { path = "std::env::vars", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+    { path = "std::env::vars_os", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+]

@@ -41,12 +41,17 @@ fn write(dir: &Path, path: &str, text: &str) {
     fs::write(path, text).unwrap();
 }
 
+/// The clippy.toml that each checkout keeps, which disallows every method
+/// that reads the environment.
+const CLIPPY: &str = include_str!("../../starmap/tests/example/clippy.toml");
+
 /// Returns a checkout whose `starmap.toml` is [`POINTER`], whose
-/// declarations are in `config/environment.toml`, and whose source in
-/// `app` reads both settings.
+/// declarations are in `config/environment.toml`, whose source in `app`
+/// reads both settings, and whose `clippy.toml` is [`CLIPPY`].
 fn checkout() -> TempDir {
     let dir = tempfile::tempdir().unwrap();
     write(dir.path(), "starmap.toml", POINTER);
+    write(dir.path(), "clippy.toml", CLIPPY);
     write(dir.path(), "config/environment.toml", SPEC);
     write(
         dir.path(),
@@ -140,6 +145,8 @@ fn check_through_a_pointer_with_an_empty_src_scans_nothing() {
         "starmap.toml",
         "spec = \"config/environment.toml\"\nsrc = []\n",
     );
+    // No source is scanned, so check asks for no clippy.toml.
+    fs::remove_file(dir.path().join("clippy.toml")).unwrap();
 
     starmap(dir.path(), &["check"]).code(0).stdout_eq(
         "config/environment.toml declares 3 variables, and no source directory is scanned.\n",
@@ -195,12 +202,18 @@ fn explain_follows_the_pointer() {
 fn init_writes_the_file_that_the_pointer_names_from_the_source_it_lists() {
     let dir = checkout();
     fs::remove_file(dir.path().join("config/environment.toml")).unwrap();
+    fs::remove_file(dir.path().join("clippy.toml")).unwrap();
 
     starmap(dir.path(), &["init"]).success();
 
     let written = fs::read_to_string(dir.path().join("config/environment.toml")).unwrap();
     assert!(written.contains("[variables.SHELF_PAGE_SIZE]"), "{written}");
     assert!(written.contains("[variables.SHELF_DEBUG]"), "{written}");
+    // init writes clippy.toml beside the pointer, where Clippy reads it.
+    assert_eq!(
+        fs::read_to_string(dir.path().join("clippy.toml")).unwrap(),
+        CLIPPY
+    );
     assert_eq!(
         fs::read_to_string(dir.path().join("starmap.toml")).unwrap(),
         POINTER

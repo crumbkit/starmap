@@ -1,7 +1,17 @@
 use std::fs;
 use std::io::ErrorKind;
 
-use super::{read_capped, rust_files, write_new};
+use super::{read_capped, replace, rust_files, write_new};
+
+#[test]
+fn a_replaced_file_holds_the_new_text_and_no_other_file_is_left() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("clippy.toml");
+    fs::write(&path, "first").unwrap();
+    replace(&path, "second").unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), "second");
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+}
 
 #[test]
 fn a_file_longer_than_the_limit_is_read_up_to_the_limit() {

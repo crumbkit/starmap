@@ -4,12 +4,14 @@ Usage: starmap init [OPTIONS]
 
 Options:
       --spec <FILE>  Write the spec to this file, and scan the src directory beside it; for a pointer, write the file it names and scan the directories it lists [default: starmap.toml]
+      --clippy       Add only the Clippy entries to clippy.toml, and leave the spec as it is
       --dry-run      Report what the command would change, and change nothing
   -h, --help         Print help (see more with '--help')
 
 Examples:
   starmap init
   starmap init --dry-run
+  starmap init --clippy
 
 Effects: additive, not idempotent, closed-world.
 Global flags: --json, --fields <FIELD>, --long, --full, --no-input. `starmap init --help` describes them.

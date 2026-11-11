@@ -317,6 +317,22 @@ const STARTS: &[Failing<'static>] = &[
         &codes::FAMILY_UNDECLARED,
         &["check", "--spec", "undeclared-family/starmap.toml"],
     ),
+    Failing::new(
+        &codes::CLIPPY_UNBANNED,
+        &["check", "--spec", "unbanned/starmap.toml"],
+    ),
+    source(
+        &codes::CLIPPY_INVALID,
+        &["check", "--spec", "clippy-invalid/starmap.toml"],
+    ),
+    source(
+        &codes::CLIPPY_UNREADABLE,
+        &["check", "--spec", "clippy-unreadable/starmap.toml"],
+    ),
+    Failing::new(
+        &codes::CLIPPY_UNWRITABLE,
+        &["init", "--clippy", "--spec", "missing/starmap.toml"],
+    ),
 ];
 
 /// A revision that starts with `-`, which diff refuses before git runs, so
@@ -404,6 +420,10 @@ const PAIRS: &[Twin<'static>] = &[
     Twin::new(STARTS[34], VALID),
     Twin::new(STARTS[35], VALID),
     Twin::new(STARTS[36], VALID_SOURCE),
+    Twin::new(STARTS[37], &["check", "--spec", "starmap.toml"]),
+    Twin::new(STARTS[38], VALID_SOURCE),
+    Twin::new(STARTS[39], VALID_SOURCE),
+    Twin::new(STARTS[40], &["init", "--clippy", "--spec", "new.toml"]),
 ];
 
 /// The settings of the twin check.

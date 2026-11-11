@@ -1,0 +1,1 @@
+This directory stands where starmap check reads clippy.toml, so the read fails.

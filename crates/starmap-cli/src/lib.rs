@@ -9,6 +9,7 @@
 
 mod check;
 mod cli;
+mod clippy;
 #[doc(hidden)]
 pub mod codes;
 mod diff;

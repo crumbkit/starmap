@@ -33,9 +33,12 @@ Write starmap.toml with a guess for each variable that src reads.
 
 The scan skips test code: files named tests.rs or ending in \_tests.rs, a file that begins with #!\[cfg(test)\], and the item after #\[cfg(test)\]. check scans src the same way.
 
+init also adds disallowed-methods entries for std::env::var, var\_os, vars and vars\_os to the clippy.toml that Clippy reads for a crate beside the spec, and writes clippy.toml there when no directory at or above it has one. It keeps the file's other entries and comments. Clippy then reports a read of the environment outside the struct that derives starmap::Env.
+
 ### Arguments
 
 - `--spec <FILE>`: Write the spec to this file, and scan the src directory beside it; for a pointer, write the file it names and scan the directories it lists. Default: `starmap.toml`.
+- `--clippy`: Add only the Clippy entries to clippy.toml, and leave the spec as it is
 - `--dry-run`: Report what the command would change, and change nothing
 
 ### Examples
@@ -50,6 +53,12 @@ Print the guesses and write nothing.
 
 ```sh
 starmap init --dry-run
+```
+
+Add the Clippy entries for an application that has starmap.toml already.
+
+```sh
+starmap init --clippy
 ```
 
 ### Columns
@@ -73,6 +82,8 @@ Check that starmap.toml follows every rule of the file, and that it declares eve
 check counts a literal name passed to var or var\_os, a #\[starmap("NAME")\] field, and clap's env argument, as in #\[arg(env = "NAME")\]; a bare clap env reads the upper-case form of its field's name. It does not count a name held in a constant.
 
 A read whose name format! builds from a name, an underscore and one trailing placeholder, such as format!("SHELF\_DB\_URL\_{region}"), reads a member of that family, and check fails when the file declares no such family. check passes on any other format! name and names the place of each one it cannot resolve.
+
+check also fails when the clippy.toml that Clippy reads for a crate beside the spec lacks a disallowed-methods entry for std::env::var, var\_os, vars or vars\_os. starmap init --clippy adds the entries.
 
 ### Arguments
 

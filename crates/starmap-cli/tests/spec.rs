@@ -98,6 +98,11 @@ fn a_file_of_exactly_256_kib_is_read_and_parsed() {
     let mut text = "#".repeat(Spec::MAX_BYTES - 1);
     text.push('\n');
     fs::write(dir.path().join("starmap.toml"), text).unwrap();
+    fs::copy(
+        "../starmap/tests/example/clippy.toml",
+        dir.path().join("clippy.toml"),
+    )
+    .unwrap();
     starmap(dir.path(), dir.path(), &["check"])
         .success()
         .stdout_eq("starmap.toml declares 0 variables, and src reads none of them.\n");

@@ -549,6 +549,39 @@ fails with `starmap::spec::pointer_chain`, so starmap follows at most one
 pointer. A pointer has no digest of its own, and `starmap check` prints the
 digest of the declaration file.
 
+## Clippy entries
+
+The Clippy entries are four `disallowed-methods` entries in an
+application's `clippy.toml`, one for each of `std::env::var`,
+`std::env::var_os`, `std::env::vars` and `std::env::vars_os`. With them,
+Clippy refuses a call of those methods in the application's own code, so
+the code reads the environment only through the struct that derives `Env`.
+The derive's generated `Env::load` carries the `#[expect]` that lets it
+make the one read.
+
+```toml
+disallowed-methods = [
+    { path = "std::env::var", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+]
+```
+
+The file is the one that Clippy reads for a crate in the directory of the
+`--spec` path: `.clippy.toml` or `clippy.toml` in that directory, or else
+in the nearest directory above it that has one. `starmap init` adds each
+missing entry after the entries that the file lists, and keeps the file's
+other entries, comments and layout. It writes `clippy.toml` beside the
+spec when no directory has one. `starmap init --clippy` adds only these
+entries and leaves the spec alone, for an application whose spec exists.
+An entry counts as present when it is a string that holds the method's
+path or a table whose `path` holds it, in an array or in
+`[[disallowed-methods]]` tables, whatever its reason.
+
+`starmap check` fails with `starmap::clippy::unbanned` when an entry is
+missing. A `clippy.toml` that is not valid TOML, or whose
+`disallowed-methods` is not an array, fails both commands with
+`starmap::clippy::invalid`, and neither command rewrites it. A
+[pointer](#pointer) whose `src` is an empty list needs no entries.
+
 ## tool table
 
 A tool table is a `[tool.<name>]` table, where a tool such as a generator,

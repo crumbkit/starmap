@@ -23,8 +23,9 @@ the file that declares the variables.
 
 - `starmap init` starts a spec for code that reads variables. It scans `.rs`
   files under `src` and writes starmap.toml with a guess for each variable,
-  each ending in `?`. `starmap init --dry-run` prints the guesses and writes
-  nothing.
+  each ending in `?`. It also adds entries to clippy.toml that make Clippy
+  refuse `std::env::var`, `var_os`, `vars` and `vars_os`. `starmap init
+  --dry-run` prints the guesses and writes nothing.
 - `starmap check` confirms that the spec is valid and complete. It checks
   every rule of the file, fails for each variable that `src` reads and the
   file does not declare, and refuses a guess that still ends in `?`.
@@ -71,6 +72,8 @@ secret or write one to a file.
   each guess with the real type or source.
 - `starmap::variable::undeclared` means `src` reads a variable that starmap.toml
   does not declare. Declare it.
+- `starmap::clippy::unbanned` means clippy.toml lacks one of those entries.
+  Run `starmap init --clippy`, which adds them and leaves the spec as it is.
 - `starmap::variable::unknown` means the name given to `starmap explain` is not
   declared. Run `starmap explain` with no name to list the declared ones.
 - `starmap::variable::missing` and `starmap::variable::invalid` mean `starmap

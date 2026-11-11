@@ -119,6 +119,46 @@ fn a_source_file_that_is_not_rust_fails_and_names_the_file() {
         .stderr_eq(file!["golden/check-unreadable-source.stderr"]);
 }
 
+/// The spec whose clippy.toml disallows `std::env::var` and none of the
+/// other methods that read the environment, relative to
+/// [`SOURCE_FIXTURES`].
+const UNBANNED: &str = "../../../starmap/tests/example/unbanned/starmap.toml";
+
+#[test]
+fn a_clippy_toml_that_lacks_an_entry_is_a_failure_that_names_each_method_and_init_with_clippy() {
+    starmap(&["check", "--spec", UNBANNED])
+        .code(1)
+        .stderr_eq(file!["golden/check-unbanned.stderr"]);
+    let run = starmap(&["check", "--spec", UNBANNED, "--json"]).code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    let failure = &document["failures"][0];
+    assert_eq!(failure["code"], "starmap::clippy::unbanned");
+    assert_eq!(
+        failure["fields"]["methods"],
+        json!(["std::env::var_os", "std::env::vars", "std::env::vars_os"])
+    );
+    assert_eq!(
+        failure["fields"]["file"],
+        "../../../starmap/tests/example/unbanned/clippy.toml"
+    );
+}
+
+#[test]
+fn a_clippy_toml_whose_disallowed_methods_is_not_an_array_fails_and_names_the_file() {
+    starmap(&["check", "--spec", "clippy-invalid/starmap.toml"])
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/check-clippy-invalid.stderr"]);
+}
+
+#[test]
+fn a_clippy_toml_that_cannot_be_read_fails_and_names_the_file() {
+    starmap(&["check", "--spec", "clippy-unreadable/starmap.toml"])
+        .code(1)
+        .stdout_eq("")
+        .stderr_eq(file!["golden/check-clippy-unreadable.stderr"]);
+}
+
 #[test]
 fn a_check_in_code_without_a_sentence_and_a_sentence_without_a_check_are_notes() {
     starmap(&["check", "--spec", "checks/starmap.toml"])

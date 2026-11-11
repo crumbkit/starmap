@@ -1,0 +1,3 @@
+note: init lists no variables
+clippy.toml already disallows std::env::var, std::env::var_os, std::env::vars and std::env::vars_os.
+Next: starmap check checks the spec and these entries.

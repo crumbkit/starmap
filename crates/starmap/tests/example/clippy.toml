@@ -1,0 +1,6 @@
+disallowed-methods = [
+    { path = "std::env::var", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+    { path = "std::env::var_os", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+    { path = "std::env::vars", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+    { path = "std::env::vars_os", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+]

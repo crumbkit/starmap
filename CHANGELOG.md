@@ -13,6 +13,32 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   argument: the flag is an `Option`, and the application writes
   `cli.port.unwrap_or(env.port)`, or `cli.catalogue.or(env.catalogue)` for
   an `Option` field. No API is added.
+- `starmap init` adds a `disallowed-methods` entry for each of
+  `std::env::var`, `std::env::var_os`, `std::env::vars` and
+  `std::env::vars_os` to the application's `clippy.toml`, so Clippy refuses
+  a read of the environment outside the struct that derives `Env`. init
+  edits the `.clippy.toml` or `clippy.toml` that Clippy reads for a crate
+  beside the spec, which is the nearest one at or above that directory,
+  and writes `clippy.toml` beside the spec when there is none. It keeps
+  the file's entries, comments and layout, and adds only the entries that
+  are missing. `starmap init --dry-run` says what it would add.
+  `starmap init --clippy` adds only these entries, and neither reads nor
+  writes the spec, so it serves an application whose `starmap.toml` exists.
+  init refuses a `clippy.toml` that is not valid TOML, or whose
+  `disallowed-methods` is not an array, with `starmap::clippy::invalid`,
+  and one it cannot read with `starmap::clippy::unreadable`, and writes
+  nothing. `starmap::clippy::unwritable` reports a file it cannot write.
+
+### Changed
+
+- **Breaking:** `starmap check` fails with `starmap::clippy::unbanned` when
+  the application's `clippy.toml` lacks a `disallowed-methods` entry for
+  `std::env::var`, `std::env::var_os`, `std::env::vars` or
+  `std::env::vars_os`, or does not exist. The failure names the file and
+  the methods, and `starmap init --clippy` adds the entries. check also
+  fails with `starmap::clippy::invalid` or `starmap::clippy::unreadable`
+  for a `clippy.toml` it cannot use. A pointer whose `src` is an empty list
+  is exempt, because it names no source for Clippy to check.
 
 ## [0.3.0](https://github.com/crumbkit/starmap/compare/v0.2.0...v0.3.0) - 2026-11-11
 ### Added

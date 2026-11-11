@@ -5,19 +5,20 @@
 use std::ffi::OsString;
 use std::fmt;
 
-use crumbkit::{Document, Failure, Prose, Recovery};
+use crumbkit::{Document, Failure, FieldValue, Prose, Recovery};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{Declaration, Mode, Name};
 
-use crate::cli::CheckArgs;
-use crate::codes::{FAMILY_UNDECLARED, VARIABLE_UNDECLARED};
+use crate::cli::{CheckArgs, SpecFile};
+use crate::clippy;
+use crate::codes::{CLIPPY_UNBANNED, FAMILY_UNDECLARED, VARIABLE_UNDECLARED};
 use crate::mode;
 use crate::scan::{self, Dirs};
 use crate::spec;
 
 /// The document that `starmap check` prints.
-pub(crate) const CHECK: Document<Prose<Checked, Undeclared>> = Document::new(
+pub(crate) const CHECK: Document<Prose<Checked, Finding>> = Document::new(
     "starmap",
     "check",
     1,
@@ -118,10 +119,12 @@ impl fmt::Display for Checked {
     }
 }
 
-/// A read in src that the spec does not declare: of a variable, or of a
-/// member of a family by a name that `format!` builds from a prefix.
+/// A finding that fails check: a read in src that the spec does not
+/// declare, of a variable or of a member of a family by a name that
+/// `format!` builds from a prefix, or a clippy.toml that does not disallow
+/// every method that reads the environment.
 #[derive(Debug, Failure)]
-pub(crate) enum Undeclared {
+pub(crate) enum Finding {
     /// A variable that src reads and the spec does not declare.
     #[failure(
         code = VARIABLE_UNDECLARED,
@@ -156,9 +159,29 @@ pub(crate) enum Undeclared {
         /// The spec file, as the caller gave it.
         file: String,
     },
+    /// The clippy.toml that Clippy reads for a crate beside the spec does
+    /// not disallow every method of [`clippy::BANNED`], so Clippy passes a
+    /// read of the environment outside the struct that derives
+    /// `starmap::Env`.
+    #[failure(
+        code = CLIPPY_UNBANNED,
+        recovery = Recovery::Run(SpecFile::call(&["init"], spec).arg("clippy")),
+        field(file = file.as_str()),
+        field(methods = FieldValue::list(methods.iter().copied())),
+    )]
+    Unbanned {
+        /// The clippy.toml, or the path where init writes one.
+        file: String,
+        /// Whether the file exists.
+        exists: bool,
+        /// Each method that the file does not disallow.
+        methods: Vec<&'static str>,
+        /// The file that the caller gave as `--spec`.
+        spec: String,
+    },
 }
 
-impl fmt::Display for Undeclared {
+impl fmt::Display for Finding {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Variable { name, at, file } => {
@@ -171,11 +194,31 @@ impl fmt::Display for Undeclared {
                 formatter,
                 "{at} reads names that start with {prefix}_, and {file} declares no family {prefix}"
             ),
+            Self::Unbanned {
+                file,
+                exists: true,
+                methods,
+                ..
+            } => write!(
+                formatter,
+                "{file} does not disallow {}",
+                clippy::list(methods)
+            ),
+            Self::Unbanned {
+                file,
+                exists: false,
+                methods,
+                ..
+            } => write!(
+                formatter,
+                "{file} does not exist, so Clippy does not disallow {}",
+                clippy::list(methods)
+            ),
         }
     }
 }
 
-impl std::error::Error for Undeclared {}
+impl std::error::Error for Finding {}
 
 /// Reads and parses the spec that `--spec` names, through its pointer when
 /// it holds one, scans the source directories that go with it, and decides the mode from `vars`, the process environment.
@@ -185,16 +228,17 @@ impl std::error::Error for Undeclared {}
 /// reads and the spec does not declare is a failure, and so is each prefix
 /// that src builds a `format!` name from and the spec declares no family
 /// for. A `format!` read that the scan cannot resolve passes, and the
-/// result names its place.
+/// result names its place. When a source directory is scanned, a
+/// clippy.toml that lacks an entry of [`clippy::BANNED`] is a failure too.
 ///
 /// # Errors
 ///
-/// Returns a [`crumbkit::Error`] when the spec cannot be read or parsed, or src cannot
-/// be scanned.
+/// Returns a [`crumbkit::Error`] when the spec cannot be read or parsed, src cannot
+/// be scanned, or clippy.toml cannot be read or parsed.
 pub(crate) fn check(
     args: &CheckArgs,
     vars: Vec<(OsString, OsString)>,
-) -> Result<Prose<Checked, Undeclared>, crumbkit::Error> {
+) -> Result<Prose<Checked, Finding>, crumbkit::Error> {
     let spec::Opened { spec, located } = spec::open(&args.file.spec)?;
     let file = located.file.display().to_string();
     let scan::Scanned {
@@ -246,7 +290,7 @@ pub(crate) fn check(
         } else if !member {
             let at = places.into_iter().next().unwrap_or_default();
             undeclared_names.push(name.to_string());
-            undeclared.push(Undeclared::Variable {
+            undeclared.push(Finding::Variable {
                 name,
                 at,
                 file: file.clone(),
@@ -258,10 +302,23 @@ pub(crate) fn check(
     for (prefix, places) in families {
         if spec.family(&prefix).is_none() {
             let at = places.into_iter().next().unwrap_or_default();
-            undeclared.push(Undeclared::Family {
+            undeclared.push(Finding::Family {
                 prefix,
                 at,
                 file: file.clone(),
+            });
+        }
+    }
+    // An application whose pointer lists no source directory has no Rust
+    // source for Clippy to check.
+    if !src.is_empty() {
+        let ban = clippy::open(&args.file.spec)?;
+        if !ban.missing.is_empty() {
+            undeclared.push(Finding::Unbanned {
+                file: ban.file.display().to_string(),
+                exists: ban.exists,
+                methods: ban.missing,
+                spec: args.file.spec.display().to_string(),
             });
         }
     }

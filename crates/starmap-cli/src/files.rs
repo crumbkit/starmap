@@ -71,6 +71,26 @@ pub(crate) fn write_new(path: &Path, text: &str) -> io::Result<()> {
     })
 }
 
+/// Replaces the file at `path` with `text`. It writes `text` to a new file
+/// beside `path` and renames that file over `path`, so a write that fails,
+/// such as on a full disk, leaves the file at `path` as it was.
+///
+/// # Errors
+///
+/// Returns the I/O error of a file that cannot be created, written or
+/// renamed.
+pub(crate) fn replace(path: &Path, text: &str) -> io::Result<()> {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".starmap-new");
+    let new = path.with_file_name(name);
+    write_new(&new, text)?;
+    fs::rename(&new, path).inspect_err(|_| {
+        // The rename error is what the caller needs, so a failed removal
+        // is not reported in its place.
+        let _ = fs::remove_file(&new);
+    })
+}
+
 /// Reports whether anything is at `path`. A path that cannot be checked,
 /// such as one below a directory that cannot be read, counts as free, and
 /// the write that follows reports why it fails.

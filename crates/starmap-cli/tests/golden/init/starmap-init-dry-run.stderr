@@ -1,3 +1,4 @@
 src reads 9 variables, and init wrote nothing.
+init would write clippy.toml with disallowed-methods entries for std::env::var, std::env::var_os, std::env::vars and std::env::vars_os.
 Next: starmap init writes the file.
 This was a dry run, so nothing changed.
