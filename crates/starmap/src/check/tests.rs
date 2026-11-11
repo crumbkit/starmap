@@ -795,11 +795,7 @@ fn a_shown_bytes_value_that_does_not_decode_is_quoted() {
         ("SHELF_SALT", "xyz"),
     ]));
 
-    assert_eq!(
-        first_quote(&refusals).as_deref(),
-        Some("xyz"),
-        "{refusals}"
-    );
+    assert_eq!(first_quote(&refusals).as_deref(), Some("xyz"), "{refusals}");
     assert!(refusals.to_string().ends_with("(the value is \"xyz\")"));
 }
 
