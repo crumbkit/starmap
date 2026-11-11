@@ -1,0 +1,8 @@
+# src lets clap read SHELF_PORT, which this file declares, and SHELF_THEME
+# and SHELF_HOST, which it does not.
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"

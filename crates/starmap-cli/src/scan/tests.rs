@@ -278,3 +278,69 @@ fn a_module_that_starts_with_an_inner_cfg_test_is_not_read() {
     let text = "#![cfg(test)]\nfn f() { env::var(\"A\"); }\n";
     assert_eq!(reads(text), []);
 }
+
+#[test]
+fn a_clap_env_attribute_with_a_literal_name_is_a_read_on_its_line() {
+    let text = "#[derive(clap::Parser)]\nstruct Cli {\n    #[arg(long, env = \"SHELF_PORT\", default_value_t = 8080)]\n    port: u16,\n    #[clap(env = \"SHELF_HOST\")]\n    host: String,\n    #[arg(\n        short,\n        env = r\"SHELF_THEME\",\n    )]\n    theme: String,\n}\n";
+    assert_eq!(
+        reads(text),
+        [
+            read("SHELF_PORT", 3),
+            read("SHELF_HOST", 5),
+            read("SHELF_THEME", 9)
+        ]
+    );
+    assert_eq!(checked(text), [] as [&str; 0]);
+}
+
+#[test]
+fn a_bare_clap_env_reads_the_upper_case_form_of_the_field_name() {
+    let text = "struct Cli {\n    #[arg(long, env)]\n    listen_port: u16,\n    /// The host.\n    #[arg(env, long)]\n    #[expect(unused)]\n    pub(crate) host: String,\n    #[clap(env)]\n    pub r#type: String,\n}\n";
+    assert_eq!(
+        reads(text),
+        [read("LISTEN_PORT", 2), read("HOST", 5), read("TYPE", 8)]
+    );
+}
+
+#[test]
+fn a_clap_env_whose_name_is_not_a_string_literal_is_not_a_read() {
+    let text = "const NAME: &str = \"A\";\nstruct Cli {\n    #[arg(env = NAME)]\n    a: u8,\n    #[arg(env = concat!(\"B\", \"C\"))]\n    b: u8,\n    #[arg(env = \"D\".to_owned())]\n    d: u8,\n}\n";
+    assert_eq!(reads(text), []);
+    assert_eq!(built(text), []);
+}
+
+#[test]
+fn the_word_env_outside_a_clap_attribute_or_in_another_argument_is_not_a_read() {
+    let text = "struct Cli {\n    #[arg(long = \"env\", default_value = env)]\n    a: u8,\n    #[serde(env = \"B\")]\n    b: u8,\n    #[arg(hide_env = \"C\", value_parser = f(env = \"D\"))]\n    c: u8,\n}\nfn f() { arg(env = \"E\"); let env = \"F\"; }\n";
+    assert_eq!(reads(text), []);
+}
+
+#[test]
+fn a_clap_env_on_a_test_only_field_is_skipped() {
+    let text = "struct Cli {\n    #[cfg(test)]\n    #[arg(env = \"T\")]\n    t: String,\n    #[arg(env)]\n    port: u16,\n}\n";
+    assert_eq!(reads(text), [read("PORT", 5)]);
+}
+
+#[test]
+fn a_clap_env_literal_that_is_not_a_variable_name_is_not_a_read() {
+    let text = "struct Cli {\n    #[arg(env = \"lower_case\")]\n    a: u8,\n    #[arg(env = \"A B\")]\n    b: u8,\n}\n";
+    assert_eq!(reads(text), []);
+}
+
+#[test]
+fn a_bare_clap_env_on_a_test_only_field_does_not_read_the_next_field() {
+    let text = "struct Cli {\n    #[arg(env)]\n    #[cfg(test)]\n    debug: bool,\n    #[arg(long)]\n    port: u16,\n}\n";
+    assert_eq!(reads(text), []);
+}
+
+#[test]
+fn a_clap_env_inside_cfg_attr_is_not_a_read() {
+    let text = "struct Cli {\n    #[cfg_attr(unix, arg(env = \"A\"))]\n    a: u8,\n    #[cfg_attr(unix, arg(env))]\n    b: u8,\n}\n";
+    assert_eq!(reads(text), []);
+}
+
+#[test]
+fn a_bare_clap_env_that_clap_renames_is_read_under_the_field_name() {
+    let text = "#[command(rename_all_env = \"kebab-case\")]\nstruct Cli {\n    #[arg(env, id = \"other\")]\n    listen_port: u16,\n}\n";
+    assert_eq!(reads(text), [read("LISTEN_PORT", 3)]);
+}

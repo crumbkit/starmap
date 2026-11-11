@@ -56,6 +56,21 @@ fn a_read_of_a_member_is_declared_and_a_read_of_an_unlisted_key_is_undeclared() 
 }
 
 #[test]
+fn a_clap_env_attribute_is_a_read_that_passes_when_declared_and_fails_when_not() {
+    starmap(&["check", "--spec", "clap/starmap.toml"])
+        .code(1)
+        .stdout_eq("clap/starmap.toml declares 1 variable, and clap/src reads it.\n")
+        .stderr_eq(file!["golden/check-clap.stderr"]);
+    let run = starmap(&["check", "--spec", "clap/starmap.toml", "--json"]).code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(document["data"]["read"], 1);
+    assert_eq!(
+        document["data"]["undeclared"],
+        json!(["SHELF_HOST", "SHELF_THEME"])
+    );
+}
+
+#[test]
 fn a_name_built_from_an_undeclared_prefix_fails_and_an_unresolved_name_is_a_second_sentence() {
     starmap(&["check", "--spec", "undeclared-family/starmap.toml"])
         .code(1)

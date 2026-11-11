@@ -1,0 +1,9 @@
+Mode: local, because the spec has no [mode] table.
+error: clap/src/cli.rs:11 reads SHELF_HOST, which clap/starmap.toml does not declare
+  help:  declare SHELF_HOST in clap/starmap.toml
+  help:  stop reading SHELF_HOST
+  code:  starmap::variable::undeclared
+error: clap/src/cli.rs:9 reads SHELF_THEME, which clap/starmap.toml does not declare
+  help:  declare SHELF_THEME in clap/starmap.toml
+  help:  stop reading SHELF_THEME
+  code:  starmap::variable::undeclared

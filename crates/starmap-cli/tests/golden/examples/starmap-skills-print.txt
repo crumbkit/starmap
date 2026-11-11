@@ -32,6 +32,10 @@ file that declares the variables.
 | See what a branch changed in the spec | `starmap diff REVISION` | starmap lists each variable that was added, changed or removed since the spec at that git revision, such as `starmap diff main`. |
 | Run a program with the declared environment | `starmap run -- COMMAND` | starmap resolves every variable, checks the values and starts the program. `--set NAME=VALUE` changes one setting for the run. The program's exit code becomes starmap's. |
 
+The scan counts `var` and `var_os` with a literal name, `#[starmap("NAME")]`
+fields and clap's `#[arg(env = "NAME")]`. A bare clap `env` reads the
+upper-case field name. The scan misses a name in a constant.
+
 Add `--json` to any command to print JSON. `starmap check --json` and
 `starmap explain --json` give the documents `starmap/check/v1` and
 `starmap/explain/v1`, and a failure prints `starmap/failure/v1` with a code and
