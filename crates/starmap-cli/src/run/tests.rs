@@ -1100,3 +1100,80 @@ fn a_fully_set_group_is_admitted() {
 
     assert_eq!(value(&ready, "SHELF_MIRROR_KEY").as_deref(), Some("k-1"));
 }
+
+/// A spec with the open family `SHELF_DB_URL` and the listed family
+/// `SHELF_TOKEN`.
+const FAMILIES: &str = r#"
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[families.SHELF_TOKEN]
+purpose = "The API token of one tenant."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "setting"
+keys = ["ACME", "GLOBEX"]
+"#;
+
+#[test]
+fn dotenv_the_shell_and_set_each_give_a_member_its_value() {
+    let checkout = Checkout::with_spec(FAMILIES, Some("SHELF_DB_URL_EU=https://eu.example/\n"));
+    let ready = prepared(
+        &checkout.args(&[("SHELF_DB_URL_US", "https://us.example/")]),
+        &[("SHELF_TOKEN_ACME", "abc")],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        value(&ready, "SHELF_DB_URL_EU").as_deref(),
+        Some("https://eu.example/")
+    );
+    assert_eq!(
+        value(&ready, "SHELF_DB_URL_US").as_deref(),
+        Some("https://us.example/")
+    );
+    assert_eq!(secret(&ready, "SHELF_TOKEN_ACME").as_deref(), Some("abc"));
+    assert!(
+        !ready
+            .notes
+            .iter()
+            .any(|note| note.contains("does not declare")),
+        "{:?}",
+        ready.notes
+    );
+}
+
+#[test]
+fn an_unlisted_key_is_refused_and_offers_to_unset_it_or_to_list_the_key() {
+    let checkout = Checkout::with_spec(FAMILIES, None);
+    let refused = prepared(
+        &checkout.args(&[]),
+        &[("SHELF_TOKEN_INITECH", "abc")],
+        &FakeResolver::default(),
+        &mut Person::absent(),
+    )
+    .unwrap_err();
+
+    assert_eq!(codes(&refused), [&codes::FAMILY_UNLISTED_KEY]);
+    assert_eq!(
+        refused.failures[0].to_string(),
+        "SHELF_TOKEN_INITECH is set, and the family SHELF_TOKEN lists only the keys ACME and \
+         GLOBEX"
+    );
+    assert_eq!(
+        repairs(&refused),
+        [(
+            hint("unset SHELF_TOKEN_INITECH in this shell, in .env and in --set"),
+            vec![hint(
+                "add INITECH to keys in [families.SHELF_TOKEN] in starmap.toml"
+            )]
+        )]
+    );
+}

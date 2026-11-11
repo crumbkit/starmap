@@ -26,7 +26,7 @@ const CANONICAL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/example/cano
 
 /// Every problem kind. A kind added to `SpecProblemKind` belongs here too,
 /// with a fixture or a test of its own that writes its golden.
-const KINDS: [SpecProblemKind; 24] = [
+const KINDS: [SpecProblemKind; 25] = [
     SpecProblemKind::TooLarge,
     SpecProblemKind::Syntax,
     SpecProblemKind::UnknownField,
@@ -51,6 +51,7 @@ const KINDS: [SpecProblemKind; 24] = [
     SpecProblemKind::EnumerationUndeclared,
     SpecProblemKind::GroupUndeclared,
     SpecProblemKind::BadGroup,
+    SpecProblemKind::BadFamily,
 ];
 
 /// Returns the path of each `.toml` fixture under `tests/spec`, in name
@@ -1015,6 +1016,22 @@ fn a_changed_value_changes_the_digest() {
 
 // The goldens of every spec problem
 
+/// Returns the code of the kind that the fixture `stem` shows first: the
+/// code whose name is the stem, or the start of the stem before an
+/// underscore and the name of the case, as `bad_group_family` shows
+/// `starmap::spec::bad_group`.
+fn fixture_code(stem: &str) -> &'static str {
+    KINDS
+        .iter()
+        .map(|kind| kind.code())
+        .filter(|code| {
+            let name = code.trim_start_matches("starmap::spec::");
+            stem == name || stem.starts_with(&format!("{name}_"))
+        })
+        .max_by_key(|code| code.len())
+        .unwrap_or_default()
+}
+
 #[test]
 fn each_problem_fixture_matches_its_golden_and_shows_its_kind_first() {
     for fixture in fixtures() {
@@ -1027,7 +1044,7 @@ fn each_problem_fixture_matches_its_golden_and_shows_its_kind_first() {
                 .problems()
                 .first()
                 .map(|problem| problem.kind().code()),
-            Some(format!("starmap::spec::{stem}").as_str()),
+            Some(fixture_code(stem)),
             "the first problem of {stem}.toml"
         );
         golden(render(&text, &error), &fixture.with_extension("txt"));
@@ -1049,13 +1066,11 @@ fn the_too_large_problem_matches_its_golden() {
 fn the_fixtures_and_the_too_large_test_cover_every_problem_kind() {
     let mut shown: Vec<String> = fixtures()
         .iter()
-        .map(|fixture| {
-            let stem = fixture.file_stem().unwrap().to_str().unwrap();
-            format!("starmap::spec::{stem}")
-        })
+        .map(|fixture| fixture_code(fixture.file_stem().unwrap().to_str().unwrap()).to_owned())
         .collect();
     shown.push("starmap::spec::too_large".to_owned());
     shown.sort();
+    shown.dedup();
     let mut codes: Vec<String> = KINDS.iter().map(|kind| kind.code().to_owned()).collect();
     codes.sort();
 
@@ -1152,7 +1167,7 @@ fn a_key_outside_tool_is_still_refused_and_the_message_lists_tool() {
     assert_eq!(error.problems()[0].kind(), SpecProblemKind::UnknownField);
     assert_eq!(
         error.to_string(),
-        "the file has the field `colour`, and it takes mode, enumerations, groups, variables and tool"
+        "the file has the field `colour`, and it takes mode, enumerations, groups, families, variables and tool"
     );
 }
 

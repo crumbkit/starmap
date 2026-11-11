@@ -21,6 +21,12 @@ struct UnknownFieldKey {
 }
 
 #[derive(starmap::Env)]
+struct FamilyNotFamily {
+    #[starmap(family = "SHELF_DB_URL")]
+    databases: Vec<starmap::url::Url>,
+}
+
+#[derive(starmap::Env)]
 struct Generic<T> {
     #[starmap("SHELF_PORT")]
     port: T,

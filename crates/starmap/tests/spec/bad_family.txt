@@ -1,0 +1,4 @@
+starmap::spec::bad_family: `families.SHELF_DB_URL.unset` requires a value in local mode, and only a family with `keys` may be required, because starmap cannot know which keys an open family must have
+  at: 5:9 to 5:19, bytes 192..202
+   5 | unset = "required"
+     |         ^^^^^^^^^^

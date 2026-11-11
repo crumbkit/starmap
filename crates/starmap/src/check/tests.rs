@@ -1289,3 +1289,158 @@ proptest! {
         prop_assert_eq!(quoted.to_string(), serde_json::to_string(&cut).unwrap());
     }
 }
+
+// families
+
+/// A spec with a mode variable, the open family `SHELF_DB_URL` of urls,
+/// and the listed family `SHELF_TOKEN` of withheld strings that only
+/// production requires.
+const FAMILIES: &str = r#"
+[mode]
+variable = "SHELF_ENV"
+production = ["prod"]
+
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[families.SHELF_TOKEN]
+purpose = "The API token of one tenant."
+type = { string = { pattern = "[a-z0-9]+" } }
+unset = { local = "optional", production = "required" }
+show = "withheld"
+source = "setting"
+keys = ["ACME", "GLOBEX"]
+
+[variables.SHELF_ENV]
+purpose = "Selects local or production behaviour."
+type = { enumeration = ["dev", "prod"] }
+unset = { default = "dev" }
+show = "shown"
+source = "setting"
+"#;
+
+/// Captures `pairs` with [`FAMILIES`] and checks them in the mode they
+/// decide.
+fn family_verdict(pairs: &[(&str, &str)]) -> Verdict {
+    let spec = Spec::parse(FAMILIES).unwrap();
+    let bindings = capture(&spec, vars(pairs));
+    check(&spec, &bindings, mode(&spec, &bindings))
+}
+
+#[test]
+fn a_member_is_captured_and_checked_in_the_type_of_its_family() {
+    let environment = ready(family_verdict(&[
+        ("SHELF_DB_URL_EU", "https://eu.example/"),
+        ("SHELF_TOKEN_ACME", "abc123"),
+    ]));
+
+    assert!(matches!(
+        environment.value(&name("SHELF_DB_URL_EU")),
+        Some(Value::Url(url)) if url.as_str() == "https://eu.example/"
+    ));
+    assert!(environment.secret(&name("SHELF_TOKEN_ACME")).is_some());
+    assert!(environment.value(&name("SHELF_TOKEN_ACME")).is_none());
+}
+
+#[test]
+fn an_empty_member_counts_as_unset() {
+    let spec = Spec::parse(FAMILIES).unwrap();
+    let bindings = capture(&spec, vars(&[("SHELF_DB_URL_EU", "")]));
+
+    assert!(bindings.get(&name("SHELF_DB_URL_EU")).is_none());
+    let environment = ready(check(&spec, &bindings, Mode::Local));
+    let prefix = name("SHELF_DB_URL");
+    assert_eq!(environment.members(&prefix).count(), 0);
+}
+
+#[test]
+fn an_invalid_member_has_a_finding_that_names_the_member() {
+    let found = findings(family_verdict(&[("SHELF_DB_URL_EU", "not a url")]));
+
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].name, name("SHELF_DB_URL_EU"));
+    assert!(matches!(found[0].problem, Problem::Invalid(_)));
+    let Verdict::Refused(refusals) = family_verdict(&[("SHELF_DB_URL_EU", "not a url")]) else {
+        panic!("the check passed");
+    };
+    assert!(
+        refusals
+            .to_string()
+            .starts_with("SHELF_DB_URL_EU: the value is not a url"),
+        "{refusals}"
+    );
+}
+
+#[test]
+fn a_withheld_member_that_breaks_its_pattern_is_never_quoted() {
+    let found = findings(family_verdict(&[("SHELF_TOKEN_ACME", "NOT-LOWER")]));
+
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].value, None);
+}
+
+#[test]
+fn an_unlisted_key_of_a_listed_family_gets_unlisted_key() {
+    let verdict = family_verdict(&[("SHELF_TOKEN_ACMEE", "abc")]);
+    let Verdict::Refused(refusals) = verdict else {
+        panic!("the check passed");
+    };
+
+    assert_eq!(
+        refusals.iter().cloned().collect::<Vec<_>>(),
+        [finding(
+            "SHELF_TOKEN_ACMEE",
+            Problem::UnlistedKey {
+                family: name("SHELF_TOKEN"),
+                keys: vec!["ACME".to_owned(), "GLOBEX".to_owned()],
+            }
+        )]
+    );
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_TOKEN_ACMEE is set, and the family SHELF_TOKEN lists only the keys ACME and GLOBEX"
+    );
+}
+
+#[test]
+fn a_required_listed_family_with_an_unset_key_gets_missing_for_that_member() {
+    let found = findings(family_verdict(&[
+        ("SHELF_ENV", "prod"),
+        ("SHELF_TOKEN_ACME", "abc"),
+    ]));
+
+    assert_eq!(
+        found,
+        [finding(
+            "SHELF_TOKEN_GLOBEX",
+            Problem::Missing {
+                mode: Mode::Production
+            }
+        )]
+    );
+}
+
+#[test]
+fn a_required_listed_family_passes_in_a_mode_where_it_is_optional() {
+    let environment = ready(family_verdict(&[("SHELF_TOKEN_ACME", "abc")]));
+
+    let prefix = name("SHELF_TOKEN");
+    let keys: Vec<&str> = environment.members(&prefix).map(|(key, _)| key).collect();
+    assert_eq!(keys, ["ACME"]);
+}
+
+#[test]
+fn member_findings_follow_the_declared_variables_in_name_order() {
+    let found = findings(family_verdict(&[
+        ("SHELF_ENV", "staging"),
+        ("SHELF_DB_URL_US", "bad"),
+        ("SHELF_DB_URL_EU", "bad"),
+    ]));
+
+    let names: Vec<&str> = found.iter().map(|finding| finding.name.as_str()).collect();
+    assert_eq!(names, ["SHELF_ENV", "SHELF_DB_URL_EU", "SHELF_DB_URL_US"]);
+}

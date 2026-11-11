@@ -1,0 +1,7 @@
+# An open family is required, and starmap cannot know which keys it must have.
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "required"
+show = "shown"
+source = "setting"

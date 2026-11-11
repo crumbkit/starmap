@@ -290,6 +290,63 @@ reports a change of the field `check`.
 without a check sentence, and a check sentence whose variable no field in
 src checks. Each is a note on standard error and a list in the JSON
 document, and neither fails the command.
+
+## family
+
+A family is a set of variables whose names are chosen at run time, such as
+one database url per region. A file declares one as a top-level
+`[families.<PREFIX>]` table that takes the fields of a variable table, and
+every member shares them:
+
+```toml
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+```
+
+A member is a variable whose name is the prefix, an underscore and a key,
+such as `SHELF_DB_URL_EU` with the key `EU`. The prefix follows the rule of
+a variable name. A key starts with an upper case ASCII letter or a digit
+and holds only upper case ASCII letters, digits and underscores, and a
+member's whole name has at most 128 bytes. A family's keys are open, so any
+key is a member, unless the file lists them with `keys = ["ACME",
+"GLOBEX"]`. A listed family's members are exactly its keys, and a value
+whose key it does not list is the finding `Problem::UnlistedKey`, which
+`starmap run` reports with the code `starmap::family::unlisted_key`. A
+listed key that breaks the key rule fails with `starmap::spec::bad_value`.
+
+No family has a default, because a default would apply to keys that nobody
+names. An open family is optional in every mode, because starmap cannot
+know which keys it must have. A listed family may be required, in every
+mode or per mode, and each listed key whose member is unset is then
+`Problem::Missing`, which names the member. A family's source is a setting
+without a bind, or inherited, because a secret, generated, provided or
+bound variable needs one bind per member. A family may be withheld, with
+the type string.
+
+`starmap::spec::bad_family` refuses a default, a required open family, an
+empty, repeated or overlong key list, a refused source, a declared variable
+that is a member of a family, and two families whose prefixes would share a
+member, such as `SHELF_DB` and `SHELF_DB_URL`. The prefix test ignores
+listed keys, so each name has one declaration however the keys change. A
+group may not name a family's prefix or member.
+
+`capture`, `.env` and `--set` take every member's value, and `check` checks
+each in the family's type after the declared variables, in name order. A
+finding names the member. `starmap check` counts a read of a member's name
+as declared, unless its key is one that a listed family does not list.
+Families count toward the canonical form and the digest, which writes each
+family after the groups and before the variables, in prefix order, with
+its listed keys last and in key order, so reordering the keys keeps the
+digest. The Rust API names a family's declaration
+`starmap::FamilyDeclaration`, and `Spec::families`, `Spec::family` and
+`Spec::declared` read it. A struct field reads a family with
+`#[starmap(family = "SHELF_DB_URL")]` into a `starmap::Family<T>`, which
+holds each set member's value under its key, in key order.
+
 ## group
 
 A group is a set of variables that must be set together or not at all,
@@ -308,7 +365,10 @@ not declare fails with `starmap::spec::group_undeclared`, which names the
 group and the variable. `starmap::spec::bad_group` refuses a group with
 fewer than two members or a repeated member, a variable in two groups, and
 a member with a default or a generated value, because a default or a
-generated value always counts as set. The Rust API names a group
+generated value always counts as set. It also refuses a group that names
+the prefix of a family or a member of one, because families cannot join
+groups, and it checks this before it checks that the member is declared.
+The Rust API names a group
 `starmap::Group` and its name `starmap::GroupName`. `Spec::groups` lists
 the groups in name order, `Spec::group` returns one by name, and
 `Spec::group_of` returns the group a variable belongs to.

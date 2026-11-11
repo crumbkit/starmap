@@ -304,6 +304,10 @@ const STARTS: &[Failing<'static>] = &[
         &codes::SPEC_BAD_GROUP,
         &["check", "--spec", "bad_group.toml"],
     ),
+    spec(
+        &codes::SPEC_BAD_FAMILY,
+        &["check", "--spec", "bad_family.toml"],
+    ),
 ];
 
 /// A revision that starts with `-`, which diff refuses before git runs, so
@@ -325,6 +329,7 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
     Unprovoked::new(&codes::VARIABLE_MISSING, RUN_RESOLVES_FIRST),
     Unprovoked::new(&codes::VARIABLE_INVALID, RUN_RESOLVES_FIRST),
     Unprovoked::new(&codes::GROUP_INCOMPLETE, RUN_RESOLVES_FIRST),
+    Unprovoked::new(&codes::FAMILY_UNLISTED_KEY, RUN_RESOLVES_FIRST),
     Unprovoked::new(&codes::BIND_NO_PROVIDER, RUN_RESOLVES_FIRST),
     Unprovoked::new(&codes::BIND_NO_PLACE, RUN_RESOLVES_FIRST),
     Unprovoked::new(&codes::SECRET_UNBOUND, RUN_RESOLVES_FIRST),
@@ -388,6 +393,7 @@ const PAIRS: &[Twin<'static>] = &[
     Twin::new(STARTS[32], VALID),
     Twin::new(STARTS[33], VALID),
     Twin::new(STARTS[34], VALID),
+    Twin::new(STARTS[35], VALID),
 ];
 
 /// The settings of the twin check.

@@ -8,7 +8,7 @@ use std::fmt;
 use crumbkit::{Document, Failure, Prose, Recovery};
 use schemars::JsonSchema;
 use serde::Serialize;
-use starmap::{Mode, Name};
+use starmap::{Declaration, Mode, Name};
 
 use crate::cli::CheckArgs;
 use crate::codes::VARIABLE_UNDECLARED;
@@ -185,9 +185,15 @@ pub(crate) fn check(
     let mut read = 0;
     let mut undeclared = Vec::new();
     for (name, places) in reads {
+        // A read of a member's name is declared by its family, unless the
+        // family lists its keys and not this one.
+        let member = matches!(
+            spec.declared(&name),
+            Some(Declaration::Member { family, key }) if family.lists(key)
+        );
         if spec.variable(&name).is_some() {
             read += 1;
-        } else {
+        } else if !member {
             let at = places.into_iter().next().unwrap_or_default();
             undeclared.push(Undeclared {
                 name,

@@ -139,3 +139,51 @@ fn secret_returns_nothing_for_a_shown_variable() {
 fn an_environment_reports_the_mode_it_was_checked_in() {
     assert_eq!(environment(&[]).mode(), Mode::Local);
 }
+
+/// A spec with the open family `SHELF_DB_URL`.
+const FAMILY: &str = r#"
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+"#;
+
+#[test]
+fn apply_sets_each_member_the_environment_holds_and_members_lists_them_in_key_order() {
+    let spec = Spec::parse(FAMILY).unwrap();
+    let vars = [
+        ("SHELF_DB_URL_US", "https://us.example/"),
+        ("SHELF_DB_URL_EU", "https://eu.example/"),
+    ]
+    .map(|(key, value)| (OsString::from(key), OsString::from(value)));
+    let Verdict::Ready(environment) = check(&spec, &capture(&spec, vars), Mode::Local) else {
+        panic!("the members fit");
+    };
+    let mut command = command();
+
+    environment.apply(&mut command);
+
+    let expected = BTreeMap::from([
+        (
+            "SHELF_DB_URL_EU".to_owned(),
+            Some("https://eu.example/".to_owned()),
+        ),
+        (
+            "SHELF_DB_URL_US".to_owned(),
+            Some("https://us.example/".to_owned()),
+        ),
+    ]);
+    assert_eq!(changes(&command), expected);
+    let prefix = name("SHELF_DB_URL");
+    let members: Vec<(&str, &str)> = environment
+        .members(&prefix)
+        .map(|(key, name)| (key, name.as_str()))
+        .collect();
+    assert_eq!(
+        members,
+        [("EU", "SHELF_DB_URL_EU"), ("US", "SHELF_DB_URL_US")]
+    );
+    assert_eq!(environment.members(&name("SHELF_OTHER")).count(), 0);
+}

@@ -326,3 +326,71 @@ source = "setting"
 
     assert_eq!(compare("Shelf", "starmap.toml", &fields, spec, &[]), Ok(()));
 }
+
+/// The spec of families in `crates/starmap/tests/example/regions.toml`.
+const REGIONS: &str = include_str!("../../starmap/tests/example/regions.toml");
+
+/// A struct that reads every variable and family of [`REGIONS`].
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/regions.toml")]
+struct Regions {
+    #[starmap("SHELF_STAGE")]
+    _stage: Stage,
+    #[starmap(family = "SHELF_DB_URL")]
+    _databases: starmap::Family<url::Url>,
+    #[starmap(family = "SHELF_TOKEN")]
+    _tokens: starmap::Family<starmap::Secret>,
+}
+
+/// A struct that reads the database family as text and skips the tokens.
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/regions.toml")]
+struct WrongRegions {
+    #[starmap("SHELF_STAGE")]
+    _stage: Stage,
+    #[starmap(family = "SHELF_DB_URL")]
+    _databases: starmap::Family<bool>,
+    #[starmap(family = "SHELF_TENANT")]
+    _tenants: starmap::Family<String>,
+}
+
+#[test]
+fn a_family_field_that_matches_its_family_agrees() {
+    check::<Regions>();
+}
+
+#[test]
+fn a_family_field_of_the_wrong_type_an_undeclared_family_and_an_unread_family_are_reported() {
+    let actual = report::<WrongRegions>(REGIONS, &[]);
+
+    assert!(actual.contains("disagree in 3 places:"), "{actual}");
+    assert!(
+        actual.contains(
+            "SHELF_DB_URL  starmap.toml types it as a url, and the field type bool holds a boolean"
+        ),
+        "{actual}"
+    );
+    assert!(
+        actual.contains(
+            "SHELF_TENANT  the struct reads it as a family, and starmap.toml declares no family with that prefix"
+        ),
+        "{actual}"
+    );
+    assert!(
+        actual.contains(
+            "SHELF_TOKEN   starmap.toml declares the family, and the struct neither reads it nor has an Allow entry for it"
+        ),
+        "{actual}"
+    );
+}
+
+#[test]
+fn an_allow_entry_excuses_a_family_the_struct_does_not_read() {
+    let fields = &Regions::FIELDS[..2];
+    let allow = [Allow::new("SHELF_TOKEN", "only a dependency reads it")];
+
+    assert_eq!(
+        compare("Regions", "starmap.toml", fields, REGIONS, &allow),
+        Ok(())
+    );
+}

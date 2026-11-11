@@ -64,6 +64,10 @@ pub const SPEC_GROUP_UNDECLARED: Code = Code::new("starmap", "spec", "group_unde
 /// A group lists fewer than two variables, repeats one, shares one with
 /// another group, or lists one with a default or a generated value.
 pub const SPEC_BAD_GROUP: Code = Code::new("starmap", "spec", "bad_group");
+/// A family has a default, is open and required, lists no keys, repeats or
+/// overlong keys, has a source that needs a bind per member, or shares a
+/// member with a variable or another family.
+pub const SPEC_BAD_FAMILY: Code = Code::new("starmap", "spec", "bad_family");
 /// `explain` names a variable that the spec does not declare.
 pub const VARIABLE_UNKNOWN: Code = Code::new("starmap", "variable", "unknown");
 /// `check` finds source code that reads a variable the spec does not
@@ -92,6 +96,9 @@ pub const VARIABLE_MISSING: Code = Code::new("starmap", "variable", "missing");
 pub const VARIABLE_INVALID: Code = Code::new("starmap", "variable", "invalid");
 /// A variable is unset, and other members of its group are set.
 pub const GROUP_INCOMPLETE: Code = Code::new("starmap", "group", "incomplete");
+/// A variable's name is the prefix of a listed family and a key that the
+/// family does not list.
+pub const FAMILY_UNLISTED_KEY: Code = Code::new("starmap", "family", "unlisted_key");
 /// No provider of a provided variable's kind is present, and nothing else
 /// gives it a value.
 pub const BIND_NO_PROVIDER: Code = Code::new("starmap", "bind", "no_provider");
@@ -135,6 +142,7 @@ pub const ALL: &[&Code] = &[
     &SPEC_ENUMERATION_UNDECLARED,
     &SPEC_GROUP_UNDECLARED,
     &SPEC_BAD_GROUP,
+    &SPEC_BAD_FAMILY,
     &VARIABLE_UNKNOWN,
     &VARIABLE_UNDECLARED,
     &SOURCE_UNREADABLE,
@@ -148,6 +156,7 @@ pub const ALL: &[&Code] = &[
     &VARIABLE_MISSING,
     &VARIABLE_INVALID,
     &GROUP_INCOMPLETE,
+    &FAMILY_UNLISTED_KEY,
     &BIND_NO_PROVIDER,
     &BIND_NO_PLACE,
     &SECRET_UNBOUND,

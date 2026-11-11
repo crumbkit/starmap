@@ -46,21 +46,32 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
     let mut reads = Vec::new();
     let mut rules = Vec::new();
     for field in fields {
-        let FieldAttribute { name, check } = field_attribute(field)?;
+        let member = &field.ident;
+        let (name, check) = match field_attribute(field)? {
+            FieldAttribute::Family { prefix } => {
+                let inner = family_inner(&field.ty).ok_or_else(|| {
+                    syn::Error::new(field.ty.span(), "a field with #[starmap(family = \"PREFIX\")] has the type starmap::Family<T>")
+                })?;
+                let rust_type = type_text(inner);
+                let description = quote_spanned! {inner.span()=>
+                    ::starmap::Field::of_family::<#inner>(#prefix, #rust_type)
+                };
+                reads.push(quote! {
+                    #member: ::starmap::__private::read_family::<#inner>(environment, #prefix)?
+                });
+                described.push(description);
+                continue;
+            }
+            FieldAttribute::Variable { name, check } => (name, check),
+        };
         let (inner, presence, method) = match option_inner(&field.ty) {
             Some(inner) => (inner, quote!(Maybe), quote!(read)),
             None => (&field.ty, quote!(Always), quote!(require)),
         };
-        let rust_type: String = inner
-            .to_token_stream()
-            .to_string()
-            .chars()
-            .filter(|character| !character.is_whitespace())
-            .collect();
+        let rust_type = type_text(inner);
         let description = quote_spanned! {inner.span()=>
             ::starmap::Field::new::<#inner>(#name, #rust_type, ::starmap::Presence::#presence)
         };
-        let member = &field.ident;
         reads.push(quote! {
             #member: #description.#method::<#inner>(environment)?
         });
@@ -146,20 +157,42 @@ fn spec_path(input: &DeriveInput) -> syn::Result<LitStr> {
     Ok(spec.unwrap_or_else(|| LitStr::new(DEFAULT_SPEC, input.ident.span())))
 }
 
-/// What a field's `#[starmap(...)]` attribute says: the variable's name,
-/// and the path of the application's check, when it names one.
-struct FieldAttribute {
-    /// The name of the variable the field reads.
-    name: LitStr,
-    /// The function that `check = <path>` names.
-    check: Option<Path>,
+/// What a field's `#[starmap(...)]` attribute says: the variable's name
+/// with the path of the application's check, when it names one, or the
+/// prefix of the family the field reads.
+enum FieldAttribute {
+    /// `#[starmap("NAME")]` or `#[starmap("NAME", check = path)]`.
+    Variable {
+        /// The name of the variable the field reads.
+        name: LitStr,
+        /// The function that `check = <path>` names.
+        check: Option<Path>,
+    },
+    /// `#[starmap(family = "PREFIX")]`.
+    Family {
+        /// The prefix of the family the field reads.
+        prefix: LitStr,
+    },
 }
 
 /// The message for a field attribute that does not parse.
-const FIELD_ATTRIBUTE: &str = "each field names its variable with one #[starmap(\"NAME\")] or #[starmap(\"NAME\", check = path)]";
+const FIELD_ATTRIBUTE: &str = "each field names its variable with one #[starmap(\"NAME\")] or #[starmap(\"NAME\", check = path)], or its family with #[starmap(family = \"PREFIX\")]";
 
 impl Parse for FieldAttribute {
     fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
+        if input.peek(syn::Ident) {
+            let key = input.parse::<syn::Ident>()?;
+            if key != "family" {
+                return Err(syn::Error::new(key.span(), FIELD_ATTRIBUTE));
+            }
+            input.parse::<Token![=]>()?;
+            let prefix = input.parse::<LitStr>()?;
+            input.parse::<Option<Token![,]>>()?;
+            if !input.is_empty() {
+                return Err(input.error(FIELD_ATTRIBUTE));
+            }
+            return Ok(Self::Family { prefix });
+        }
         let name = input.parse::<LitStr>()?;
         let mut check = None;
         if input.parse::<Option<Token![,]>>()?.is_some() && !input.is_empty() {
@@ -174,8 +207,22 @@ impl Parse for FieldAttribute {
         if !input.is_empty() {
             return Err(input.error(FIELD_ATTRIBUTE));
         }
-        Ok(Self { name, check })
+        Ok(Self::Variable { name, check })
     }
+}
+
+/// Returns the text of `ty` without whitespace, such as `url::Url`.
+fn type_text(ty: &Type) -> String {
+    ty.to_token_stream()
+        .to_string()
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect()
+}
+
+/// Returns `T` when `ty` is `Family<T>`, under any path.
+fn family_inner(ty: &Type) -> Option<&Type> {
+    generic_inner(ty, "Family")
 }
 
 /// Returns what the one `#[starmap(...)]` attribute on `field` says.
@@ -192,6 +239,11 @@ fn field_attribute(field: &syn::Field) -> syn::Result<FieldAttribute> {
 
 /// Returns `T` when `ty` is `Option<T>`.
 fn option_inner(ty: &Type) -> Option<&Type> {
+    generic_inner(ty, "Option")
+}
+
+/// Returns `T` when `ty` is a path whose last segment is `outer<T>`.
+fn generic_inner<'t>(ty: &'t Type, outer: &str) -> Option<&'t Type> {
     let Type::Path(TypePath {
         qself: None, path, ..
     }) = ty
@@ -203,7 +255,7 @@ fn option_inner(ty: &Type) -> Option<&Type> {
         return None;
     };
     match (
-        segment.ident == "Option",
+        segment.ident == outer,
         arguments.args.first(),
         arguments.args.len(),
     ) {

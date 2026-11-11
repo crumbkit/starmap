@@ -1,0 +1,17 @@
+# A group lists a member of a family, and families cannot join groups.
+[groups.region]
+variables = ["SHELF_REGION", "SHELF_DB_URL_EU"]
+
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_REGION]
+purpose = "The region shelf serves."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"

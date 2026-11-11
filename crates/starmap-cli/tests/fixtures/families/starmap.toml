@@ -1,0 +1,23 @@
+# src reads a member of an open family, a listed member of a listed family,
+# and a key that the listed family does not list.
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[families.SHELF_TOKEN]
+purpose = "The API token of one tenant."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "setting"
+keys = ["ACME", "GLOBEX"]
+
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"

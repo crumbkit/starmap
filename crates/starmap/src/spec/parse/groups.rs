@@ -4,7 +4,7 @@
 use std::ops::Range;
 
 use super::{Field, Kind, Parser, entries, span};
-use crate::spec::{Group, GroupName, SourceKind, Unset, Variable};
+use crate::spec::{FamilyDeclaration, Group, GroupName, SourceKind, Unset, Variable};
 use crate::{Mode, Name};
 
 #[cfg(test)]
@@ -19,13 +19,14 @@ type Members = Vec<(Name, GroupName)>;
 
 impl Parser {
     /// Parses the `[groups]` table into its groups, in name order, and
-    /// checks each member against the `declared` variables, their sources
-    /// and the parsed `variables`.
+    /// checks each member against the `declared` variables, their sources,
+    /// the parsed `variables` and the `families`, which no group may name.
     pub(super) fn groups(
         &mut self,
         field: &Field<'_>,
         declared: &[(Name, Option<SourceKind>)],
         variables: &[(Name, Variable)],
+        families: &[FamilyDeclaration],
     ) -> Vec<Group> {
         let Some(table) = self.table(field) else {
             return Vec::new();
@@ -38,7 +39,12 @@ impl Parser {
                 key,
                 item,
             };
-            if let Some(group) = self.group(&group, declared, variables, &mut members) {
+            let declarations = Declarations {
+                declared,
+                variables,
+                families,
+            };
+            if let Some(group) = self.group(&group, &declarations, &mut members) {
                 groups.push(group);
             }
         }
@@ -50,8 +56,7 @@ impl Parser {
     fn group(
         &mut self,
         field: &Field<'_>,
-        declared: &[(Name, Option<SourceKind>)],
-        variables: &[(Name, Variable)],
+        declarations: &Declarations<'_>,
         members: &mut Members,
     ) -> Option<Group> {
         let name = match field.key.get().parse::<GroupName>() {
@@ -79,7 +84,7 @@ impl Parser {
         }
         let mut kept: Vec<Name> = Vec::new();
         for (member, at) in listed {
-            let problem = member_problem(&member, &kept, declared, variables, members);
+            let problem = member_problem(&member, &kept, declarations, members);
             if let Some((kind, rule)) = problem {
                 let message = format!("`{}` lists {:?}{rule}", list.path, member.as_str());
                 self.report(at, kind, message);
@@ -130,19 +135,49 @@ impl Parser {
     }
 }
 
+/// What the file declares, which a group's members are checked against:
+/// each declared name with its source word, the variables that parsed and
+/// the families.
+struct Declarations<'d> {
+    declared: &'d [(Name, Option<SourceKind>)],
+    variables: &'d [(Name, Variable)],
+    families: &'d [FamilyDeclaration],
+}
+
 /// Returns the kind and the rest of the message of the first rule that
 /// `member` breaks, after its group has listed `kept`.
 fn member_problem(
     member: &Name,
     kept: &[Name],
-    declared: &[(Name, Option<SourceKind>)],
-    variables: &[(Name, Variable)],
+    declarations: &Declarations<'_>,
     members: &Members,
 ) -> Option<(Kind, String)> {
+    let Declarations {
+        declared,
+        variables,
+        families,
+    } = declarations;
     if kept.contains(member) {
         return Some((
             Kind::BadGroup,
             " twice, and a group lists each variable once".to_owned(),
+        ));
+    }
+    let family = families
+        .iter()
+        .find(|family| family.prefix() == member || family.key_of(member).is_some());
+    if let Some(family) = family {
+        let what = if family.prefix() == member {
+            "the prefix of"
+        } else {
+            "a member of"
+        };
+        return Some((
+            Kind::BadGroup,
+            format!(
+                ", which is {what} the family {}, and families cannot join groups",
+                family.prefix()
+            ),
         ));
     }
     let Some((_, kind)) = declared.iter().find(|(declared, _)| declared == member) else {

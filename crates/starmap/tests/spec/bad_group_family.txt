@@ -1,0 +1,4 @@
+starmap::spec::bad_group: `groups.region.variables` lists "SHELF_DB_URL_EU", which is a member of the family SHELF_DB_URL, and families cannot join groups
+  at: 3:30 to 3:47, bytes 116..133
+   3 | variables = ["SHELF_REGION", "SHELF_DB_URL_EU"]
+     |                              ^^^^^^^^^^^^^^^^^

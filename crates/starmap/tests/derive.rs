@@ -609,6 +609,94 @@ fn a_default_that_fails_the_check_refuses_the_load() {
     );
 }
 
+/// A struct over a spec of families.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/regions.toml")]
+struct Regions {
+    #[starmap("SHELF_STAGE")]
+    _stage: Stage,
+    #[starmap(family = "SHELF_DB_URL")]
+    databases: starmap::Family<url::Url>,
+    #[starmap(family = "SHELF_TOKEN")]
+    tokens: starmap::Family<Secret>,
+}
+
+#[test]
+fn the_derive_reads_members_into_a_family_and_reports_them_in_key_order() {
+    let regions = Regions::from_vars(vars(&[
+        ("SHELF_DB_URL_US", "https://us.example/"),
+        ("SHELF_DB_URL_EU", "https://eu.example/"),
+        ("SHELF_TOKEN_ACME", "abc"),
+    ]))
+    .expect("the members fit the spec");
+
+    assert_eq!(regions.databases.len(), 2);
+    assert_eq!(regions.databases.keys().collect::<Vec<_>>(), ["EU", "US"]);
+    assert_eq!(
+        regions.databases.get("US").map(url::Url::as_str),
+        Some("https://us.example/")
+    );
+    assert_eq!(
+        regions
+            .databases
+            .iter()
+            .map(|(key, url)| (key, url.as_str()))
+            .collect::<Vec<_>>(),
+        [("EU", "https://eu.example/"), ("US", "https://us.example/")]
+    );
+    assert_eq!(regions.tokens.keys().collect::<Vec<_>>(), ["ACME"]);
+    assert!(regions.tokens.get("GLOBEX").is_none());
+}
+
+#[test]
+fn a_family_field_is_described_by_its_prefix_and_the_type_of_its_values() {
+    let field = Regions::FIELDS[1];
+
+    assert_eq!(field.name, "SHELF_DB_URL");
+    assert!(field.family);
+    assert_eq!(field.rust_type, "url::Url");
+    assert_eq!(
+        (field.shape, field.presence, field.show),
+        (Shape::Url, Presence::Always, Show::Shown)
+    );
+    assert!(!Regions::FIELDS[0].family);
+}
+
+#[test]
+fn the_derive_refuses_an_unlisted_key_with_the_text_of_the_check() {
+    let error = Regions::from_vars(vars(&[("SHELF_TOKEN_INITECH", "abc")]))
+        .expect_err("INITECH is not a listed key");
+
+    assert_eq!(
+        error.to_string(),
+        "SHELF_TOKEN_INITECH is set, and the family SHELF_TOKEN lists only the keys ACME and GLOBEX"
+    );
+}
+
+#[test]
+fn a_required_listed_family_that_passes_holds_every_listed_key() {
+    let regions = Regions::from_vars(vars(&[
+        ("SHELF_STAGE", "prod"),
+        ("SHELF_TOKEN_ACME", "abc"),
+        ("SHELF_TOKEN_GLOBEX", "def"),
+    ]))
+    .expect("every listed key is set");
+    let missing = Regions::from_vars(vars(&[
+        ("SHELF_STAGE", "prod"),
+        ("SHELF_TOKEN_ACME", "abc"),
+    ]))
+    .expect_err("GLOBEX is required in production");
+
+    assert_eq!(
+        regions.tokens.keys().collect::<Vec<_>>(),
+        ["ACME", "GLOBEX"]
+    );
+    assert_eq!(
+        missing.to_string(),
+        "SHELF_TOKEN_GLOBEX is required in production mode and has no value"
+    );
+}
+
 #[test]
 fn unsupported_field_types_and_misuses_fail_to_compile_with_a_clear_message() {
     trybuild::TestCases::new().compile_fail("tests/compile_fail/*.rs");

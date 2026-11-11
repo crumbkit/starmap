@@ -294,3 +294,44 @@ fn the_canonical_form_writes_groups_after_the_named_enumerations() {
         "{canonical}"
     );
 }
+
+/// A family table of mirror regions, which no group may name.
+const REGIONS: &str = "[families.SHELF_MIRROR_REGION]\npurpose = \"The mirror of one region.\"\n\
+                       type = \"url\"\nunset = \"optional\"\nshow = \"shown\"\nsource = \"setting\"\n";
+
+#[test]
+fn a_group_that_lists_a_member_of_a_family_fails_with_bad_group_before_group_undeclared() {
+    let text = format!(
+        "{}\n{REGIONS}",
+        MIRROR.replace("\"SHELF_MIRROR_SECRET\"]", "\"SHELF_MIRROR_REGION_EU\"]")
+    );
+
+    assert_eq!(
+        problems(&text),
+        [(
+            SpecProblemKind::BadGroup,
+            "`groups.mirror.variables` lists \"SHELF_MIRROR_REGION_EU\", which is a member of \
+             the family SHELF_MIRROR_REGION, and families cannot join groups"
+                .to_owned()
+        )]
+    );
+}
+
+#[test]
+fn a_group_that_lists_the_prefix_of_a_family_fails_with_bad_group() {
+    let text = format!(
+        "{}\n{REGIONS}",
+        MIRROR.replace("\"SHELF_MIRROR_SECRET\"]", "\"SHELF_MIRROR_REGION\"]")
+    );
+
+    let found = problems(&text);
+
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, SpecProblemKind::BadGroup);
+    assert!(
+        found[0]
+            .1
+            .contains("the prefix of the family SHELF_MIRROR_REGION"),
+        "{found:?}"
+    );
+}

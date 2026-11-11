@@ -4,18 +4,20 @@
 use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Write as _};
 
-use crate::env::Held;
+use crate::env::{Held, Member};
 use crate::field::Rule;
 use crate::{
-    Bindings, Bound, Environment, GroupName, Mode, Name, Secret, Show, Spec, Type, TypeError,
-    Unset, Variable,
+    Bindings, Bound, Environment, FamilyDeclaration, GroupName, Mode, Name, Secret, Show, Spec,
+    Type, TypeError, Unset, Variable,
 };
 
 #[cfg(test)]
 mod tests;
 
-/// Binds each variable of `vars` that `spec` declares, and ignores every
-/// other variable. A withheld variable's value is held as a
+/// Binds each variable of `vars` that `spec` declares, and each name that
+/// is the prefix of a family, an underscore and a key, and ignores every
+/// other variable. A member of a listed family whose key the family does
+/// not list is bound too, so [`check`] refuses it. A withheld variable's value is held as a
 /// [`Secret`], or as [`Bound::NotUnicode`] when it is not Unicode.
 /// A shown variable's value is bound as it is, and [`check`] refuses one
 /// that is not Unicode unless the variable's type is a path. A name that
@@ -35,13 +37,14 @@ pub fn capture(spec: &Spec, vars: impl IntoIterator<Item = (OsString, OsString)>
         let Some(name) = key.to_str().and_then(|key| key.parse::<Name>().ok()) else {
             continue;
         };
-        let Some(variable) = spec.variable(&name) else {
+        let Some(declaration) = spec.declared(&name) else {
             continue;
         };
         if raw.is_empty() {
             continue;
         }
-        bindings.bind(name, variable.capture(raw));
+        let bound = declaration.variable().capture(raw);
+        bindings.bind(name, bound);
     }
     bindings
 }
@@ -130,6 +133,13 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 /// production gives the mode variable two findings: `Invalid`, and
 /// `ModeMismatch { decided: Local }`.
 ///
+/// Each member of a family that `bindings` binds is checked in the
+/// family's type and show after the declared variables, family by family
+/// in prefix order and member by member in name order, and a finding names
+/// the member. A member whose key a listed family does not list gets
+/// [`Problem::UnlistedKey`]. When a listed family is required in `mode`,
+/// each listed key whose member is unset gets [`Problem::Missing`].
+///
 /// The verdict is [`Verdict::Ready`] only when no variable has a finding,
 /// and otherwise [`Verdict::Refused`] with each finding in the spec's order
 /// and a mode mismatch last (BASE-44).
@@ -182,7 +192,24 @@ pub(crate) fn check_with(spec: &Spec, bindings: &Bindings, mode: Mode, rules: &[
             }
         }
     }
-    let environment = Environment::new(mode, entries);
+    let mut members = Vec::new();
+    let mut place = spec.variables().count();
+    for family in spec.families() {
+        let (checked, found) = check_family(family, bindings, mode);
+        for (name, value, key) in checked {
+            members.push(Member {
+                prefix: family.prefix().clone(),
+                key,
+                name: name.clone(),
+            });
+            entries.push((name, Some(value)));
+        }
+        for finding in found {
+            findings.push((place, finding));
+            place += 1;
+        }
+    }
+    let environment = Environment::new(mode, entries, members);
     for rule in rules {
         let Ok(name) = rule.name.parse::<Name>() else {
             continue;
@@ -222,6 +249,58 @@ pub(crate) fn check_with(spec: &Spec, bindings: &Bindings, mode: Mode, rules: &[
             modes: spec.mode().is_some(),
         })
     }
+}
+
+/// Checks each member of `family` that `bindings` binds, in name order, in
+/// the family's type and show, and returns each member that holds a value
+/// with its key, and each finding in name order. A member whose key a
+/// listed family does not list gets [`Problem::UnlistedKey`], and when the
+/// family is listed and required in `mode`, each listed key whose member
+/// has no value and no finding of its own gets [`Problem::Missing`].
+fn check_family(
+    family: &FamilyDeclaration,
+    bindings: &Bindings,
+    mode: Mode,
+) -> (Vec<(Name, Held, String)>, Vec<Finding>) {
+    let variable = family.variable();
+    let mut checked = Vec::new();
+    let mut findings = Vec::new();
+    for (name, bound) in bindings.iter() {
+        let Some(key) = family.key_of(name) else {
+            continue;
+        };
+        if !family.lists(key) {
+            findings.push(Finding {
+                name: name.clone(),
+                problem: Problem::UnlistedKey {
+                    family: family.prefix().clone(),
+                    keys: family.keys().unwrap_or_default().to_vec(),
+                },
+                value: None,
+            });
+            continue;
+        }
+        match read(variable, bound) {
+            Ok(Some(value)) => checked.push((name.clone(), value, key.to_owned())),
+            Ok(None) => {}
+            Err(problem) => findings.push(finding(name, variable, Some(bound), problem)),
+        }
+    }
+    if let (Some(keys), Unset::Required) = (family.keys(), variable.unset().in_mode(mode)) {
+        for name in keys.iter().filter_map(|key| family.member(key)) {
+            let reported = checked.iter().any(|(held, ..)| *held == name)
+                || findings.iter().any(|finding| finding.name == name);
+            if !reported {
+                findings.push(Finding {
+                    name,
+                    problem: Problem::Missing { mode },
+                    value: None,
+                });
+            }
+        }
+    }
+    findings.sort_by(|left, right| left.name.cmp(&right.name));
+    (checked, findings)
 }
 
 /// One declared variable with the result of holding its value: the value,
@@ -390,6 +469,9 @@ impl fmt::Display for Refusals {
                         Names(set)
                     )
                 }
+                Problem::UnlistedKey { family, keys } => {
+                    write!(formatter, "{}", UnlistedKey { name, family, keys })
+                }
             }?;
         }
         Ok(())
@@ -520,6 +602,42 @@ pub enum Problem {
         /// The members of the group that are set, in the group's order.
         set: Vec<Name>,
     },
+    /// The variable's name is the prefix of a listed family, an underscore
+    /// and a key that the family does not list.
+    UnlistedKey {
+        /// The family's prefix.
+        family: Name,
+        /// The keys the family lists, in key order.
+        keys: Vec<String>,
+    },
+}
+
+/// The text of a [`Problem::UnlistedKey`] finding, such as
+/// `SHELF_TOKEN_ACMEE is set, and the family SHELF_TOKEN lists only the
+/// keys ACME and GLOBEX`.
+struct UnlistedKey<'a> {
+    /// The member's name.
+    name: &'a Name,
+    /// The family's prefix.
+    family: &'a Name,
+    /// The keys the family lists.
+    keys: &'a [String],
+}
+
+impl fmt::Display for UnlistedKey<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let keys: Vec<&str> = self.keys.iter().map(String::as_str).collect();
+        let (noun, joined) = match keys.split_last() {
+            Some((last, [])) => ("key", (*last).to_owned()),
+            Some((last, rest)) => ("keys", format!("{} and {last}", rest.join(", "))),
+            None => ("keys", String::new()),
+        };
+        write!(
+            formatter,
+            "{} is set, and the family {} lists only the {noun} {joined}",
+            self.name, self.family
+        )
+    }
 }
 
 /// Names written as `A`, `A and B`, or `A, B and C`.

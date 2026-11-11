@@ -1231,3 +1231,46 @@ fn checking_binds_never_asks_a_provider_for_a_value() {
     assert!(ports.asked.borrow().is_empty());
     assert!(urls.asked.borrow().is_empty());
 }
+
+#[test]
+fn each_member_of_a_family_keeps_the_value_the_caller_gives() {
+    let spec = Spec::parse(
+        r#"
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by the region's code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[families.SHELF_TOKEN]
+purpose = "The API token of one tenant."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "inherited"
+"#,
+    )
+    .unwrap();
+    let vars = [
+        ("SHELF_DB_URL_EU", "https://eu.example/"),
+        ("SHELF_TOKEN_ACME", "abc"),
+        ("SHELF_OTHER", "x"),
+    ]
+    .map(|(key, value)| (OsString::from(key), OsString::from(value)));
+    let caller = starmap::capture(&spec, vars);
+    let context = Context::new(places(), &caller, later());
+
+    let resolution = resolve(&spec, Mode::Local, &context);
+
+    assert_eq!(
+        bound(&resolution, "SHELF_DB_URL_EU").as_deref(),
+        Some("plain:https://eu.example/")
+    );
+    assert_eq!(
+        bound(&resolution, "SHELF_TOKEN_ACME").as_deref(),
+        Some("secret:abc")
+    );
+    assert_eq!(bound(&resolution, "SHELF_OTHER"), None);
+    assert!(resolution.failures.is_empty());
+}
