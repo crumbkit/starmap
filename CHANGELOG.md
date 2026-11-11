@@ -15,14 +15,15 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a read of an undeclared variable finds it unset. The built-in variables
   are a fixed list per platform of names that the operating system and
   common tools need: `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`,
-  `LANG`, every name that starts with `LC_`, `TERM` and `TZ` on Unix, and
+  `LANG`, the locale categories of POSIX and glibc such as `LC_ALL` and
+  `LC_CTYPE`, `TERM` and `TZ` on Unix, and
   `PATH`, `PATHEXT`, `SystemRoot`, `SystemDrive`, `windir`, `ComSpec`,
   `TEMP`, `TMP`, `USERPROFILE`, `USERNAME`, `APPDATA` and `LOCALAPPDATA`
   on Windows. A file may declare a built-in name to give it a type.
   `starmap explain` without a name lists the built-in variables in its
   note. The flag is off by default, and `starmap run` without it starts
   the program as before. The Rust API gains
-  `Environment::apply_only_declared`, `BuiltIns` and `BuiltIn`, so a host
+  `Environment::apply_only_declared` and `BuiltIns`, so a host
   program can start a child the same way.
 - `starmap check` reads a name that `format!` builds inside `var(...)` or
   `var_os(...)`, with or without `&` and a path such as `std::format!`. A

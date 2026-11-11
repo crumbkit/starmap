@@ -411,10 +411,10 @@ changes group as a change of the field `group`.
 A built-in variable is a variable that `starmap run --only-declared` passes
 from the shell to the program without a declaration, because the operating
 system and common tools need it. The list is fixed in starmap, one list per
-platform, and no `starmap.toml` adds to it. The Rust API names one
-`starmap::BuiltIn` and a platform's list `starmap::BuiltIns`, with
-`BuiltIns::UNIX`, `BuiltIns::WINDOWS` and `BuiltIns::current`, the list of
-the platform that starmap is built for.
+platform, and no `starmap.toml` adds to it. The Rust API names a
+platform's list `starmap::BuiltIns`, with `BuiltIns::UNIX`,
+`BuiltIns::WINDOWS` and `BuiltIns::current`, the list of the platform that
+starmap is built for.
 
 On Unix systems, macOS and Linux among them, the built-in variables are:
 
@@ -427,9 +427,13 @@ On Unix systems, macOS and Linux among them, the built-in variables are:
 | `SHELL` | Tools that start a shell for the person start the one it names. |
 | `TMPDIR` | Temporary files go to the directory it names, which macOS sets per user. |
 | `LANG` | It sets the locale, which decides the character encoding and the language of messages. |
-| `LC_*` | Each name that starts with `LC_`, such as `LC_ALL` and `LC_CTYPE`, sets one part of the locale and overrides `LANG`. |
+| `LC_ALL`, `LC_COLLATE`, `LC_CTYPE`, `LC_MESSAGES`, `LC_MONETARY`, `LC_NUMERIC`, `LC_TIME` | Each is a locale category of POSIX, which sets one part of the locale and overrides `LANG`. |
+| `LC_ADDRESS`, `LC_IDENTIFICATION`, `LC_MEASUREMENT`, `LC_NAME`, `LC_PAPER`, `LC_TELEPHONE` | Each is a locale category that glibc adds. |
 | `TERM` | The program holds the terminal, and it names the terminal's kind and what it can draw. |
 | `TZ` | The C library reads the time zone from it, so local times stay the same. |
+
+Any other name that starts with `LC_`, such as `LC_TERMINAL`, is not built
+in.
 
 On Windows, where a name matches in any ASCII case, they are:
 
@@ -448,14 +452,21 @@ On Windows, where a name matches in any ASCII case, they are:
 | `APPDATA` | Tools keep each person's roaming configuration under the directory it names. |
 | `LOCALAPPDATA` | Tools keep each person's caches and local data under the directory it names. |
 
+The Windows list is not tested against a real child process, because the
+project's CI runs its tests on Linux and macOS only. A program on Windows
+may need a variable that the list leaves out, such as `ProgramFiles`, and
+the application then declares it with `source = "inherited"`.
+
 `starmap run --only-declared -- <program>` starts the program with an
 environment of only declared variables: each declared variable that has a
 value, each member of a declared family that is set, and each built-in
 variable that the shell sets. The program inherits nothing else, so a read
-of an undeclared variable finds it unset, and a test suite run this way
-fails where the code reads a variable that the file does not declare. An
-application that needs another variable of the shell, such as
-`SSH_AUTH_SOCK`, declares it with `source = "inherited"`. A file may
+of an undeclared variable finds it unset, and a test that depends on that
+variable fails. Code that falls back to a default for an unset variable
+still passes, so `starmap check` is the command that finds the undeclared
+variables that `src` reads. An application that needs another variable of
+the shell, such as `SSH_AUTH_SOCK`, declares it with
+`source = "inherited"`. A file may
 declare a built-in name to give it a type, and the program then receives
 the checked value, or no value when the check leaves the variable unset.
 `starmap run` adds `TRACEPARENT` and `TRACESTATE` when its usage log

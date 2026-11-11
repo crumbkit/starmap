@@ -10,8 +10,8 @@ use crumbkit::{Batch, Document, Failure, Recovery, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{
-    Bindings, Bound, BuiltIn, BuiltIns, Cache, Choices, Mode, Name, SecretRef, Source, Spec, Type,
-    Unset, Value, Variable,
+    Bindings, Bound, BuiltIns, Cache, Choices, Mode, Name, SecretRef, Source, Spec, Type, Unset,
+    Value, Variable,
 };
 
 use crate::cli::{ExplainArgs, SpecFile};
@@ -277,7 +277,7 @@ pub(crate) fn explain(
 /// `starmap run --only-declared` passes to the program without a
 /// declaration.
 fn built_ins_sentence(built_ins: &BuiltIns) -> String {
-    let names: Vec<&str> = built_ins.iter().map(BuiltIn::pattern).collect();
+    let names: Vec<&str> = built_ins.names().collect();
     format!(
         "starmap run --only-declared also passes these built-in variables from the shell: {}.",
         names.join(", ")

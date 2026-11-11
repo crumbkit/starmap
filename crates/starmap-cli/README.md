@@ -30,11 +30,12 @@ variable of the shell, unless `--only-declared` is passed: the program then
 receives only the declared variables that have a value, the members of
 declared families that are set, and a fixed list of built-in variables that
 the operating system and common tools need, such as `PATH` and `HOME`,
-which `starmap explain` lists. A test suite run with `--only-declared`
-fails where the code reads a variable that the file does not declare. A `starmap.toml` that holds
-`spec = "config/environment.toml"` points to the file that declares the
-variables, with optional `src` and `dotenv` paths beside it, and every
-command follows it.
+which `starmap explain` lists. A read of an undeclared variable then finds
+it unset, so a test that depends on that variable fails, and
+`starmap check` is the command that finds the undeclared variables that
+`src` reads. A `starmap.toml` that holds `spec = "config/environment.toml"`
+points to the file that declares the variables, with optional `src` and
+`dotenv` paths beside it, and every command follows it.
 [docs/commands.md](https://github.com/crumbkit/starmap/blob/main/crates/starmap-cli/docs/commands.md) is the
 reference of every command. The repository's
 [README](https://github.com/crumbkit/starmap) describes the project.

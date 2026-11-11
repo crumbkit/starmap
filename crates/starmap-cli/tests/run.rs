@@ -378,3 +378,30 @@ fn only_declared_passes_a_default_and_each_member_of_a_family_that_is_set() {
     .code(0)
     .stdout_eq("false https://eu.example/ unset");
 }
+
+#[test]
+fn only_declared_leaves_a_declared_built_in_variable_unset_when_the_check_does() {
+    // The spec declares the built-in name TZ as optional, and an empty
+    // value counts as unset, so the check leaves TZ unset although the
+    // shell sets it. HOME is built in and undeclared, so it still passes.
+    let root = tempfile::tempdir().unwrap();
+    let spec = format!(
+        "{SPEC}\n[variables.TZ]\npurpose = \"The time zone shelf prints dates in.\"\ntype = \"string\"\nunset = \"optional\"\nshow = \"shown\"\nsource = \"inherited\"\n"
+    );
+    std::fs::write(root.path().join("starmap.toml"), spec).unwrap();
+    starmap(
+        root.path(),
+        &[
+            "run",
+            "--no-input",
+            "--only-declared",
+            "--",
+            "sh",
+            "-c",
+            r#"printf '%s %s' "${TZ-unset}" "$HOME""#,
+        ],
+        &[("TZ", ""), ("HOME", "/home/shelf")],
+    )
+    .code(0)
+    .stdout_eq("unset /home/shelf");
+}

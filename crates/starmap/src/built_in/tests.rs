@@ -5,25 +5,41 @@ use std::ffi::OsStr;
 
 use super::BuiltIns;
 
-/// Returns the patterns of `built_ins`, in the order the list holds them.
-fn patterns(built_ins: &BuiltIns) -> Vec<&'static str> {
-    built_ins.iter().map(super::BuiltIn::pattern).collect()
-}
-
 #[test]
-fn the_unix_list_holds_exactly_the_names_the_documentation_states() {
+fn the_unix_list_names_the_basic_variables_and_each_locale_category() {
     assert_eq!(
-        patterns(&BuiltIns::UNIX),
+        BuiltIns::UNIX.names().collect::<Vec<_>>(),
         [
-            "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "LC_*", "TERM", "TZ",
+            "PATH",
+            "HOME",
+            "USER",
+            "LOGNAME",
+            "SHELL",
+            "TMPDIR",
+            "LANG",
+            "LC_ALL",
+            "LC_COLLATE",
+            "LC_CTYPE",
+            "LC_MESSAGES",
+            "LC_MONETARY",
+            "LC_NUMERIC",
+            "LC_TIME",
+            "LC_ADDRESS",
+            "LC_IDENTIFICATION",
+            "LC_MEASUREMENT",
+            "LC_NAME",
+            "LC_PAPER",
+            "LC_TELEPHONE",
+            "TERM",
+            "TZ",
         ]
     );
 }
 
 #[test]
-fn the_windows_list_holds_exactly_the_names_the_documentation_states() {
+fn the_windows_list_names_the_variables_that_windows_programs_need() {
     assert_eq!(
-        patterns(&BuiltIns::WINDOWS),
+        BuiltIns::WINDOWS.names().collect::<Vec<_>>(),
         [
             "PATH",
             "PATHEXT",
@@ -42,15 +58,6 @@ fn the_windows_list_holds_exactly_the_names_the_documentation_states() {
 }
 
 #[test]
-fn every_built_in_states_its_reason_in_a_sentence() {
-    for built_in in BuiltIns::UNIX.iter().chain(BuiltIns::WINDOWS.iter()) {
-        let reason = built_in.reason();
-        assert!(reason.ends_with('.'), "{}: {reason}", built_in.pattern());
-        assert!(reason.len() > 20, "{}: {reason}", built_in.pattern());
-    }
-}
-
-#[test]
 fn a_unix_name_passes_only_in_the_case_the_list_writes() {
     assert!(BuiltIns::UNIX.passes(OsStr::new("PATH")));
     assert!(!BuiltIns::UNIX.passes(OsStr::new("Path")));
@@ -59,11 +66,12 @@ fn a_unix_name_passes_only_in_the_case_the_list_writes() {
 }
 
 #[test]
-fn a_pattern_that_ends_in_a_star_passes_every_name_with_its_prefix() {
+fn a_name_that_starts_with_lc_passes_only_when_it_is_a_locale_category() {
     assert!(BuiltIns::UNIX.passes(OsStr::new("LC_ALL")));
     assert!(BuiltIns::UNIX.passes(OsStr::new("LC_CTYPE")));
-    assert!(!BuiltIns::UNIX.passes(OsStr::new("LC")));
-    assert!(!BuiltIns::UNIX.passes(OsStr::new("LCD_SIZE")));
+    assert!(BuiltIns::UNIX.passes(OsStr::new("LC_PAPER")));
+    assert!(!BuiltIns::UNIX.passes(OsStr::new("LC_TERMINAL")));
+    assert!(!BuiltIns::UNIX.passes(OsStr::new("LC_")));
 }
 
 #[test]
@@ -89,5 +97,5 @@ fn the_current_list_is_the_list_of_the_platform_the_crate_is_built_for() {
     } else {
         &BuiltIns::UNIX
     };
-    assert_eq!(patterns(BuiltIns::current()), patterns(expected));
+    assert_eq!(BuiltIns::current(), expected);
 }

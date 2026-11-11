@@ -61,7 +61,7 @@ pub use bind::{
     PathTemplate, PathTemplateError, Placeholder, ProvidedRef, ProviderKind, ProviderKindError,
     QualifierError, SecretBind, SecretRef,
 };
-pub use built_in::{BuiltIn, BuiltIns};
+pub use built_in::BuiltIns;
 pub use check::{Finding, Problem, Quote, Refusals, Verdict, capture, check, mode};
 pub use env::Environment;
 pub use family::Family;
