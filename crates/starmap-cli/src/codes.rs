@@ -56,6 +56,9 @@ pub const SPEC_MODE_SOURCE: Code = Code::new("starmap", "spec", "mode_source");
 pub const SPEC_POINTER_DECLARES: Code = Code::new("starmap", "spec", "pointer_declares");
 /// A pointer names a file that is a pointer too.
 pub const SPEC_POINTER_CHAIN: Code = Code::new("starmap", "spec", "pointer_chain");
+/// A variable's type names an enumeration the file does not declare.
+pub const SPEC_ENUMERATION_UNDECLARED: Code =
+    Code::new("starmap", "spec", "enumeration_undeclared");
 /// `explain` names a variable that the spec does not declare.
 pub const VARIABLE_UNKNOWN: Code = Code::new("starmap", "variable", "unknown");
 /// `check` finds source code that reads a variable the spec does not
@@ -122,6 +125,7 @@ pub const ALL: &[&Code] = &[
     &SPEC_MODE_SOURCE,
     &SPEC_POINTER_DECLARES,
     &SPEC_POINTER_CHAIN,
+    &SPEC_ENUMERATION_UNDECLARED,
     &VARIABLE_UNKNOWN,
     &VARIABLE_UNDECLARED,
     &SOURCE_UNREADABLE,

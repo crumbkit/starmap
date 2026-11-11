@@ -1,6 +1,7 @@
 //! The type a variable's value has, the checking types that back it
-//! ([`Port`], [`IntegerRange`], [`Choices`], [`Choice`], [`Pattern`],
-//! [`Schemes`], [`Scheme`] and [`ByteRule`]), and the value a type reads.
+//! ([`Port`], [`IntegerRange`], [`Choices`], [`Choice`],
+//! [`EnumerationName`], [`Pattern`], [`Schemes`], [`Scheme`] and
+//! [`ByteRule`]), and the value a type reads.
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -20,10 +21,14 @@ use crate::ByteCount;
 
 use crate::Secret;
 
+mod enumeration;
 mod scheme;
 #[cfg(test)]
 mod tests;
 
+pub use enumeration::{
+    Choice, ChoiceError, Choices, ChoicesError, EnumerationName, EnumerationNameError,
+};
 pub use scheme::{Scheme, SchemeError, Schemes, SchemesError};
 
 /// The words the boolean type reads as `true`.
@@ -529,108 +534,6 @@ impl fmt::Display for RangeError {
 
 impl Error for RangeError {}
 
-/// One value of an enumeration type: text that is not empty and holds no
-/// whitespace.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Choice(String);
-
-impl Choice {
-    /// Returns the choice as text.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl FromStr for Choice {
-    type Err = ChoiceError;
-
-    /// Accepts text that is not empty and holds no whitespace, as
-    /// [`char::is_whitespace`] defines it.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ChoiceError`] for empty text or text with whitespace.
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        if text.is_empty() {
-            return Err(ChoiceError::Empty);
-        }
-        if let Some((at, _)) = text.char_indices().find(|(_, c)| c.is_whitespace()) {
-            return Err(ChoiceError::Whitespace { at });
-        }
-        Ok(Self(text.to_owned()))
-    }
-}
-
-impl fmt::Display for Choice {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
-
-/// The reason text is not a [`Choice`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ChoiceError {
-    /// The text is empty.
-    Empty,
-    /// The text holds whitespace.
-    Whitespace {
-        /// The byte offset of the first whitespace character.
-        at: usize,
-    },
-}
-
-impl fmt::Display for ChoiceError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Empty => formatter.write_str("an enumeration value is empty"),
-            Self::Whitespace { at } => write!(
-                formatter,
-                "an enumeration value holds whitespace at byte {at}"
-            ),
-        }
-    }
-}
-
-impl Error for ChoiceError {}
-
-/// The values of an enumeration type: at least one [`Choice`], none of them
-/// repeated, in the order the spec lists them.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Choices(Vec<Choice>);
-
-impl Choices {
-    /// Builds the set from `choices`, keeping their order.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ChoicesError`] when there is no choice or one repeats.
-    pub fn new(choices: impl IntoIterator<Item = Choice>) -> Result<Self, ChoicesError> {
-        let kept = distinct(choices).map_err(ChoicesError::Repeated)?;
-        if kept.is_empty() {
-            return Err(ChoicesError::Empty);
-        }
-        Ok(Self(kept))
-    }
-
-    /// Returns the choices in order.
-    pub fn iter(&self) -> impl Iterator<Item = &Choice> {
-        self.0.iter()
-    }
-
-    /// Returns the choice that equals `text` exactly, if there is one.
-    pub(crate) fn get(&self, text: &str) -> Option<&Choice> {
-        self.0.iter().find(|choice| choice.as_str() == text)
-    }
-}
-
-impl fmt::Display for Choices {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_list(formatter, &self.0)
-    }
-}
-
 /// Returns `items` in their order, or the first item that repeats an
 /// earlier one.
 fn distinct<T: PartialEq>(items: impl IntoIterator<Item = T>) -> Result<Vec<T>, T> {
@@ -654,29 +557,6 @@ fn write_list<T: fmt::Display>(formatter: &mut fmt::Formatter<'_>, items: &[T]) 
     }
     Ok(())
 }
-
-/// The reason a list of values is not [`Choices`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ChoicesError {
-    /// The list is empty.
-    Empty,
-    /// The list holds this choice more than once.
-    Repeated(Choice),
-}
-
-impl fmt::Display for ChoicesError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Empty => formatter.write_str("an enumeration has no values"),
-            Self::Repeated(choice) => {
-                write!(formatter, "an enumeration lists the value {choice} twice")
-            }
-        }
-    }
-}
-
-impl Error for ChoicesError {}
 
 /// The encoding of a bytes type's text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

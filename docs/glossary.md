@@ -17,6 +17,8 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
 - `{ integer = { min = 1, max = 100 } }` is a whole number from `min` to
   `max`, both included.
 - `{ enumeration = ["dev", "prod"] }` is one of the listed values.
+- `{ enumeration = "log-level" }` is one of the values of the named
+  enumeration `log-level`, which the next entry describes.
 - `{ url = { schemes = ["postgres", "postgresql"] } }` is a URL whose scheme
   is one of the listed schemes. Each scheme is written in lower case, and a
   value's scheme matches in any case. `{ url = {} }` means the same as
@@ -71,6 +73,47 @@ ending the comment with a newline fixes it. The Rust API names the pattern
 when the value counts as unset, or a `TypeError` when the value does not fit
 the type. `starmap explain` and
 `starmap diff` print a variable's type under the name `type`.
+
+## enumeration
+
+An enumeration type takes one of a fixed list of values. Each value is text
+that is not empty and holds no whitespace. A variable writes the list inline,
+as `type = { enumeration = ["dev", "prod"] }`, or names an enumeration that
+the file declares, as `type = { enumeration = "log-level" }`. The Rust API
+names the type `Type::Enumeration` and its values `starmap::Choices`.
+
+A file declares a named enumeration in a top-level table, with each value as
+a key and a description of that value as the key's value:
+
+```toml
+[enumerations.log-level]
+debug = "Logs every request and its timing."
+info = "Logs each request once."
+warn = "Logs only failures and slow requests."
+```
+
+The values keep the file's order. A name starts with a lower case ASCII
+letter and holds only lower case ASCII letters, digits and hyphens; the Rust
+API names it `starmap::EnumerationName`. Every value has a description, which
+follows the rules of `purpose`. The parser refuses a bad name, a value with
+whitespace and an empty or non-text description with
+`starmap::spec::bad_value`, a description of `?` with
+`starmap::spec::guess`, and an empty table with
+`starmap::spec::empty_enumeration`. A variable that names an enumeration the
+file does not declare fails with `starmap::spec::enumeration_undeclared`.
+Any number of variables may share one named enumeration, and a file may
+declare one that no variable uses. An inline list has no descriptions.
+
+A named enumeration follows every rule of an inline one: a default must be
+one of its values, and a withheld variable cannot have it as its type. The
+canonical form writes each `[enumerations.<name>]` table after `[mode]` and
+before the variables, in name order, so renaming an enumeration or changing
+a description changes the digest. `Spec::enumerations` lists the named
+enumerations, `Choices::name` returns a named enumeration's name, and
+`Choices::description` returns a value's description. `starmap explain`
+prints the type as `log-level: one of debug, info, warn`, and its `--long`
+column `values` lists each value with its description. `starmap diff`
+reports a changed description as a change of `values`.
 
 ## withheld
 

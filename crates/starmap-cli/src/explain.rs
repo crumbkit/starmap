@@ -10,7 +10,8 @@ use crumbkit::{Batch, Document, Failure, Recovery, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{
-    Bindings, Bound, Cache, Mode, Name, SecretRef, Source, Spec, Type, Unset, Value, Variable,
+    Bindings, Bound, Cache, Choices, Mode, Name, SecretRef, Source, Spec, Type, Unset, Value,
+    Variable,
 };
 
 use crate::cli::{ExplainArgs, SpecFile};
@@ -60,11 +61,18 @@ pub(crate) struct Explained {
     /// The sentence that says what the application does when the variable is unset; empty, and left out of `--json`, when the spec states none.
     #[serde(skip_serializing_if = "Option::is_none")]
     effect: Option<String>,
+    /// The name of the named enumeration that the variable's type is; left out of `--json` for any other type.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    enumeration: Option<String>,
+    /// Each value of a named enumeration with its description; empty, and left out of `--json`, for any other type.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    values: Option<Values>,
 }
 
 impl Row for Explained {
     const COLUMNS: &'static [&'static str] = &["name", "type", "unset", "source", "value"];
-    const LONG_COLUMNS: &'static [&'static str] = &["show", "bind", "cache", "purpose", "effect"];
+    const LONG_COLUMNS: &'static [&'static str] =
+        &["show", "bind", "cache", "purpose", "effect", "values"];
     const UNCUT_COLUMNS: &'static [&'static str] = &["name"];
 }
 
@@ -130,6 +138,68 @@ impl Shown for Cell {
 }
 
 crumbkit::shown!(Cell);
+
+/// The values of a named enumeration, each with its description. Its text
+/// is `value: description` for each value, separated by `; `, because a
+/// table cell holds one line. Its JSON is a list of objects.
+#[derive(Debug)]
+pub(crate) struct Values(Vec<Described>);
+
+/// One value of a named enumeration with its description.
+#[derive(Debug, Serialize, JsonSchema)]
+struct Described {
+    /// The value.
+    value: String,
+    /// The sentence that says what choosing the value means.
+    description: String,
+}
+
+impl Values {
+    /// Returns the values of a named enumeration type, or `None` for any
+    /// other type.
+    pub(crate) fn of(ty: &Type) -> Option<Self> {
+        let Type::Enumeration(choices) = ty else {
+            return None;
+        };
+        choices.name()?;
+        Some(Self(described(choices)))
+    }
+}
+
+/// Returns each choice of `choices` with its description.
+fn described(choices: &Choices) -> Vec<Described> {
+    choices
+        .iter()
+        .map(|choice| Described {
+            value: choice.to_string(),
+            description: choices.description(choice).unwrap_or_default().to_owned(),
+        })
+        .collect()
+}
+
+impl fmt::Display for Values {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, described) in self.0.iter().enumerate() {
+            if index > 0 {
+                formatter.write_str("; ")?;
+            }
+            write!(formatter, "{}: {}", described.value, described.description)?;
+        }
+        Ok(())
+    }
+}
+
+impl Shown for Values {
+    fn json<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+
+    fn schema(generator: &mut SchemaGenerator) -> Schema {
+        Vec::<Described>::json_schema(generator)
+    }
+}
+
+crumbkit::shown!(Values);
 
 /// A name that `starmap explain` was given and the spec does not declare.
 #[derive(Debug, Failure)]
@@ -215,6 +285,8 @@ fn row(
         cache: cache_text(variable.source()).map(str::to_owned),
         purpose: variable.purpose().to_owned(),
         effect: variable.effect().map(str::to_owned),
+        enumeration: enumeration_name(variable.value_type()),
+        values: Values::of(variable.value_type()),
         name: name.as_str().to_owned(),
     })
 }
@@ -279,7 +351,10 @@ pub(crate) fn type_text(ty: &Type) -> String {
         Type::SocketAddress => "ip socket address".to_owned(),
         Type::Boolean => "boolean".to_owned(),
         Type::Integer(range) => format!("integer {}..={}", range.min(), range.max()),
-        Type::Enumeration(choices) => format!("one of {choices}"),
+        Type::Enumeration(choices) => match choices.name() {
+            Some(name) => format!("{name}: one of {choices}"),
+            None => format!("one of {choices}"),
+        },
         Type::String { pattern: None } => "string".to_owned(),
         Type::String {
             pattern: Some(pattern),
@@ -287,6 +362,15 @@ pub(crate) fn type_text(ty: &Type) -> String {
         Type::Bytes(rule) => rule.to_string(),
         // A type that a later release of starmap adds.
         _ => "another type".to_owned(),
+    }
+}
+
+/// Returns the name of a named enumeration type, or `None` for any other
+/// type.
+fn enumeration_name(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Enumeration(choices) => choices.name().map(ToString::to_string),
+        _ => None,
     }
 }
 
