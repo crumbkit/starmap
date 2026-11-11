@@ -21,8 +21,8 @@ use std::time::{Duration, Instant};
 
 use crumbkit::{Failure, Recovery, Run, Sink};
 use starmap::{
-    Bindings, Bound, Environment, GroupName, Mode, Name, NoPlace, Placeholder, Problem,
-    ProviderKind, Source, Spec, Verdict,
+    Bindings, Bound, Environment, Finding, GroupName, Mode, Name, NoPlace, Placeholder, Problem,
+    ProviderKind, Quote, Source, Spec, Verdict,
 };
 use starmap_resolve::{
     AppName, Context, Keychain, Lookup, OnePassword, Places, ResolveProblem, Resolver, SecretError,
@@ -315,7 +315,7 @@ pub(crate) fn settle(
             refusals
                 .iter()
                 .filter(|finding| !unbound.iter().any(|failure| failure.name == finding.name))
-                .map(|finding| RunFailure::check(finding.name.clone(), &finding.problem, &file)),
+                .map(|finding| RunFailure::check(finding, &file)),
         );
     }
     let can_start = failures.is_empty();
@@ -355,7 +355,7 @@ fn checked(
         Verdict::Refused(refusals) => {
             let failures = refusals
                 .iter()
-                .map(|finding| RunFailure::check(finding.name.clone(), &finding.problem, file))
+                .map(|finding| RunFailure::check(finding, file))
                 .collect();
             Err(Refused::new(failures, notes))
         }
@@ -518,12 +518,16 @@ pub(crate) enum RunFailure {
         code = VARIABLE_INVALID,
         recovery = Recovery::Run(SpecFile::call(&["explain"], file).value("names", name.as_str())),
         field(key = name.as_str()),
+        field(value = value.as_ref().map(Quote::as_str)),
     )]
     Invalid {
         /// The variable.
         name: Name,
         /// What is wrong with the value.
         problem: String,
+        /// The quote of the refused value, which only a shown variable's
+        /// value has.
+        value: Option<Quote>,
         /// The spec file, as the caller gave it.
         file: String,
     },
@@ -635,28 +639,27 @@ impl RunFailure {
         }
     }
 
-    /// Returns the failure of the variable `name` that the check of the
-    /// spec `file` refused because of `problem`.
-    fn check(name: Name, problem: &Problem, file: &str) -> Self {
+    /// Returns the failure of `finding`, which the check of the spec `file`
+    /// refused.
+    fn check(finding: &Finding, file: &str) -> Self {
+        let name = finding.name.clone();
         let file = file.to_owned();
-        match problem {
+        let invalid = |problem: String| Self::Invalid {
+            name: finding.name.clone(),
+            problem,
+            value: finding.value.clone(),
+            file: file.clone(),
+        };
+        match &finding.problem {
             Problem::Missing { mode } => Self::Missing { name, mode: *mode },
-            Problem::Invalid(error) => Self::Invalid {
-                name,
-                problem: error.to_string(),
-                file,
-            },
-            Problem::ShowMismatch { .. } => Self::Invalid {
-                name,
-                problem: "the value is held as a secret where starmap.toml shows it, or the other way round"
+            Problem::Invalid(error) => invalid(error.to_string()),
+            Problem::ShowMismatch { .. } => invalid(
+                "the value is held as a secret where starmap.toml shows it, or the other way round"
                     .to_owned(),
-                file,
-            },
-            Problem::ModeMismatch { decided } => Self::Invalid {
-                name,
-                problem: format!("the resolved value decides {decided} mode"),
-                file,
-            },
+            ),
+            Problem::ModeMismatch { decided } => {
+                invalid(format!("the resolved value decides {decided} mode"))
+            }
             Problem::GroupIncomplete { group, set } => Self::GroupIncomplete {
                 name,
                 group: group.clone(),
@@ -664,11 +667,7 @@ impl RunFailure {
             },
             // A problem that a later starmap adds reads as an invalid
             // value, until this command learns it.
-            _ => Self::Invalid {
-                name,
-                problem: "the value does not fit the variable".to_owned(),
-                file,
-            },
+            _ => invalid("the value does not fit the variable".to_owned()),
         }
     }
 }
@@ -694,7 +693,18 @@ impl fmt::Display for RunFailure {
                     "{name} is required in {mode} mode and has no value"
                 )
             }
-            Self::Invalid { name, problem, .. } => write!(formatter, "{name}: {problem}"),
+            Self::Invalid {
+                name,
+                problem,
+                value,
+                ..
+            } => {
+                write!(formatter, "{name}: {problem}")?;
+                match value {
+                    Some(quote) => write!(formatter, " (the value is {quote})"),
+                    None => Ok(()),
+                }
+            }
             Self::GroupIncomplete { name, group, set } => {
                 let verb = if set.len() == 1 { "is" } else { "are" };
                 write!(

@@ -1,8 +1,8 @@
 //! Capturing an environment into bindings, deciding the mode, and checking
 //! bindings against a spec.
 
-use std::ffi::OsString;
-use std::fmt;
+use std::ffi::{OsStr, OsString};
+use std::fmt::{self, Write as _};
 
 use crate::env::Held;
 use crate::{
@@ -137,24 +137,30 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
     } else {
         Mode::Local
     };
-    let held: Vec<(&Name, Result<Option<Held>, Problem>)> = spec
+    let held: Vec<Holding<'_>> = spec
         .variables()
-        .map(|(name, variable)| (name, hold(variable, bindings.get(name), mode)))
+        .map(|(name, variable)| (name, variable, hold(variable, bindings.get(name), mode)))
         .collect();
     let incomplete: Vec<Option<Problem>> = held
         .iter()
-        .map(|(name, result)| match result {
+        .map(|(name, _, result)| match result {
             Ok(None) => incomplete(spec, &held, name),
             _ => None,
         })
         .collect();
     let mut entries = Vec::new();
     let mut findings = Vec::new();
-    for ((name, result), incomplete) in held.into_iter().zip(incomplete) {
+    for ((name, variable, result), incomplete) in held.into_iter().zip(incomplete) {
         match (result, incomplete) {
             (Ok(held), None) => entries.push((name.clone(), held)),
-            (Err(problem), _) | (Ok(_), Some(problem)) => findings.push(Finding {
+            (Ok(_), Some(problem)) => findings.push(Finding {
                 name: name.clone(),
+                value: None,
+                problem,
+            }),
+            (Err(problem), _) => findings.push(Finding {
+                name: name.clone(),
+                value: quote(variable, bindings.get(name), &problem),
                 problem,
             }),
         }
@@ -166,6 +172,7 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
         findings.push(Finding {
             name: rule.variable().clone(),
             problem: Problem::ModeMismatch { decided },
+            value: None,
         });
     }
     if findings.is_empty() {
@@ -178,20 +185,20 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
     }
 }
 
+/// One declared variable with the result of holding its value: the value,
+/// `None` when it stays unset, or the problem that stops the check.
+type Holding<'a> = (&'a Name, &'a Variable, Result<Option<Held>, Problem>);
+
 /// Returns the finding of `name`, which is unset, when its group is partly
 /// set: the group, and each member that `held` holds a value for.
-fn incomplete(
-    spec: &Spec,
-    held: &[(&Name, Result<Option<Held>, Problem>)],
-    name: &Name,
-) -> Option<Problem> {
+fn incomplete(spec: &Spec, held: &[Holding<'_>], name: &Name) -> Option<Problem> {
     let group = spec.group_of(name)?;
     let set: Vec<Name> = group
         .variables()
         .iter()
         .filter(|member| {
             held.iter()
-                .any(|(held, result)| held == member && matches!(result, Ok(Some(_))))
+                .any(|(held, _, result)| held == member && matches!(result, Ok(Some(_))))
         })
         .cloned()
         .collect();
@@ -215,6 +222,16 @@ fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option
         Unset::Required => Err(Problem::Missing { mode }),
         Unset::Optional => Ok(None),
         Unset::Default(value) => Ok(Some(Held::Shown(value.clone()))),
+    }
+}
+
+/// Returns the quote of the value that `problem` refuses, which only an
+/// invalid plain value of a shown variable has. A withheld variable's
+/// value, and any value held as a secret, is never quoted.
+fn quote(variable: &Variable, bound: Option<&Bound>, problem: &Problem) -> Option<Quote> {
+    match (problem, variable.show(), bound) {
+        (Problem::Invalid(_), Show::Shown, Some(Bound::Plain(raw))) => Some(Quote::new(raw)),
+        _ => None,
     }
 }
 
@@ -279,7 +296,10 @@ impl fmt::Display for Refusals {
     /// such as `SHELF_PORT is required and has no value; SHELF_DEBUG: the
     /// value is not one of the words 1, 0, true, false, yes, no, on and
     /// off`. A missing variable names its mode only when the spec has a
-    /// `[mode]` table. The text never repeats a value.
+    /// `[mode]` table. An invalid value of a shown variable is quoted after
+    /// the reason, as in `SHELF_PORT: the value is not a port from 1 to
+    /// 65535 (the value is "80a")`, as [`Quote`] writes it. The text never
+    /// repeats a withheld variable's value or a value held as a secret.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (index, finding) in self.findings.iter().enumerate() {
             if index > 0 {
@@ -294,7 +314,13 @@ impl fmt::Display for Refusals {
                     )
                 }
                 Problem::Missing { .. } => write!(formatter, "{name} is required and has no value"),
-                Problem::Invalid(error) => write!(formatter, "{name}: {error}"),
+                Problem::Invalid(error) => {
+                    write!(formatter, "{name}: {error}")?;
+                    match &finding.value {
+                        Some(quote) => write!(formatter, " (the value is {quote})"),
+                        None => Ok(()),
+                    }
+                }
                 Problem::ShowMismatch { show } => write!(
                     formatter,
                     "{name} has a value of the wrong kind for a {show} variable"
@@ -324,6 +350,69 @@ pub struct Finding {
     pub name: Name,
     /// Why the variable stops the check.
     pub problem: Problem,
+    /// The quote of the refused value. Only a [`Problem::Invalid`] of a
+    /// shown variable whose value is bound as [`Bound::Plain`] has one; a
+    /// withheld variable, a value held as a secret, a missing variable and
+    /// a mode mismatch never do.
+    pub value: Option<Quote>,
+}
+
+/// A shown value as a refusal quotes it: its first 64 characters, counted
+/// as Unicode scalar values, with `…` after them when the value is longer.
+/// A value that is not Unicode is read with U+FFFD in place of each
+/// invalid sequence. A quote is cut when it is made, so it never holds more
+/// of the value than it prints.
+///
+/// Its `Display` writes the cut text as a JSON string, in double quotes:
+/// `"` and `\` are escaped, U+0008, U+000C, a newline, a carriage return
+/// and a tab are written as `\b`, `\f`, `\n`, `\r` and `\t`, and every
+/// other character below U+0020 as `\u00XX` with lower-case hex digits.
+/// A quoted value therefore never breaks a log line or starts another one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Quote(String);
+
+impl Quote {
+    /// How many characters of a value a quote keeps.
+    const LIMIT: usize = 64;
+
+    /// Returns the quote of `raw`.
+    pub(crate) fn new(raw: &OsStr) -> Self {
+        let text = raw.to_string_lossy();
+        let mut characters = text.chars();
+        let mut cut: String = characters.by_ref().take(Self::LIMIT).collect();
+        if characters.next().is_some() {
+            cut.push('…');
+        }
+        Self(cut)
+    }
+
+    /// Returns the cut text before it is escaped.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for Quote {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_char('"')?;
+        for character in self.0.chars() {
+            match character {
+                '"' => formatter.write_str("\\\""),
+                '\\' => formatter.write_str("\\\\"),
+                '\u{8}' => formatter.write_str("\\b"),
+                '\u{c}' => formatter.write_str("\\f"),
+                '\n' => formatter.write_str("\\n"),
+                '\r' => formatter.write_str("\\r"),
+                '\t' => formatter.write_str("\\t"),
+                control if u32::from(control) < 0x20 => {
+                    write!(formatter, "\\u{:04x}", u32::from(control))
+                }
+                other => formatter.write_char(other),
+            }?;
+        }
+        formatter.write_char('"')
+    }
 }
 
 /// Why a variable stops a check from passing.
