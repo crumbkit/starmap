@@ -36,6 +36,8 @@ const MODE_FIELDS: &[&str] = &["variable", "production"];
 const VARIABLE_FIELDS: &[&str] = &[
     "purpose", "effect", "check", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
+/// What a check sentence says, as a refusal of one names it.
+const CHECK_SAYS: &str = "what the application's own code checks of the value";
 /// The keys of a type table.
 const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "string", "url", "bytes"];
 /// The keys of an unset table.
@@ -370,7 +372,7 @@ impl Parser {
         };
         let check = match field.child(table, "check") {
             None => Some(None),
-            Some(check) => self.check(&check).map(Some),
+            Some(check) => self.sentence(&check, "a check", CHECK_SAYS).map(Some),
         };
         let ty = self
             .required(field, table, "type")
@@ -460,15 +462,6 @@ impl Parser {
             field,
             "an effect",
             "what the application does when the variable is unset",
-        )
-    }
-
-    /// Parses the check sentence, which follows the rules of the purpose.
-    fn check(&mut self, field: &Field<'_>) -> Option<String> {
-        self.sentence(
-            field,
-            "a check",
-            "what the application's own code checks of the value",
         )
     }
 
