@@ -16,7 +16,7 @@ use super::{
 };
 use crate::bind::BIND_KINDS;
 use crate::{
-    ByteCount, ByteLength, ByteRule, BytesError, Cache, IntegerRange, ModeRule, Name,
+    ByteCount, ByteLength, ByteRule, BytesError, Cache, Encoding, IntegerRange, ModeRule, Name,
     OnePasswordRef, PathTemplate, PathTemplateError, Pattern, ProvidedRef, ProviderKind,
     SecretBind, SecretRef, Type, Value,
 };
@@ -412,19 +412,13 @@ impl Parser {
             );
             self.report(type_field.span(), Kind::WithheldType, message);
         }
-        if let (Some((SourceKind::Generated, _)), Some((Type::Bytes(_), type_field))) = (&kind, &ty)
-        {
-            // A generated value is written as base64url text, which no
-            // bytes type's encoding and length describe yet.
-            let message = format!(
-                "`{}` is a bytes type, and a generated variable has the type string",
-                type_field.path
-            );
-            self.report(type_field.span(), Kind::BadBytes, message);
-        }
+        let rule = match &ty {
+            Some((Type::Bytes(rule), type_field)) => Some((*rule, type_field)),
+            _ => None,
+        };
         let source = kind
             .as_ref()
-            .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes));
+            .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes, rule));
         let variable = match (purpose, effect, ty, unset, show, source, tools) {
             (
                 Some(purpose),
@@ -800,7 +794,9 @@ impl Parser {
     }
 
     /// Merges the source word with its bind and its `bytes`, or reports a
-    /// combination the rules forbid (BASE-45).
+    /// combination the rules forbid (BASE-45). `rule` is the variable's
+    /// bytes type and its field, when it has one, which gives a generated
+    /// value its length and encoding.
     fn source(
         &mut self,
         variable: &Field<'_>,
@@ -808,8 +804,9 @@ impl Parser {
         kind: SourceKind,
         bind: Option<Option<(Bind, Range<usize>)>>,
         bytes: Option<Field<'_>>,
+        rule: Option<(ByteRule, &Field<'_>)>,
     ) -> Option<Source> {
-        let bytes = self.bytes(variable, kind, bytes);
+        let bytes = self.bytes(variable, kind, bytes, rule.is_some());
         let bind = match bind {
             None => None,
             // The bind's own problem was reported.
@@ -827,8 +824,18 @@ impl Parser {
                     bind: Some(SecretBind::new(SecretRef::OnePassword(reference), cache)),
                 }
             }
-            (SourceKind::Generated, None) => Source::Generated {
-                bytes: bytes?.unwrap_or_default(),
+            (SourceKind::Generated, None) => match rule {
+                Some((rule, type_field)) => {
+                    let count = self.generated_length(rule, type_field);
+                    Source::Generated {
+                        bytes: count?,
+                        encoding: rule.encoding(),
+                    }
+                }
+                None => Source::Generated {
+                    bytes: bytes?.unwrap_or_default(),
+                    encoding: Encoding::Base64Url,
+                },
             },
             (SourceKind::Inherited, None) => Source::Inherited,
             (SourceKind::Provided, Some((Bind::Provided(reference), _))) => {
@@ -858,13 +865,15 @@ impl Parser {
         Some(source)
     }
 
-    /// Parses `bytes`, which only a generated variable takes. It returns
+    /// Parses `bytes`, which only a generated variable with the type string
+    /// takes; `typed` says the variable has a bytes type. It returns
     /// `Some(None)` when the field is absent and `None` after a problem.
     fn bytes(
         &mut self,
         variable: &Field<'_>,
         kind: SourceKind,
         field: Option<Field<'_>>,
+        typed: bool,
     ) -> Option<Option<ByteCount>> {
         let Some(field) = field else {
             return Some(None);
@@ -877,7 +886,31 @@ impl Parser {
             self.report(field.key_span(), Kind::BadBytes, message);
             return None;
         }
+        if typed {
+            let message = format!(
+                "`{}` is set, and a generated variable with a bytes type takes its length from \
+                 the type",
+                field.path
+            );
+            self.report(field.key_span(), Kind::BadBytes, message);
+            return None;
+        }
         self.count(&field, ByteCount::generated).map(Some)
+    }
+
+    /// Returns the number of random bytes a generated variable of the bytes
+    /// type `rule` has: its length, or its smallest length. It reports a
+    /// count outside the range a generated value takes.
+    fn generated_length(&mut self, rule: ByteRule, field: &Field<'_>) -> Option<ByteCount> {
+        let (ByteLength::Exactly(count) | ByteLength::AtLeast(count)) = rule.length();
+        match ByteCount::generated(count.get()) {
+            Ok(count) => Some(count),
+            Err(error) => {
+                let message = format!("`{}` asks for {count}, and {error}", field.path);
+                self.report(field.span(), Kind::BadBytes, message);
+                None
+            }
+        }
     }
 
     /// Parses a whole number of bytes through `build`, which refuses a

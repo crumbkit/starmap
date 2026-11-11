@@ -303,6 +303,7 @@ enum Asked {
         app: String,
         name: String,
         bytes: u16,
+        encoding: starmap::Encoding,
     },
     Saved {
         workspace: String,
@@ -352,11 +353,16 @@ impl Resolver for FakeResolver {
                 reference: starmap::SecretRef::OnePassword(reference),
                 ..
             } => Asked::Reference(reference.as_str().to_owned()),
-            Lookup::Generated { slot, bytes } => Asked::Generated {
+            Lookup::Generated {
+                slot,
+                bytes,
+                encoding,
+            } => Asked::Generated {
                 workspace: slot.workspace.as_str().to_owned(),
                 app: slot.app.as_str().to_owned(),
                 name: slot.name.as_str().to_owned(),
                 bytes: bytes.get(),
+                encoding,
             },
             Lookup::Saved { slot } => Asked::Saved {
                 workspace: slot.workspace.as_str().to_owned(),
@@ -540,8 +546,34 @@ fn a_secret_asks_the_resolver_by_reference_and_a_generated_value_by_generated_lo
                 app: "shelf".to_owned(),
                 name: "SHELF_SESSION_KEY".to_owned(),
                 bytes: 48,
+                encoding: starmap::Encoding::Base64Url,
             },
         ]
+    );
+}
+
+#[test]
+fn a_generated_bytes_variable_asks_for_its_declared_encoding_and_length() {
+    let spec = Spec::parse(
+        "[variables.SHELF_COOKIE_KEY]\npurpose = \"Signs session cookies.\"\n\
+         type = { bytes = { encoding = \"hex\", length = 32 } }\nunset = \"required\"\n\
+         show = \"withheld\"\nsource = \"generated\"\n",
+    )
+    .unwrap();
+    let caller = Bindings::new();
+    let resolver = FakeResolver::answering();
+    let context = Context::new(places(), &caller, later()).resolver(&resolver);
+    let _resolution = resolve(&spec, Mode::Local, &context);
+
+    assert_eq!(
+        resolver.lookups(),
+        vec![Asked::Generated {
+            workspace: "shelf-dev".to_owned(),
+            app: "shelf".to_owned(),
+            name: "SHELF_COOKIE_KEY".to_owned(),
+            bytes: 32,
+            encoding: starmap::Encoding::Hex,
+        }]
     );
 }
 

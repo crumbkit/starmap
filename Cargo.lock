@@ -1120,7 +1120,6 @@ dependencies = [
 name = "starmap-resolve"
 version = "0.2.0"
 dependencies = [
- "base64",
  "core-foundation",
  "getrandom",
  "landlock",

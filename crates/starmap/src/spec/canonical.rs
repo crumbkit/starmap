@@ -76,7 +76,11 @@ fn variable(variable: &Variable) -> Table {
     if let Some(bind) = bind {
         table.insert("bind", value(bind));
     }
-    if let Source::Generated { bytes } = variable.source() {
+    // A bytes type holds the count of a generated value, so only a
+    // generated string variable writes `bytes`.
+    if let Source::Generated { bytes, .. } = variable.source()
+        && !matches!(variable.value_type(), Type::Bytes(_))
+    {
         table.insert("bytes", value(i64::from(bytes.get())));
     }
     table

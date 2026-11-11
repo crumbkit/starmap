@@ -15,15 +15,13 @@
 use std::io;
 use std::time::Instant;
 
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use core_foundation::data::CFData;
 use security_framework::base::Error;
 use security_framework::item::{ItemAddOptions, ItemAddValue, ItemClass, ItemSearchOptions, Limit};
 use security_framework::passwords::{delete_generic_password, generic_password};
 use security_framework::passwords_options::PasswordOptions;
 use security_framework::random::SecRandom;
-use starmap::{ByteCount, Secret};
+use starmap::{ByteCount, Encoding, Secret};
 use zeroize::Zeroizing;
 
 use crate::SecretError;
@@ -41,18 +39,20 @@ const INTERACTION_NOT_ALLOWED: i32 = -25308;
 /// The session has no default keychain, as in a session without a login.
 const NO_DEFAULT_KEYCHAIN: i32 = -25307;
 
-/// Returns the generated value at `service` and `account`, and creates it
-/// from `bytes` random bytes when the Keychain holds none.
+/// Returns the generated value at `service` and `account` unchanged, and
+/// creates it from `bytes` random bytes written in `encoding` when the
+/// Keychain holds none.
 pub(super) fn generated(
     service: &str,
     account: &str,
     bytes: ByteCount,
+    encoding: Encoding,
     deadline: Instant,
 ) -> Result<Secret, SecretError> {
     if let Some(value) = read(service, account, deadline)? {
         return Ok(value);
     }
-    store(service, account, create(bytes)?, deadline)
+    store(service, account, create(bytes, encoding)?, deadline)
 }
 
 /// Returns the value that [`save`] kept at `service` and `account`, or
@@ -152,14 +152,17 @@ fn read(service: &str, account: &str, deadline: Instant) -> Result<Option<Secret
     }
 }
 
-/// Returns `bytes` cryptographically secure random bytes, written as
-/// base64url without padding.
-fn create(bytes: ByteCount) -> Result<Zeroizing<String>, SecretError> {
+/// Returns `bytes` cryptographically secure random bytes, written in
+/// `encoding`.
+pub(super) fn create(
+    bytes: ByteCount,
+    encoding: Encoding,
+) -> Result<Zeroizing<String>, SecretError> {
     let mut random = Zeroizing::new(vec![0; usize::from(bytes.get())]);
     SecRandom::default()
         .copy_bytes(&mut random)
         .map_err(SecretError::Program)?;
-    Ok(Zeroizing::new(URL_SAFE_NO_PAD.encode(&*random)))
+    Ok(encoding.encode(&random))
 }
 
 /// Returns [`SecretError::Deadline`] once the deadline has passed.

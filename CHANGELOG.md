@@ -57,11 +57,27 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   marks such a value invalid and never prints a withheld one; `starmap check`
   reads only the spec and the source, so it does not see values. A withheld
   variable may have a bytes type, and a shown one's default must decode and
-  fit. A length outside 1 to 1024 fails with `starmap::spec::bad_bytes`, and
-  so does a generated variable with a bytes type. `starmap explain` prints
+  fit. A length outside 1 to 1024 fails with `starmap::spec::bad_bytes`.
+  `starmap explain` prints
   the type as `32 bytes as base64` or `at least 16 bytes as hex`, and
   `starmap diff` names it `bytes` and reports a changed encoding or length as
   a change of `type`. The digest of an existing file does not change.
+- A generated variable may have a bytes type, such as
+  `type = { bytes = { encoding = "hex", length = 32 } }`. Its first lookup
+  creates as many random bytes as the type's `length`, or its `min-length`,
+  and writes them in the declared encoding: lower case `hex`, padded
+  `base64` or unpadded `base64url`. The type gives the length, so a `bytes`
+  field beside it fails with `starmap::spec::bad_bytes`, and so does a
+  length or `min-length` under 16. A generated `string` variable keeps its
+  `bytes` field, its default of 32 and its unpadded base64url. A value the
+  Keychain already holds is returned unchanged, and `check` refuses one in
+  another encoding or of another length, naming the expected encoding and
+  length and never the value. `starmap explain` prints a generated
+  variable's bind as `32 random bytes as hex` or
+  `32 random bytes as base64url`. The canonical form writes no `bytes`
+  field for a generated variable with a bytes type. The digest of an
+  existing file does not change. `Encoding::encode` is public and returns
+  the text in a `Zeroizing<String>`.
 - `#[derive(Env)]` reads a shown bytes variable into `Vec<u8>` and a
   withheld one into `starmap::SecretBytes`, which holds the decoded bytes,
   prints only dots in `Debug` and zeroes them on drop.
@@ -87,6 +103,11 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   withheld variable. The reason's wording is unchanged, and the digest of an
   existing file does not change.
 
+- **Breaking:** `Source::Generated` and `starmap_resolve::Lookup::Generated`
+  gain an `encoding` field, the `starmap::Encoding` a new value is written
+  in. The parser sets it to the bytes type's encoding, or to
+  `Encoding::Base64Url` for a variable with the type string, and `resolve`
+  passes it to the resolver. starmap-resolve no longer depends on `base64`.
 - **Breaking:** `starmap::SecretBytes`, the number of random bytes in a
   generated value, is renamed `starmap::ByteCount`, and the name
   `SecretBytes` now holds the decoded bytes of a withheld bytes value.

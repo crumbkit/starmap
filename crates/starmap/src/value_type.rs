@@ -15,7 +15,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
 use regex::Regex;
 use url::Url;
-use zeroize::Zeroize as _;
+use zeroize::{Zeroize as _, Zeroizing};
 
 use crate::ByteCount;
 
@@ -273,7 +273,7 @@ impl Value {
             Self::Boolean(boolean) => boolean.to_string().into(),
             Self::Integer(number) => number.to_string().into(),
             Self::Choice(choice) => choice.as_str().into(),
-            Self::Bytes { bytes, encoding } => encoding.encode(bytes).into(),
+            Self::Bytes { bytes, encoding } => encoding.encode(bytes).as_str().into(),
         }
     }
 }
@@ -610,12 +610,51 @@ impl Encoding {
     }
 
     /// Writes `bytes` in the encoding's one spelling: lower case hex, padded
-    /// base64 or unpadded base64url.
-    pub(crate) fn encode(self, bytes: &[u8]) -> String {
-        match self {
-            Self::Hex => bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
-            Self::Base64 => STANDARD.encode(bytes),
-            Self::Base64Url => URL_SAFE_NO_PAD.encode(bytes),
+    /// base64 or unpadded base64url. A host writes a generated value with
+    /// it, so the value always passes its own check.
+    ///
+    /// The text is written into one buffer sized to its final length, which
+    /// is zeroed when it is dropped, so encoding leaves no unzeroed copy of
+    /// the text behind.
+    ///
+    /// ```
+    /// use starmap::Encoding;
+    ///
+    /// assert_eq!(Encoding::Hex.encode(&[0xbe, 0xef]).as_str(), "beef");
+    /// assert_eq!(Encoding::Base64.encode(&[0xff]).as_str(), "/w==");
+    /// assert_eq!(Encoding::Base64Url.encode(&[0xff]).as_str(), "_w");
+    /// ```
+    #[must_use]
+    pub fn encode(self, bytes: &[u8]) -> Zeroizing<String> {
+        let (engine, padded) = match self {
+            Self::Hex => {
+                let mut text = Zeroizing::new(String::with_capacity(bytes.len() * 2));
+                for byte in bytes {
+                    for digit in [byte >> 4, byte & 0xf] {
+                        // A digit below 16 always has a hex character.
+                        text.push(char::from_digit(u32::from(digit), 16).unwrap_or('0'));
+                    }
+                }
+                return text;
+            }
+            Self::Base64 => (&STANDARD, true),
+            Self::Base64Url => (&URL_SAFE_NO_PAD, false),
+        };
+        // `encode_slice` writes into the buffer directly. `encode_string`
+        // would pass the text through a stack buffer that is never zeroed.
+        // The length of at most 1024 bytes' text never overflows.
+        let length = base64::encoded_len(bytes.len(), padded).unwrap_or_default();
+        let mut buffer = Zeroizing::new(vec![0; length]);
+        let written = engine.encode_slice(bytes, &mut buffer).unwrap_or_default();
+        buffer.truncate(written);
+        // Base64 text is ASCII, so the conversion moves the buffer into the
+        // String without copying it, and never fails.
+        match String::from_utf8(std::mem::take(&mut *buffer)) {
+            Ok(text) => Zeroizing::new(text),
+            Err(error) => {
+                drop(Zeroizing::new(error.into_bytes()));
+                Zeroizing::new(String::new())
+            }
         }
     }
 }
