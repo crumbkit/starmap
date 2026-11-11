@@ -76,6 +76,10 @@ const HELP: Help = Help::new()
                     "Write starmap.toml with a guess for each variable that src reads",
                 ),
                 Example::new(&["--dry-run"], "Print the guesses and write nothing"),
+                Example::new(
+                    &["--clippy"],
+                    "Add the Clippy entries for an application that has starmap.toml already",
+                ),
             ])
             .effects(Effects::additive())
             .document(INIT),
@@ -219,6 +223,19 @@ pub(crate) enum Verb {
     /// The scan skips test code: files named tests.rs or ending in
     /// _tests.rs, a file that begins with #![cfg(test)], and the item after
     /// #[cfg(test)]. check scans src the same way.
+    ///
+    /// init also adds disallowed-methods entries for std::env::var, var_os,
+    /// vars and vars_os to the clippy.toml that Clippy reads for the crate
+    /// of each .rs file that init reads. The crate's directory is the
+    /// nearest one above the file that holds a Cargo.toml, and the file is
+    /// the nearest .clippy.toml or clippy.toml in or above it. The search
+    /// stops at the directory that holds .git, or without one at the root
+    /// of the crate's Cargo workspace, so init never reads a clippy.toml
+    /// above that. init writes clippy.toml when there
+    /// is none, and keeps a file's other entries and comments. Clippy then
+    /// reports a read of the environment outside the struct that derives
+    /// starmap::Env, in build scripts and tests as well. When init reads no
+    /// .rs file, it writes no clippy.toml.
     Init(InitArgs),
     /// Check that starmap.toml follows every rule of the file, and that it
     /// declares every variable that src reads.
@@ -233,6 +250,11 @@ pub(crate) enum Verb {
     /// reads a member of that family, and check fails when the file
     /// declares no such family. check passes on any other format! name and
     /// names the place of each one it cannot resolve.
+    ///
+    /// check also fails when the clippy.toml that Clippy reads for the
+    /// crate of a .rs file that check reads lacks a disallowed-methods
+    /// entry for std::env::var, var_os, vars or vars_os. starmap init
+    /// --clippy adds the entries.
     Check(CheckArgs),
     /// Describe each declared variable and the value it has in this shell.
     Explain(ExplainArgs),
@@ -369,6 +391,10 @@ pub(crate) struct InitArgs {
     /// Write the spec to this file, and scan the src directory beside it; for a pointer, write the file it names and scan the directories it lists
     #[arg(long, value_name = "FILE", default_value = SpecFile::DEFAULT)]
     pub(crate) spec: PathBuf,
+
+    /// Add only the Clippy entries to clippy.toml, and leave the spec as it is
+    #[arg(long)]
+    pub(crate) clippy: bool,
 
     /// Print the guesses and write nothing. `crumbkit::parse` reads the
     /// flag, and `init` reads it from the output.

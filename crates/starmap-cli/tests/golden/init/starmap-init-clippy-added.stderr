@@ -1,0 +1,3 @@
+Wrote starmap.toml with 9 variables that src reads. Each value marked ? is a guess.
+Added disallowed-methods entries to clippy.toml for std::env::var_os, std::env::vars and std::env::vars_os.
+Next: starmap check refuses the file until each guess is confirmed and its ? deleted.

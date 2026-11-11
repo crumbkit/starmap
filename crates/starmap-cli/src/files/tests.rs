@@ -1,7 +1,17 @@
 use std::fs;
 use std::io::ErrorKind;
 
-use super::{read_capped, rust_files, write_new};
+use super::{read_capped, replace, rust_files, write_new};
+
+#[test]
+fn a_replaced_file_holds_the_new_text_and_no_other_file_is_left() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("clippy.toml");
+    fs::write(&path, "first").unwrap();
+    replace(&path, "second").unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), "second");
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+}
 
 #[test]
 fn a_file_longer_than_the_limit_is_read_up_to_the_limit() {
@@ -49,4 +59,37 @@ fn a_new_file_is_written_and_an_existing_file_is_kept() {
     let error = write_new(&path, "second").unwrap_err();
     assert_eq!(error.kind(), ErrorKind::AlreadyExists);
     assert_eq!(fs::read_to_string(&path).unwrap(), "first");
+}
+
+#[test]
+fn a_file_left_by_a_killed_run_does_not_stop_a_replacement() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("clippy.toml");
+    fs::write(&path, "first").unwrap();
+    fs::write(dir.path().join("clippy.toml.starmap-new"), "half").unwrap();
+    replace(&path, "second").unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), "second");
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn replacing_a_symbolic_link_writes_the_file_it_names_and_keeps_the_link_and_the_mode() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("shared")).unwrap();
+    let target = dir.path().join("shared/clippy.toml");
+    fs::write(&target, "first").unwrap();
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o640)).unwrap();
+    let link = dir.path().join("clippy.toml");
+    std::os::unix::fs::symlink("shared/clippy.toml", &link).unwrap();
+
+    replace(&link, "second").unwrap();
+
+    assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
+    assert_eq!(fs::read_to_string(&target).unwrap(), "second");
+    let mode = fs::metadata(&target).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o640);
+    assert_eq!(fs::read_dir(dir.path().join("shared")).unwrap().count(), 1);
 }

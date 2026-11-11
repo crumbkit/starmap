@@ -9,6 +9,7 @@
 
 mod check;
 mod cli;
+mod clippy;
 #[doc(hidden)]
 pub mod codes;
 mod diff;
@@ -55,7 +56,12 @@ where
     match cli.verb {
         Verb::Init(args) => {
             let dry_run = output.is_dry_run();
-            crumbkit::finish(output, init::INIT, init::init(&args, dry_run))
+            let listing = if args.clippy {
+                init::ban(&args, dry_run)
+            } else {
+                init::init(&args, dry_run)
+            };
+            crumbkit::finish(output, init::INIT, listing)
         }
         Verb::Check(args) => crumbkit::finish(output, check::CHECK, check::check(&args, vars)),
         Verb::Explain(args) => {

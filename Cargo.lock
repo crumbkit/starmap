@@ -1103,6 +1103,7 @@ dependencies = [
  "starmap",
  "starmap-resolve",
  "tempfile",
+ "toml_edit",
  "zeroize",
 ]
 

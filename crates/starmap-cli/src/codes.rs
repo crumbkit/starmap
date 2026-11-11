@@ -78,6 +78,14 @@ pub const VARIABLE_UNDECLARED: Code = Code::new("starmap", "variable", "undeclar
 pub const FAMILY_UNDECLARED: Code = Code::new("starmap", "family", "undeclared");
 /// A file or directory under `src` cannot be read as Rust source.
 pub const SOURCE_UNREADABLE: Code = Code::new("starmap", "source", "unreadable");
+/// `check` finds that the application's clippy.toml does not disallow a
+/// method of the standard library that reads the environment.
+pub const CLIPPY_UNBANNED: Code = Code::new("starmap", "clippy", "unbanned");
+/// The application's clippy.toml cannot be read, is over 256 KiB, is not
+/// UTF-8 text or valid TOML, or its `disallowed-methods` is not an array.
+pub const CLIPPY_INVALID: Code = Code::new("starmap", "clippy", "invalid");
+/// `init` cannot create or write the application's clippy.toml.
+pub const CLIPPY_UNWRITABLE: Code = Code::new("starmap", "clippy", "unwritable");
 /// `diff` runs in a directory that is not in a git repository.
 pub const REVISION_NO_REPOSITORY: Code = Code::new("starmap", "revision", "no_repository");
 /// `diff` names a revision that names no commit.
@@ -150,6 +158,9 @@ pub const ALL: &[&Code] = &[
     &VARIABLE_UNDECLARED,
     &FAMILY_UNDECLARED,
     &SOURCE_UNREADABLE,
+    &CLIPPY_UNBANNED,
+    &CLIPPY_INVALID,
+    &CLIPPY_UNWRITABLE,
     &REVISION_NO_REPOSITORY,
     &REVISION_NOT_FOUND,
     &REVISION_UNREADABLE,

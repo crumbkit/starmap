@@ -64,6 +64,9 @@ zeroize = { workspace = true }
 # line. The scan needs only tokens, so it takes no parser such as syn.
 proc-macro2 = { workspace = true, features = ["span-locations"] }
 miette = { workspace = true }
+# `init` adds entries to an application's clippy.toml and keeps the file's
+# other entries, comments and layout, which toml_edit preserves.
+toml_edit = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 schemars = { workspace = true, features = ["derive"] }
 

@@ -108,8 +108,8 @@ const READERS: &[&str] = &["var", "var_os", "starmap"];
 pub(crate) type Reads = BTreeMap<Name, Vec<String>>;
 
 /// What a scan finds: the reads, each variable whose field attribute names
-/// a check, with the first place that names it, the family reads and the
-/// unresolved reads.
+/// a check, with the first place that names it, the family reads, the
+/// unresolved reads and the directories that hold the Rust files it read.
 #[derive(Debug, Default)]
 pub(crate) struct Scanned {
     /// Each variable that the source reads.
@@ -123,6 +123,9 @@ pub(crate) struct Scanned {
     /// The place of each read whose `format!` name the scan cannot
     /// resolve, in the order of the files and their lines.
     pub(crate) unresolved: Vec<String>,
+    /// Each directory that holds a `.rs` file that the scan read, once.
+    /// Clippy checks the crate that each one belongs to.
+    pub(crate) rust: Vec<PathBuf>,
 }
 
 /// What one read names.
@@ -170,6 +173,7 @@ pub(crate) fn scan_all(dirs: &[PathBuf]) -> Result<Scanned, SourceFailure> {
             all.families.entry(prefix).or_default().extend(places);
         }
         all.unresolved.extend(scanned.unresolved);
+        all.rust.extend(scanned.rust);
     }
     Ok(all)
 }
@@ -220,6 +224,10 @@ pub(crate) fn scan(src: &Path) -> Result<Scanned, SourceFailure> {
     };
     let mut scanned = Scanned::default();
     for path in paths.into_iter().filter(|path| !is_test_file(path)) {
+        let dir = path.parent().unwrap_or(src);
+        if !scanned.rust.iter().any(|found| found == dir) {
+            scanned.rust.push(dir.to_path_buf());
+        }
         let bytes = files::read_capped(&path, MAX_SOURCE_BYTES + 1)
             .map_err(|error| SourceFailure::new(&path, format!("cannot be read: {error}")))?;
         if bytes.len() > MAX_SOURCE_BYTES {

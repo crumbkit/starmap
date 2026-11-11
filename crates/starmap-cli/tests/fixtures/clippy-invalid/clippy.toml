@@ -1,0 +1,2 @@
+# disallowed-methods is a string, and Clippy and starmap read an array.
+disallowed-methods = "std::env::var"

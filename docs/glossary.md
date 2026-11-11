@@ -549,6 +549,75 @@ fails with `starmap::spec::pointer_chain`, so starmap follows at most one
 pointer. A pointer has no digest of its own, and `starmap check` prints the
 digest of the declaration file.
 
+## Clippy entries
+
+The Clippy entries are four `disallowed-methods` entries in an
+application's `clippy.toml`, one for each of `std::env::var`,
+`std::env::var_os`, `std::env::vars` and `std::env::vars_os`. With them,
+Clippy refuses a call of those methods in the application's own code, so
+the code reads the environment only through the struct that derives `Env`.
+The derive's generated `Env::load` carries the `#[expect]` that lets it
+make the one read.
+
+```toml
+disallowed-methods = [
+    { path = "std::env::var", reason = "read the environment through the struct that derives starmap::Env, whose variables starmap.toml declares" },
+]
+```
+
+Clippy applies the entries to every target of the crate, so it also
+reports a read in a build script or a test, which starmap's scan skips. A
+read there, such as `OUT_DIR` in `build.rs`, takes
+`#[expect(clippy::disallowed_methods, reason = "...")]`.
+
+starmap requires the entries for the crate of each `.rs` file that its scan
+reads. The crate's directory is the nearest directory above the file that
+holds a `Cargo.toml`, however far above, so `src = ["."]` and
+`src = ["crates"]` reach the crate of each file. A file with no
+`Cargo.toml` above it belongs to the spec's directory. The file that holds the entries is the one that Clippy
+reads for the crate: `.clippy.toml` or `clippy.toml` in the crate's
+directory, or else in the nearest directory above it that has one. Clippy
+reads that one file and merges no other, so a crate with a `clippy.toml` of
+its own needs the entries there. Clippy skips a directory that has one of
+those names, and starmap does too. starmap does not read
+`CLIPPY_CONF_DIR`, so an application that sets it keeps the entries in the
+file that this search finds as well.
+
+The search for a `clippy.toml` stops at the repository's root, which is
+the nearest directory at or above the crate's directory that holds `.git`.
+Without a repository, the search stops at the root of the crate's Cargo
+workspace, which is the nearest directory at or above the crate's
+directory whose `Cargo.toml` has a `[workspace]` table. Without a
+workspace either, starmap reads only the crate's directory. starmap never
+reads or edits a `clippy.toml` above the directory where the search stops,
+although Clippy does read one there. The `clippy.toml` that init writes is
+nearer to the crate, so Clippy then reads it in place of the file above,
+and a setting that only the file above holds no longer applies to the
+crate.
+
+`starmap init` adds each missing entry after the entries that a file
+lists, and keeps the file's other entries, comments, layout and mode. It
+writes through a symbolic link to the file that the link names, and its
+messages name that file. When no directory has a file, init writes
+`clippy.toml` beside the spec when the spec's directory is the crate's
+directory, or a directory above it where the search reaches, and in the
+crate's directory otherwise. `starmap init --clippy`
+adds only these entries and leaves the spec alone, for an application whose
+spec exists. It lists no variable, and says what it did to each file in
+the note of its output. An entry counts as
+present when it is a string that holds the method's path or a table whose
+`path` holds it, in an array or in `[[disallowed-methods]]` tables,
+whatever its reason.
+
+`starmap check` fails with `starmap::clippy::unbanned` for each file that
+lacks an entry. A `clippy.toml` that cannot be read, is over 256 KiB, is
+not UTF-8 text or valid TOML, or whose `disallowed-methods` is not an
+array, fails both commands with `starmap::clippy::invalid`, and neither
+command rewrites it. A symbolic link that leads to no file, or back to
+itself, cannot be read. When the scan reads no `.rs` file, as in an
+application written in another language, check requires no entries and
+init writes no `clippy.toml`.
+
 ## tool table
 
 A tool table is a `[tool.<name>]` table, where a tool such as a generator,

@@ -13,6 +13,7 @@ use serde::Serialize;
 use starmap::Name;
 
 use crate::cli::{InitArgs, SpecFile};
+use crate::clippy;
 use crate::files;
 use crate::scan::{self, Dirs};
 use crate::spec::{self, Located, SpecFailure};
@@ -26,7 +27,8 @@ pub(crate) const INIT: Document<Listing<Guess>> = Document::new(
     "init",
     1,
     "Each variable that src reads, with the guesses that init writes to the spec.",
-);
+)
+.when_empty("init lists no variables");
 
 /// The variables that the shell and the XDG base directories set, which
 /// init guesses are inherited. Every name that starts with `XDG_` is
@@ -109,11 +111,15 @@ crumbkit::shown!(Places);
 /// and writes the file that the pointer names. A dry run prints the same
 /// guesses and writes nothing.
 ///
+/// init also adds the entries of [`clippy::BANNED`] to each clippy.toml
+/// that Clippy reads for a crate whose `.rs` file the scan read, as
+/// [`clippy::open`] finds them.
+///
 /// # Errors
 ///
 /// Returns a [`crumbkit::Error`] when a file that declares variables is at the
-/// spec path already, when the spec cannot be written, and when src cannot
-/// be scanned.
+/// spec path already, when the spec cannot be written, when src cannot
+/// be scanned, and when a clippy.toml cannot be read, parsed or written.
 pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, crumbkit::Error> {
     let path = &args.spec;
     let given = path.display().to_string();
@@ -126,7 +132,14 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
     if files::exists(&located.file) {
         return Err(exists().into());
     }
-    let guesses: Vec<Guess> = scan::scan_all(&located.src)?
+    let scanned = scan::scan_all(&located.src)?;
+    // init refuses a clippy.toml that it cannot edit before it writes the
+    // spec, so a refused run writes nothing.
+    let bans: Vec<clippy::Ban> = clippy::open(path, &scanned.rust)
+        .into_iter()
+        .collect::<Result<_, _>>()?;
+    let banned = clippy::sentences(&bans, dry_run);
+    let guesses: Vec<Guess> = scanned
         .reads
         .into_iter()
         .map(|(name, places)| guess(name, places))
@@ -138,7 +151,7 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
     let listing = if dry_run {
         Listing::new(guesses, count)
             .note(format!(
-                "{src} {reads} {count} {noun}, and init wrote nothing."
+                "{src} {reads} {count} {noun}, and init wrote nothing.\n{banned}"
             ))
             .next(SpecFile::call(&["init"], &given), "writes the file.")
     } else {
@@ -152,9 +165,12 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
                 }
             }
         })?;
+        for ban in bans {
+            ban.write(path)?;
+        }
         Listing::new(guesses, count)
             .note(format!(
-                "Wrote {file} with {count} {noun} that {src} {reads}. Each value marked ? is a guess."
+                "Wrote {file} with {count} {noun} that {src} {reads}. Each value marked ? is a guess.\n{banned}"
             ))
             .next(
                 SpecFile::call(&["check"], &given),
@@ -162,6 +178,32 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
             )
     };
     Ok(listing.described(noun))
+}
+
+/// Adds the entries of [`clippy::BANNED`] as [`init`] does, for an
+/// application whose spec exists. It reads the file that `--spec` names
+/// only to find the source directories, scans them, and leaves the spec
+/// as it is. A dry run reports the same entries and writes nothing. The
+/// listing has no variable, and its note says what init did to each
+/// clippy.toml.
+///
+/// # Errors
+///
+/// Returns a [`crumbkit::Error`] when the file that `--spec` names cannot be
+/// read, when src cannot be scanned, and when a clippy.toml cannot be
+/// read, parsed or written.
+pub(crate) fn ban(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, crumbkit::Error> {
+    let located = spec::locate(&args.spec)?;
+    let bans: Vec<clippy::Ban> = clippy::open(&args.spec, &scan::scan_all(&located.src)?.rust)
+        .into_iter()
+        .collect::<Result<_, _>>()?;
+    let banned = clippy::sentences(&bans, dry_run);
+    if !dry_run {
+        for ban in bans {
+            ban.write(&args.spec)?;
+        }
+    }
+    Ok(Listing::new(Vec::new(), 0).note(banned))
 }
 
 /// Returns where init writes the spec that `path` names. A file that

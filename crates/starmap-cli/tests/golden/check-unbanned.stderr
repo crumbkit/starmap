@@ -1,0 +1,4 @@
+Mode: local, because the spec has no [mode] table.
+error: ../../../starmap/tests/example/unbanned/clippy.toml does not disallow std::env::var_os, std::env::vars and std::env::vars_os
+  help:  run `starmap init --spec ../../../starmap/tests/example/unbanned/starmap.toml --clippy`
+  code:  starmap::clippy::unbanned

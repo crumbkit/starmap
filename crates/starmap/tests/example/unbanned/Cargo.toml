@@ -1,0 +1,10 @@
+# Marks this directory as a crate, so starmap reads the clippy.toml beside
+# this file for it. Cargo does not build it.
+[package]
+name = "shelf-unbanned"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Keeps this crate out of the workspace of the repository.
+[workspace]

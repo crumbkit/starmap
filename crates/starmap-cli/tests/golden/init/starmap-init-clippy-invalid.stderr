@@ -1,0 +1,3 @@
+error: clippy.toml sets disallowed-methods to a value that is not an array
+  help:  make clippy.toml a readable file of at most 256 KiB that holds valid TOML whose disallowed-methods is an array
+  code:  starmap::clippy::invalid

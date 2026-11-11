@@ -53,9 +53,11 @@ pub(crate) fn rust_files(dir: &Path) -> io::Result<Vec<PathBuf>> {
 }
 
 /// Writes `text` to a new file at `path`, and keeps a file that is already
-/// there unchanged. When the write fails after the file is created, such
-/// as on a full disk, it removes the partial file, so a later run does not
-/// find a truncated spec in its place.
+/// there unchanged. It asks the system to store the text before it
+/// returns, so a power loss after a rename of the file leaves the text in
+/// it. When the write fails after the file is created, such as on a full
+/// disk, it removes the partial file, so a later run does not find a
+/// truncated spec in its place.
 ///
 /// # Errors
 ///
@@ -63,12 +65,45 @@ pub(crate) fn rust_files(dir: &Path) -> io::Result<Vec<PathBuf>> {
 /// `AlreadyExists` when `path` names an existing file.
 pub(crate) fn write_new(path: &Path, text: &str) -> io::Result<()> {
     let mut file = File::options().write(true).create_new(true).open(path)?;
-    file.write_all(text.as_bytes()).inspect_err(|_| {
-        drop(file);
+    let written = file
+        .write_all(text.as_bytes())
+        .and_then(|()| file.sync_all());
+    drop(file);
+    written.inspect_err(|_| {
         // The write error is what the caller needs, so a failed removal
         // is not reported in its place.
         let _ = fs::remove_file(path);
     })
+}
+
+/// Replaces the file at `path` with `text`, and keeps its mode. It writes
+/// `text` to a new file beside the file and renames that file over it, so
+/// a write that fails, such as on a full disk, leaves the file as it was.
+/// When `path` is a symbolic link, the file that the link names is
+/// replaced, and the link stays. A read-only file is replaced too,
+/// because the rename needs only a writable directory.
+///
+/// # Errors
+///
+/// Returns the I/O error of a file that cannot be found, created, written
+/// or renamed.
+pub(crate) fn replace(path: &Path, text: &str) -> io::Result<()> {
+    let path = fs::canonicalize(path)?;
+    let mode = fs::metadata(&path)?.permissions();
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".starmap-new");
+    let new = path.with_file_name(name);
+    // A run that was killed may have left its new file behind. When the
+    // removal fails, the write that follows reports why.
+    let _ = fs::remove_file(&new);
+    write_new(&new, text)
+        .and_then(|()| fs::set_permissions(&new, mode))
+        .and_then(|()| fs::rename(&new, &path))
+        .inspect_err(|_| {
+            // The first error is what the caller needs, so a failed removal
+            // is not reported in its place.
+            let _ = fs::remove_file(&new);
+        })
 }
 
 /// Reports whether anything is at `path`. A path that cannot be checked,
@@ -78,8 +113,18 @@ pub(crate) fn exists(path: &Path) -> bool {
     path.exists()
 }
 
-/// Returns the absolute path of `path` with every symbolic link resolved,
-/// which `starmap run` reads the checkout's directory name from.
+/// Reports whether `path` names something that is not a directory, through
+/// any symbolic link, which is what Clippy takes as a configuration file.
+/// A symbolic link that leads to no file counts, so its reader reports
+/// that it cannot be read.
+pub(crate) fn is_file(path: &Path) -> bool {
+    match fs::metadata(path) {
+        Ok(found) => !found.is_dir(),
+        Err(_) => fs::symlink_metadata(path).is_ok(),
+    }
+}
+
+/// Returns the absolute path of `path` with every symbolic link resolved.
 ///
 /// # Errors
 ///

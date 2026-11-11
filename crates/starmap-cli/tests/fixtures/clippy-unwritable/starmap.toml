@@ -1,0 +1,8 @@
+# A directory stands where starmap init writes the new text of the
+# clippy.toml beside this file, so init cannot write it.
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
