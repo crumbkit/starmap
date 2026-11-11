@@ -2,7 +2,7 @@
 //! each one.
 
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 
@@ -601,11 +601,11 @@ proptest! {
 fn a_string_type_reads_any_text_including_an_empty_one() {
     assert_eq!(
         parse(&Type::String { pattern: None }, ""),
-        Ok(Some(Value::String(OsString::new())))
+        Ok(Some(Value::String(String::new())))
     );
     assert_eq!(
         parse(&Type::String { pattern: None }, "two words"),
-        Ok(Some(Value::String(OsString::from("two words"))))
+        Ok(Some(Value::String("two words".to_owned())))
     );
 }
 
@@ -615,7 +615,7 @@ fn a_string_type_with_a_pattern_accepts_a_value_that_matches() {
 
     assert_eq!(
         parse(&matching("[0-9a-f]{40}"), revision),
-        Ok(Some(Value::String(OsString::from(revision))))
+        Ok(Some(Value::String(revision.to_owned())))
     );
 }
 
@@ -650,18 +650,6 @@ fn a_refused_match_names_the_pattern_and_not_the_value() {
         error.to_string(),
         "the value does not match the pattern sk-[a-z]+"
     );
-}
-
-#[test]
-fn a_string_type_with_a_pattern_needs_unicode_text() {
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-
-        let raw = OsStr::from_bytes(b"ab\xff");
-
-        assert_eq!(matching(".*").parse(raw), Err(TypeError::NotUnicode));
-    }
 }
 
 #[test]
@@ -978,7 +966,7 @@ proptest! {
 
 #[cfg(unix)]
 #[test]
-fn every_type_that_needs_text_refuses_a_value_that_is_not_unicode() {
+fn every_type_except_path_refuses_a_value_that_is_not_unicode() {
     use std::os::unix::ffi::OsStrExt;
 
     let raw = OsStr::from_bytes(b"\xff80");
@@ -989,6 +977,8 @@ fn every_type_that_needs_text_refuses_a_value_that_is_not_unicode() {
         Type::Boolean,
         Type::Integer(IntegerRange::new(1, 100).unwrap()),
         Type::Enumeration(choices(&["dev"])),
+        Type::String { pattern: None },
+        matching(".*"),
         exactly(Encoding::Hex, 1),
     ];
 
@@ -999,19 +989,18 @@ fn every_type_that_needs_text_refuses_a_value_that_is_not_unicode() {
 
 #[cfg(unix)]
 #[test]
-fn the_string_and_path_types_read_a_value_that_is_not_unicode() {
+fn a_path_type_holds_a_value_that_is_not_unicode_as_it_is() {
     use std::os::unix::ffi::OsStrExt;
 
     let raw = OsStr::from_bytes(b"/state/\xff");
 
-    assert_eq!(
-        Type::String { pattern: None }.parse(raw),
-        Ok(Some(Value::String(raw.to_os_string())))
-    );
-    assert_eq!(
-        Type::Path { absolute: true }.parse(raw),
-        Ok(Some(Value::Path(PathBuf::from(raw))))
-    );
+    for absolute in [false, true] {
+        assert_eq!(
+            Type::Path { absolute }.parse(raw),
+            Ok(Some(Value::Path(PathBuf::from(raw)))),
+            "absolute = {absolute}"
+        );
+    }
 }
 
 // Display of types and values

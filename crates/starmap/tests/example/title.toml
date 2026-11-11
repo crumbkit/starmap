@@ -1,0 +1,15 @@
+# A spec with a shown string and a required port, for the struct test of
+# a string value that is not Unicode.
+[variables.SHELF_TITLE]
+purpose = "The title of the web view."
+type = "string"
+unset = { default = "Shelf" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
