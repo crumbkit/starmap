@@ -11,7 +11,7 @@ use serde::Serialize;
 use starmap::{Declaration, Mode, Name};
 
 use crate::cli::CheckArgs;
-use crate::codes::VARIABLE_UNDECLARED;
+use crate::codes::{FAMILY_UNDECLARED, VARIABLE_UNDECLARED};
 use crate::mode;
 use crate::scan::{self, Dirs};
 use crate::spec;
@@ -41,6 +41,8 @@ pub(crate) struct Checked {
     checks_without_sentence: Vec<String>,
     /// The declared variables that have a check sentence and whose field in src names no check, each of which is also a note; empty when no source directory is scanned.
     sentences_without_check: Vec<String>,
+    /// The place of each read in src whose name is built with `format!` in a shape that check cannot resolve, such as `src/tenants.rs:30`.
+    unresolved: Vec<String>,
     /// The source directories that check scanned, as a sentence names
     /// them.
     #[serde(skip)]
@@ -76,7 +78,8 @@ impl From<Mode> for ModeWord {
 }
 
 /// Prints one sentence, such as `starmap.toml declares 9 variables, and src
-/// reads all 9.`
+/// reads all 9.`, and a second that names each unresolved read when there
+/// is one.
 impl fmt::Display for Checked {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (declared, read) = (self.variables, self.read);
@@ -102,35 +105,73 @@ impl fmt::Display for Checked {
             formatter,
             "{} declares {declared} {noun}, and {} {} {reads}.",
             self.spec, self.src, self.src_verb
-        )
+        )?;
+        match self.unresolved.split_last() {
+            None => Ok(()),
+            Some((last, [])) => write!(formatter, " check cannot resolve the name read at {last}."),
+            Some((last, rest)) => write!(
+                formatter,
+                " check cannot resolve the names read at {} and {last}.",
+                rest.join(", ")
+            ),
+        }
     }
 }
 
-/// A variable that src reads and the spec does not declare.
+/// A read in src that the spec does not declare: of a variable, or of a
+/// member of a family by a name that `format!` builds from a prefix.
 #[derive(Debug, Failure)]
-#[failure(
-    code = VARIABLE_UNDECLARED,
-    hint = "declare {name} in {file}",
-    alternative = Recovery::Hint(format!("stop reading {name}")),
-    field(name = name.as_str()),
-    field(at = at.as_str()),
-)]
-pub(crate) struct Undeclared {
-    /// The variable.
-    name: Name,
-    /// The first place in src that reads it, such as `src/theme.rs:14`.
-    at: String,
-    /// The spec file, as the caller gave it.
-    file: String,
+pub(crate) enum Undeclared {
+    /// A variable that src reads and the spec does not declare.
+    #[failure(
+        code = VARIABLE_UNDECLARED,
+        hint = "declare {name} in {file}",
+        alternative = Recovery::Hint(format!("stop reading {name}")),
+        field(name = name.as_str()),
+        field(at = at.as_str()),
+    )]
+    Variable {
+        /// The variable.
+        name: Name,
+        /// The first place in src that reads it, such as `src/theme.rs:14`.
+        at: String,
+        /// The spec file, as the caller gave it.
+        file: String,
+    },
+    /// A prefix that src builds names from and the spec declares no family
+    /// for.
+    #[failure(
+        code = FAMILY_UNDECLARED,
+        hint = "declare [families.{prefix}] in {file}",
+        alternative = Recovery::Hint("read a declared name".to_owned()),
+        field(prefix = prefix.as_str()),
+        field(at = at.as_str()),
+    )]
+    Family {
+        /// The prefix of the names.
+        prefix: Name,
+        /// The first place in src that reads such a name, such as
+        /// `src/regions.rs:14`.
+        at: String,
+        /// The spec file, as the caller gave it.
+        file: String,
+    },
 }
 
 impl fmt::Display for Undeclared {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{} reads {}, which {} does not declare",
-            self.at, self.name, self.file
-        )
+        match self {
+            Self::Variable { name, at, file } => {
+                write!(
+                    formatter,
+                    "{at} reads {name}, which {file} does not declare"
+                )
+            }
+            Self::Family { prefix, at, file } => write!(
+                formatter,
+                "{at} reads names that start with {prefix}_, and {file} declares no family {prefix}"
+            ),
+        }
     }
 }
 
@@ -141,7 +182,10 @@ impl std::error::Error for Undeclared {}
 /// The note names the reason for the mode, then each field in src that
 /// names a check for a variable without a check sentence, then each check
 /// sentence whose variable no field in src checks. Each variable that src
-/// reads and the spec does not declare is a failure.
+/// reads and the spec does not declare is a failure, and so is each prefix
+/// that src builds a `format!` name from and the spec declares no family
+/// for. A `format!` read that the scan cannot resolve passes, and the
+/// result names its place.
 ///
 /// # Errors
 ///
@@ -153,7 +197,12 @@ pub(crate) fn check(
 ) -> Result<Prose<Checked, Undeclared>, crumbkit::Error> {
     let spec::Opened { spec, located } = spec::open(&args.file.spec)?;
     let file = located.file.display().to_string();
-    let scan::Scanned { reads, checks } = scan::scan_all(&located.src)?;
+    let scan::Scanned {
+        reads,
+        checks,
+        families,
+        unresolved,
+    } = scan::scan_all(&located.src)?;
     let bindings = starmap::capture(&spec, vars);
     let (mode, note) = mode::decide(&spec, &bindings);
     let src = Dirs(&located.src);
@@ -184,6 +233,7 @@ pub(crate) fn check(
     }
     let mut read = 0;
     let mut undeclared = Vec::new();
+    let mut undeclared_names = Vec::new();
     for (name, places) in reads {
         // A read of a member's name is declared by its family, unless the
         // family lists its keys and not this one.
@@ -195,8 +245,21 @@ pub(crate) fn check(
             read += 1;
         } else if !member {
             let at = places.into_iter().next().unwrap_or_default();
-            undeclared.push(Undeclared {
+            undeclared_names.push(name.to_string());
+            undeclared.push(Undeclared::Variable {
                 name,
+                at,
+                file: file.clone(),
+            });
+        }
+    }
+    // A `format!` name with a declared prefix reads a member of that
+    // family, whose key check cannot know.
+    for (prefix, places) in families {
+        if spec.family(&prefix).is_none() {
+            let at = places.into_iter().next().unwrap_or_default();
+            undeclared.push(Undeclared::Family {
+                prefix,
                 at,
                 file: file.clone(),
             });
@@ -206,9 +269,10 @@ pub(crate) fn check(
         digest: spec.digest().to_string(),
         variables: u64::try_from(spec.variables().count()).unwrap_or(u64::MAX),
         read,
-        undeclared: undeclared.iter().map(|u| u.name.to_string()).collect(),
+        undeclared: undeclared_names,
         checks_without_sentence,
         sentences_without_check,
+        unresolved,
         src: Dirs(&located.src).to_string(),
         src_verb: Dirs(&located.src).verb("reads", "read"),
         scanned_nothing: Dirs(&located.src).is_empty(),

@@ -1,0 +1,5 @@
+Mode: local, because the spec has no [mode] table.
+error: undeclared-family/src/regions.rs:9 reads names that start with SHELF_CACHE_URL_, and undeclared-family/starmap.toml declares no family SHELF_CACHE_URL
+  help:  declare [families.SHELF_CACHE_URL] in undeclared-family/starmap.toml
+  help:  read a declared name
+  code:  starmap::family::undeclared

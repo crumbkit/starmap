@@ -68,7 +68,9 @@ Effects: additive, not idempotent, closed-world.
 
 ## `starmap check`
 
-Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads
+Check that starmap.toml follows every rule of the file, and that it declares every variable that src reads.
+
+A read whose name format! builds from a name, an underscore and one trailing placeholder, such as format!("SHELF\_DB\_URL\_{region}"), reads a member of that family, and check fails when the file declares no such family. check passes on any other format! name and names the place of each one it cannot resolve.
 
 ### Arguments
 

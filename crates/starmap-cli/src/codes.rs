@@ -73,6 +73,9 @@ pub const VARIABLE_UNKNOWN: Code = Code::new("starmap", "variable", "unknown");
 /// `check` finds source code that reads a variable the spec does not
 /// declare.
 pub const VARIABLE_UNDECLARED: Code = Code::new("starmap", "variable", "undeclared");
+/// `check` finds source code that builds a variable's name with `format!`
+/// from a prefix that the spec declares no family for.
+pub const FAMILY_UNDECLARED: Code = Code::new("starmap", "family", "undeclared");
 /// A file or directory under `src` cannot be read as Rust source.
 pub const SOURCE_UNREADABLE: Code = Code::new("starmap", "source", "unreadable");
 /// `diff` runs in a directory that is not in a git repository.
@@ -145,6 +148,7 @@ pub const ALL: &[&Code] = &[
     &SPEC_BAD_FAMILY,
     &VARIABLE_UNKNOWN,
     &VARIABLE_UNDECLARED,
+    &FAMILY_UNDECLARED,
     &SOURCE_UNREADABLE,
     &REVISION_NO_REPOSITORY,
     &REVISION_NOT_FOUND,

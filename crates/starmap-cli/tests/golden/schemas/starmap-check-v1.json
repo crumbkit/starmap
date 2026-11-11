@@ -471,6 +471,13 @@
             "type": "string"
           }
         },
+        "unresolved": {
+          "description": "The place of each read in src whose name is built with `format!` in a shape that check cannot resolve, such as `src/tenants.rs:30`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "variables": {
           "description": "How many variables the spec declares.",
           "type": "integer",
@@ -486,6 +493,7 @@
         "undeclared",
         "checks_without_sentence",
         "sentences_without_check",
+        "unresolved",
         "mode"
       ]
     },

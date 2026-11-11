@@ -152,6 +152,11 @@ starmap check --spec bad_family.toml
   fails with starmap::spec::bad_family
   hint
 
+starmap check --spec undeclared-family/starmap.toml
+  fails with starmap::family::undeclared
+  hint
+  hint
+
 codes that no start provokes:
   starmap::spec::too_large: Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.
   starmap::revision::no_repository: Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.
