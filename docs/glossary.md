@@ -25,7 +25,7 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
   `url`.
 - `{ string = { pattern = "[0-9a-f]{40}" } }` is Unicode text that the
   pattern matches as a whole. `{ string = {} }` is the same type as the word
-  `string`, which takes any text, including text that is not Unicode.
+  `string`, which takes any Unicode text.
 
 - `{ bytes = { encoding = "base64", length = 32 } }` is bytes written as
   text in an encoding, whose length after decoding is exactly `length`, or
@@ -73,6 +73,33 @@ ending the comment with a newline fixes it. The Rust API names the pattern
 when the value counts as unset, or a `TypeError` when the value does not fit
 the type. `starmap explain` and
 `starmap diff` print a variable's type under the name `type`.
+
+## Unicode
+
+A value that is not valid Unicode is refused with the text
+`the value is not unicode text` by every type except `path`, which holds the
+operating system's value as it is. A withheld variable always refuses such a
+value. On Unix an environment value is bytes, and a value that is not UTF-8
+is not Unicode. On Windows a value that holds an unpaired surrogate is not
+Unicode.
+
+Each place a value comes from follows the rule:
+
+- The process environment is checked by each variable's type. A variable
+  whose name is not Unicode is ignored, as an undeclared name is.
+- A `.env` file must be UTF-8 as a whole, or `starmap run` refuses it as
+  unreadable.
+- `starmap run --set` takes only Unicode text, and refuses an argument that
+  is not before it reads the spec.
+- A value from a resolver or a provider is text, so it is always Unicode.
+- A mode variable whose value is not Unicode leaves its local default to
+  decide the mode, and the check then refuses the value.
+
+Output that prints a value that is not Unicode replaces each invalid
+sequence with U+FFFD. `starmap explain` prints a shown value that way, and
+the refusal of a shown variable quotes it that way. A withheld value is
+never printed or quoted. No test builds a value that is
+not Unicode on Windows; the rule there follows from Rust's `OsStr::to_str`.
 
 ## enumeration
 

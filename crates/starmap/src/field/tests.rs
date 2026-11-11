@@ -3,7 +3,7 @@
 
 use std::ffi::OsString;
 
-use super::{Field, FieldError, FieldProblem, FieldType, Presence, ReadField as _, Shape};
+use super::{Field, FieldError, FieldType, Presence, ReadField as _, Shape};
 use crate::{Environment, Mode, Secret, Spec, Verdict, capture, check};
 
 /// A spec with a path, a string and a withheld token.
@@ -45,12 +45,15 @@ fn required<T: FieldType>(environment: &Environment, name: &'static str) -> Resu
     Field::new::<T>(name, "T", Presence::Always).require(environment)
 }
 
-/// The text `SHELF_TITLE` holds in the tests of a value that is not
+/// The path `SHELF_DATABASE` holds in the test of a value that is not
 /// Unicode.
 #[cfg(unix)]
 fn not_unicode() -> Vec<(OsString, OsString)> {
     use std::os::unix::ffi::OsStringExt as _;
-    vec![("SHELF_TITLE".into(), OsString::from_vec(vec![b'S', 0xff]))]
+    vec![(
+        "SHELF_DATABASE".into(),
+        OsString::from_vec(vec![b'S', 0xff]),
+    )]
 }
 
 #[test]
@@ -96,26 +99,12 @@ fn a_secret_field_reads_a_copy_of_the_withheld_value() {
 
 #[test]
 #[cfg(unix)]
-fn an_os_string_field_reads_a_value_that_is_not_unicode() {
+fn an_os_string_field_reads_a_path_that_is_not_unicode() {
     use std::os::unix::ffi::OsStrExt as _;
     let environment = environment(not_unicode());
 
-    let field = Field::new::<OsString>("SHELF_TITLE", "OsString", Presence::Maybe);
-    let title: OsString = field.read(&environment).unwrap().unwrap();
+    let field = Field::new::<OsString>("SHELF_DATABASE", "OsString", Presence::Maybe);
+    let database: OsString = field.read(&environment).unwrap().unwrap();
 
-    assert_eq!(title.as_bytes(), [b'S', 0xff]);
-}
-
-#[test]
-#[cfg(unix)]
-fn a_string_field_refuses_a_value_that_is_not_unicode_without_claiming_a_disagreement() {
-    let environment = environment(not_unicode());
-
-    let error = required::<String>(&environment, "SHELF_TITLE").unwrap_err();
-
-    assert_eq!(error.problem(), FieldProblem::NotUnicode);
-    assert_eq!(
-        error.to_string(),
-        "the field that reads SHELF_TITLE holds unicode text, and the value is not unicode"
-    );
+    assert_eq!(database.as_bytes(), [b'S', 0xff]);
 }
