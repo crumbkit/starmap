@@ -60,7 +60,9 @@
 //! `concat!`, `+` or `push_str`, and every lookup in the map that
 //! `std::env::vars_os` returns. It misses a clap `env` whose value is not
 //! a string literal, such as `#[arg(env = NAME)]` with a constant, and one
-//! inside `cfg_attr`. It reads a bare clap `env` under the wrong name when
+//! inside `cfg_attr`. It misses a clap `env` whose literal is not a valid
+//! starmap name, such as `env = "lower_case"`, although clap reads that
+//! variable. It reads a bare clap `env` under the wrong name when
 //! clap does not name the variable after the field in upper case: when the
 //! attribute sets `id`, when the struct sets `rename_all_env`, and when
 //! the field name has a leading, trailing or doubled underscore or an
@@ -296,6 +298,7 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
             if is_punct(previous.as_ref(), '#') {
                 in_test_item = true;
                 previous = None;
+                bare_env = None;
                 continue;
             }
             // An inner `#![cfg(test)]` makes the rest of its module test
