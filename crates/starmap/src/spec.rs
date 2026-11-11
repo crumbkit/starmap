@@ -11,7 +11,8 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    ByteCount, Encoding, Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind, Type, Value,
+    ByteCount, Choices, Encoding, EnumerationName, Mode, ModeRule, Name, PathTemplate, ProvidedRef,
+    SecretBind, Type, Value,
 };
 
 pub use group::{Group, GroupName, GroupNameError};
@@ -43,6 +44,8 @@ mod tests;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spec {
     mode: Option<ModeRule>,
+    /// The file's named enumerations, in name order. Each one has a name.
+    enumerations: Vec<Choices>,
     /// The file's groups of variables, in name order.
     groups: Vec<Group>,
     variables: Vec<(Name, Variable)>,
@@ -73,6 +76,21 @@ impl Spec {
     #[must_use]
     pub fn mode(&self) -> Option<&ModeRule> {
         self.mode.as_ref()
+    }
+
+    /// Returns the named enumeration called `name`, if the spec declares
+    /// it in an `[enumerations.<name>]` table.
+    #[must_use]
+    pub fn enumeration(&self, name: &EnumerationName) -> Option<&Choices> {
+        self.enumerations
+            .iter()
+            .find(|choices| choices.name() == Some(name))
+    }
+
+    /// Returns each named enumeration the spec declares, in name order,
+    /// including those that no variable uses.
+    pub fn enumerations(&self) -> impl Iterator<Item = &Choices> {
+        self.enumerations.iter()
     }
 
     /// Returns each group of variables the spec declares, in name order.
@@ -136,8 +154,9 @@ impl Spec {
     }
 
     /// Returns the spec's canonical form: TOML that lists the mode table,
-    /// then each group in name order with its variables in the file's order,
-    /// and then each variable in order, with each field in a fixed order, each
+    /// then each named enumeration in name order with its values in the
+    /// file's order, then each group in name order with its variables in
+    /// the file's order, and then each variable in order, with each field in a fixed order, each
     /// value in one spelling, and no comments. It leaves out every tool
     /// table, so parsing it returns a spec equal to this one without its
     /// tool tables.
@@ -603,11 +622,14 @@ pub enum SpecProblemKind {
     /// The mode variable is not a setting or inherited variable.
     ModeSource,
     /// A file has `spec`, which makes it a [`Pointer`], and declares
-    /// variables, groups or a mode too.
+    /// variables, enumerations, groups or a mode too.
     PointerDeclares,
     /// A [`Pointer`] is read where a file that declares variables belongs,
     /// such as the file that another pointer names.
     PointerChain,
+    /// A variable's type names an enumeration that the file does not
+    /// declare in an `[enumerations.<name>]` table.
+    EnumerationUndeclared,
     /// A group lists a variable that the file does not declare.
     GroupUndeclared,
     /// A group lists fewer than two variables or repeats one, or lists a
@@ -642,6 +664,7 @@ impl SpecProblemKind {
             Self::ModeSource => "starmap::spec::mode_source",
             Self::PointerDeclares => "starmap::spec::pointer_declares",
             Self::PointerChain => "starmap::spec::pointer_chain",
+            Self::EnumerationUndeclared => "starmap::spec::enumeration_undeclared",
             Self::GroupUndeclared => "starmap::spec::group_undeclared",
             Self::BadGroup => "starmap::spec::bad_group",
         }

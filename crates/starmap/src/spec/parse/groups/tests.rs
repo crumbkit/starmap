@@ -272,3 +272,17 @@ fn a_pointer_with_groups_is_refused_as_declaring() {
 
     assert_eq!(kinds, [SpecProblemKind::PointerDeclares]);
 }
+
+#[test]
+fn the_canonical_form_writes_groups_after_the_named_enumerations() {
+    let text = format!("[enumerations.region]\neu = \"The European mirror.\"\n{MIRROR}");
+
+    let canonical = Spec::parse(&text).unwrap().to_toml();
+
+    assert!(
+        canonical.starts_with(
+            "[enumerations.region]\neu = \"The European mirror.\"\n\n[groups.mirror]\n"
+        ),
+        "{canonical}"
+    );
+}

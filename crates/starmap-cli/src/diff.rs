@@ -15,7 +15,7 @@ use starmap::{Name, Source, Spec, Type, Variable};
 
 use crate::cli::DiffArgs;
 use crate::codes;
-use crate::explain::{bind_text, cache_text, source_text, type_text, unset_text};
+use crate::explain::{Values, bind_text, cache_text, source_text, type_text, unset_text};
 use crate::git::{self, Entry, GitError};
 use crate::spec::{self, SpecFailure};
 
@@ -244,8 +244,10 @@ fn changes(was: Option<&Spec>, now: &Spec) -> Vec<Change> {
 type FieldChange = (&'static str, Option<String>, Option<String>);
 
 /// Returns each field that differs between `old` and `new`, in the order
-/// type, unset, show, source, bind, cache, purpose and effect, with the text that
-/// explain prints for it. The fields are compared by value and shown as
+/// type, values, unset, show, source, bind, cache, purpose and effect, with
+/// the text that explain prints for it. A changed type lists `type` when
+/// its text differs, and `values` when the descriptions of a named
+/// enumeration's values differ. The fields are compared by value and shown as
 /// text, and a withheld variable has no default, so diff shows no secret
 /// value. A changed source lists
 /// `source` when the kind of source differs, `bind` when the bind's
@@ -254,11 +256,16 @@ type FieldChange = (&'static str, Option<String>, Option<String>);
 fn changed_fields(old: &Variable, new: &Variable) -> Vec<FieldChange> {
     let mut changed = Vec::new();
     if old.value_type() != new.value_type() {
-        changed.push((
-            "type",
-            Some(type_text(old.value_type())),
-            Some(type_text(new.value_type())),
-        ));
+        let (was, now) = (type_text(old.value_type()), type_text(new.value_type()));
+        let text = |variable: &Variable| Values::of(variable.value_type()).map(|v| v.to_string());
+        let (was_values, now_values) = (text(old), text(new));
+        let values_differ = was_values != now_values;
+        if was != now || !values_differ {
+            changed.push(("type", Some(was), Some(now)));
+        }
+        if values_differ {
+            changed.push(("values", was_values, now_values));
+        }
     }
     if old.unset() != new.unset() {
         changed.push(("unset", Some(unset_text(old)), Some(unset_text(new))));

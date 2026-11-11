@@ -11,8 +11,8 @@ use snapbox::{Assert, Data};
 
 use super::{Pointer, Show, Source, Spec, SpecError, SpecProblemKind, Unset};
 use crate::{
-    ByteCount, ByteLength, ByteRule, Cache, Choice, Encoding, IntegerRange, Mode, Name,
-    Placeholder, Scheme, SecretRef, Type, Value,
+    ByteCount, ByteLength, ByteRule, Cache, Choice, Encoding, EnumerationName, IntegerRange, Mode,
+    Name, Placeholder, Scheme, SecretRef, Type, Value,
 };
 
 /// The example spec in `crates/starmap/tests/example/starmap.toml`.
@@ -26,7 +26,7 @@ const CANONICAL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/example/cano
 
 /// Every problem kind. A kind added to `SpecProblemKind` belongs here too,
 /// with a fixture or a test of its own that writes its golden.
-const KINDS: [SpecProblemKind; 23] = [
+const KINDS: [SpecProblemKind; 24] = [
     SpecProblemKind::TooLarge,
     SpecProblemKind::Syntax,
     SpecProblemKind::UnknownField,
@@ -48,6 +48,7 @@ const KINDS: [SpecProblemKind; 23] = [
     SpecProblemKind::ModeSource,
     SpecProblemKind::PointerDeclares,
     SpecProblemKind::PointerChain,
+    SpecProblemKind::EnumerationUndeclared,
     SpecProblemKind::GroupUndeclared,
     SpecProblemKind::BadGroup,
 ];
@@ -1094,7 +1095,7 @@ fn a_key_outside_tool_is_still_refused_and_the_message_lists_tool() {
     assert_eq!(error.problems()[0].kind(), SpecProblemKind::UnknownField);
     assert_eq!(
         error.to_string(),
-        "the file has the field `colour`, and it takes mode, groups, variables and tool"
+        "the file has the field `colour`, and it takes mode, enumerations, groups, variables and tool"
     );
 }
 
@@ -1919,4 +1920,305 @@ fn a_changed_scheme_list_changes_the_digest() {
     ));
 
     assert_ne!(one.digest(), two.digest());
+}
+
+/// The named enumeration `log-level`, with three values.
+const LOG_LEVEL: &str = "[enumerations.log-level]\n\
+     debug = \"Logs every request and its timing.\"\n\
+     info = \"Logs each request once.\"\n\
+     warn = \"Logs only failures and slow requests.\"\n\n";
+
+/// Returns a setting called `name` whose type is `ty` and whose unset rule
+/// is `unset`.
+fn enumerated(name: &str, ty: &str, unset: &str) -> String {
+    format!(
+        "[variables.{name}]\npurpose = \"How much a process logs.\"\ntype = {ty}\n\
+         unset = {unset}\nshow = \"shown\"\nsource = \"setting\"\n\n"
+    )
+}
+
+/// Returns the type of the variable `name` in `spec`.
+fn type_of<'s>(spec: &'s Spec, name_text: &str) -> &'s Type {
+    spec.variable(&name(name_text)).unwrap().value_type()
+}
+
+#[test]
+fn a_named_enumeration_parses_and_keeps_the_order_of_its_values() {
+    let text = format!(
+        "{LOG_LEVEL}{}",
+        enumerated(
+            "SHELF_LOG_LEVEL",
+            "{ enumeration = \"log-level\" }",
+            "{ default = \"info\" }"
+        )
+    );
+    let spec = spec(&text);
+
+    let Type::Enumeration(choices) = type_of(&spec, "SHELF_LOG_LEVEL") else {
+        panic!("SHELF_LOG_LEVEL is an enumeration");
+    };
+    let values: Vec<&str> = choices.iter().map(Choice::as_str).collect();
+    let warn: Choice = "warn".parse().unwrap();
+    assert_eq!(values, ["debug", "info", "warn"]);
+    assert_eq!(
+        choices.name().map(EnumerationName::as_str),
+        Some("log-level")
+    );
+    assert_eq!(
+        choices.description(&warn),
+        Some("Logs only failures and slow requests.")
+    );
+    let names: Vec<&str> = spec
+        .enumerations()
+        .filter_map(|choices| choices.name().map(EnumerationName::as_str))
+        .collect();
+    assert_eq!(names, ["log-level"]);
+    assert_eq!(
+        spec.enumeration(&"log-level".parse().unwrap()),
+        Some(choices)
+    );
+}
+
+#[test]
+fn two_variables_share_one_named_enumeration() {
+    let ty = "{ enumeration = \"log-level\" }";
+    let text = format!(
+        "{LOG_LEVEL}{}{}",
+        enumerated("SHELF_API_LOG", ty, "\"required\""),
+        enumerated("SHELF_WORKER_LOG", ty, "{ default = \"warn\" }")
+    );
+    let spec = spec(&text);
+
+    assert_eq!(
+        type_of(&spec, "SHELF_API_LOG"),
+        type_of(&spec, "SHELF_WORKER_LOG")
+    );
+}
+
+#[test]
+fn a_named_enumeration_that_no_variable_uses_is_allowed() {
+    let text = format!(
+        "{LOG_LEVEL}{}",
+        enumerated(
+            "SHELF_STAGE",
+            "{ enumeration = [\"dev\", \"prod\"] }",
+            "\"required\""
+        )
+    );
+
+    assert_eq!(spec(&text).enumerations().count(), 1);
+}
+
+#[test]
+fn a_variable_that_names_an_undeclared_enumeration_is_refused() {
+    let text = format!(
+        "{LOG_LEVEL}{}",
+        enumerated(
+            "SHELF_LOG_LEVEL",
+            "{ enumeration = \"log-levels\" }",
+            "\"required\""
+        )
+    );
+
+    let error = Spec::parse(&text).unwrap_err();
+    let problem = &error.problems()[0];
+    assert_eq!(error.problems().len(), 1);
+    assert_eq!(problem.kind(), SpecProblemKind::EnumerationUndeclared);
+    assert_eq!(
+        problem.to_string(),
+        "`variables.SHELF_LOG_LEVEL.type.enumeration` is \"log-levels\", which the file does not \
+         declare as an enumeration"
+    );
+}
+
+#[test]
+fn a_variable_that_names_a_broken_enumeration_reports_only_the_enumeration() {
+    let text = format!(
+        "[enumerations.log-level]\ndebug = \"\"\n\n{}",
+        enumerated(
+            "SHELF_LOG_LEVEL",
+            "{ enumeration = \"log-level\" }",
+            "\"required\""
+        )
+    );
+
+    assert_eq!(kinds(&text), [SpecProblemKind::BadValue]);
+}
+
+#[test]
+fn an_enumeration_type_that_is_neither_a_name_nor_a_list_is_a_bad_value() {
+    let text = enumerated("SHELF_LOG_LEVEL", "{ enumeration = 3 }", "\"required\"");
+
+    assert_eq!(kinds(&text), [SpecProblemKind::BadValue]);
+}
+
+#[test]
+fn an_enumeration_with_a_bad_name_is_refused() {
+    let text = "[enumerations.Log_Level]\ndebug = \"Logs everything.\"\n";
+
+    let error = Spec::parse(text).unwrap_err();
+    assert_eq!(kinds(text), [SpecProblemKind::BadValue]);
+    assert!(
+        error
+            .to_string()
+            .starts_with("`enumerations.Log_Level` is not an enumeration name"),
+        "{error}"
+    );
+}
+
+#[test]
+fn an_empty_named_enumeration_is_refused() {
+    assert_eq!(
+        kinds("[enumerations.log-level]\n"),
+        [SpecProblemKind::EmptyEnumeration]
+    );
+}
+
+#[test]
+fn a_named_enumeration_value_with_whitespace_is_refused() {
+    assert_eq!(
+        kinds("[enumerations.log-level]\n\"very loud\" = \"Logs everything.\"\n"),
+        [SpecProblemKind::BadValue]
+    );
+}
+
+#[test]
+fn an_empty_blank_or_missing_description_is_refused() {
+    for description in ["\"\"", "\"  \"", "3", "[\"Logs.\"]"] {
+        let text = format!("[enumerations.log-level]\ndebug = {description}\n");
+
+        assert_eq!(kinds(&text), [SpecProblemKind::BadValue], "{description}");
+    }
+}
+
+#[test]
+fn a_description_that_is_the_guess_of_init_is_refused() {
+    assert_eq!(
+        kinds("[enumerations.log-level]\ndebug = \"?\"\n"),
+        [SpecProblemKind::Guess]
+    );
+}
+
+#[test]
+fn enumerations_that_is_not_a_table_of_tables_is_a_bad_value() {
+    assert_eq!(kinds("enumerations = 3\n"), [SpecProblemKind::BadValue]);
+    assert_eq!(
+        kinds("[enumerations]\nlog-level = 3\n"),
+        [SpecProblemKind::BadValue]
+    );
+}
+
+#[test]
+fn a_default_outside_a_named_enumeration_is_a_bad_default() {
+    let text = format!(
+        "{LOG_LEVEL}{}",
+        enumerated(
+            "SHELF_LOG_LEVEL",
+            "{ enumeration = \"log-level\" }",
+            "{ default = \"trace\" }"
+        )
+    );
+
+    assert_eq!(kinds(&text), [SpecProblemKind::BadDefault]);
+}
+
+#[test]
+fn a_withheld_variable_cannot_name_an_enumeration() {
+    let text = format!(
+        "{LOG_LEVEL}[variables.SHELF_LOG_LEVEL]\npurpose = \"How much it logs.\"\n\
+         type = {{ enumeration = \"log-level\" }}\nunset = \"required\"\n\
+         show = \"withheld\"\nsource = \"setting\"\n"
+    );
+
+    assert_eq!(kinds(&text), [SpecProblemKind::WithheldType]);
+}
+
+#[test]
+fn a_mode_variable_with_a_named_enumeration_decides_the_mode() {
+    let text = format!(
+        "[mode]\nvariable = \"SHELF_STAGE\"\nproduction = [\"prod\"]\n\n\
+         [enumerations.stage]\ndev = \"A developer's machine.\"\nprod = \"The live service.\"\n\n{}",
+        enumerated(
+            "SHELF_STAGE",
+            "{ enumeration = \"stage\" }",
+            "{ default = \"dev\" }"
+        )
+    );
+    let spec = spec(&text);
+
+    let mode = spec.mode().unwrap();
+    assert_eq!(mode.decide(Some(OsStr::new("prod"))), Mode::Production);
+    assert_eq!(mode.decide(Some(OsStr::new("dev"))), Mode::Local);
+}
+
+#[test]
+fn the_canonical_form_writes_enumerations_in_name_order_before_the_variables() {
+    let text = format!(
+        "{}[enumerations.stage]\nprod = \"Live.\"\ndev = \"Local.\"\n\n{LOG_LEVEL}",
+        enumerated(
+            "SHELF_LOG_LEVEL",
+            "{ enumeration = \"log-level\" }",
+            "{ default = \"info\" }"
+        )
+    );
+    let original = spec(&text);
+
+    let canonical = original.to_toml();
+
+    assert_eq!(
+        canonical,
+        "[enumerations.log-level]\n\
+         debug = \"Logs every request and its timing.\"\n\
+         info = \"Logs each request once.\"\n\
+         warn = \"Logs only failures and slow requests.\"\n\
+         \n\
+         [enumerations.stage]\n\
+         prod = \"Live.\"\n\
+         dev = \"Local.\"\n\
+         \n\
+         [variables.SHELF_LOG_LEVEL]\n\
+         purpose = \"How much a process logs.\"\n\
+         type = { enumeration = \"log-level\" }\n\
+         unset = { default = \"info\" }\n\
+         show = \"shown\"\n\
+         source = \"setting\"\n"
+    );
+    assert_eq!(spec(&canonical), original);
+}
+
+#[test]
+fn a_changed_description_changes_the_digest() {
+    let text = format!(
+        "{LOG_LEVEL}{}",
+        enumerated(
+            "SHELF_LOG_LEVEL",
+            "{ enumeration = \"log-level\" }",
+            "\"required\""
+        )
+    );
+    let changed = text.replace("Logs each request once.", "Logs one line per request.");
+
+    assert_ne!(spec(&text).digest(), spec(&changed).digest());
+}
+
+#[test]
+fn a_renamed_enumeration_changes_the_digest() {
+    let text = format!(
+        "{LOG_LEVEL}{}",
+        enumerated(
+            "SHELF_LOG_LEVEL",
+            "{ enumeration = \"log-level\" }",
+            "\"required\""
+        )
+    );
+    let renamed = text.replace("log-level", "verbosity");
+
+    assert_ne!(spec(&text).digest(), spec(&renamed).digest());
+}
+
+#[test]
+fn a_pointer_with_an_enumerations_table_is_refused_as_declaring() {
+    let text = "spec = \"config/environment.toml\"\n[enumerations.stage]\ndev = \"Local.\"\n";
+
+    assert_eq!(pointer_kinds(text), [SpecProblemKind::PointerDeclares]);
 }

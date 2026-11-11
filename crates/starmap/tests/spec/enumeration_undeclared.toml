@@ -1,0 +1,11 @@
+# A variable names an enumeration the file does not declare.
+[enumerations.log-level]
+debug = "Logs every request and its timing."
+info = "Logs each request once."
+
+[variables.SHELF_LOG_LEVEL]
+purpose = "How much the api process logs."
+type = { enumeration = "log-levels" }
+unset = { default = "info" }
+show = "shown"
+source = "setting"
