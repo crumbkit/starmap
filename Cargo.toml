@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
@@ -71,9 +71,9 @@ snapbox = { version = "1.2.2", default-features = false }
 # starmap checks. Each entry gives a version beside the path, because
 # cargo-deny treats a path dependency without a version as a wildcard, and
 # the release pull request moves both versions with the workspace version.
-starmap = { version = "0.1.0", path = "crates/starmap" }
-starmap-derive = { version = "0.1.0", path = "crates/starmap-derive" }
-starmap-resolve = { version = "0.1.0", path = "crates/starmap-resolve" }
+starmap = { version = "0.2.0", path = "crates/starmap" }
+starmap-derive = { version = "0.2.0", path = "crates/starmap-derive" }
+starmap-resolve = { version = "0.2.0", path = "crates/starmap-resolve" }
 
 # syn, quote and proc-macro2 build starmap-derive, the `Env` and
 # `Enumeration` derives behind starmap's `derive` feature. The entries enable

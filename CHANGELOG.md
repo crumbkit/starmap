@@ -5,7 +5,7 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
+## [0.2.0](https://github.com/crumbkit/starmap/compare/v0.1.0...v0.2.0) - 2026-11-11
 ### Added
 
 - `starmap skills install` writes starmap's agent skill into each agent skills
