@@ -299,6 +299,8 @@ fn row(
 /// Returns the cell of `variable`'s value, which `bound` gives when this
 /// shell sets it. A value that counts as unset, such as a relative path
 /// where the type takes an absolute one, falls back to the default.
+/// A shell value that is not Unicode is shown with each invalid sequence
+/// replaced by U+FFFD.
 fn cell(variable: &Variable, bound: Option<&Bound>) -> Cell {
     match bound {
         Some(Bound::Plain(raw)) => match variable.value_type().parse(raw) {
@@ -336,7 +338,7 @@ pub(crate) fn value_text(value: &Value) -> String {
         Value::Boolean(boolean) => boolean.to_string(),
         Value::Integer(number) => number.to_string(),
         Value::Choice(choice) => choice.to_string(),
-        Value::String(string) => string.to_string_lossy().into_owned(),
+        Value::String(string) => string.clone(),
         Value::Bytes { .. } => value.to_string(),
         // A kind of value that a later release of starmap adds.
         _ => "a value".to_owned(),
