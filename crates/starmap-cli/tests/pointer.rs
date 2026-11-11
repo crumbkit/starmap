@@ -145,12 +145,45 @@ fn check_through_a_pointer_with_an_empty_src_scans_nothing() {
         "starmap.toml",
         "spec = \"config/environment.toml\"\nsrc = []\n",
     );
-    // No source is scanned, so check asks for no clippy.toml.
-    fs::remove_file(dir.path().join("clippy.toml")).unwrap();
 
     starmap(dir.path(), &["check"]).code(0).stdout_eq(
         "config/environment.toml declares 3 variables, and no source directory is scanned.\n",
     );
+}
+
+#[test]
+fn check_names_the_clippy_toml_of_a_member_crate_that_lacks_the_entries_and_init_adds_them() {
+    let dir = checkout();
+    write(
+        dir.path(),
+        "starmap.toml",
+        "spec = \"config/environment.toml\"\nsrc = [\"crates/a/src\", \"crates/b/src\"]\n",
+    );
+    let read = "fn size() {\n    let _ = std::env::var(\"SHELF_PAGE_SIZE\");\n}\n";
+    write(dir.path(), "crates/a/src/lib.rs", read);
+    write(dir.path(), "crates/b/src/lib.rs", read);
+    // Clippy reads only this file for crate b, and the file at the root
+    // for crate a.
+    let lints = "too-many-lines-threshold = 150\n";
+    write(dir.path(), "crates/b/clippy.toml", lints);
+
+    let run = starmap(dir.path(), &["check", "--json"]).code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    let failures = document["failures"].as_array().unwrap();
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert_eq!(failures[0]["code"], "starmap::clippy::unbanned");
+    assert_eq!(failures[0]["fields"]["file"], "crates/b/clippy.toml");
+
+    starmap(dir.path(), &["init", "--clippy"])
+        .success()
+        .stdout_eq(
+            "clippy.toml already disallows std::env::var, std::env::var_os, std::env::vars and std::env::vars_os.\n\
+             Added disallowed-methods entries to crates/b/clippy.toml for std::env::var, std::env::var_os, std::env::vars and std::env::vars_os.\n",
+        )
+        .stderr_eq("");
+    let written = fs::read_to_string(dir.path().join("crates/b/clippy.toml")).unwrap();
+    assert!(written.starts_with(lints), "{written}");
+    starmap(dir.path(), &["check"]).success();
 }
 
 #[test]

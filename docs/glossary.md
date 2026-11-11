@@ -565,22 +565,40 @@ disallowed-methods = [
 ]
 ```
 
-The file is the one that Clippy reads for a crate in the directory of the
-`--spec` path: `.clippy.toml` or `clippy.toml` in that directory, or else
-in the nearest directory above it that has one. `starmap init` adds each
-missing entry after the entries that the file lists, and keeps the file's
-other entries, comments and layout. It writes `clippy.toml` beside the
-spec when no directory has one. `starmap init --clippy` adds only these
-entries and leaves the spec alone, for an application whose spec exists.
-An entry counts as present when it is a string that holds the method's
-path or a table whose `path` holds it, in an array or in
-`[[disallowed-methods]]` tables, whatever its reason.
+Clippy applies the entries to every target of the crate, so it also
+reports a read in a build script or a test, which starmap's scan skips. A
+read there, such as `OUT_DIR` in `build.rs`, takes
+`#[expect(clippy::disallowed_methods, reason = "...")]`.
 
-`starmap check` fails with `starmap::clippy::unbanned` when an entry is
-missing. A `clippy.toml` that is not valid TOML, or whose
-`disallowed-methods` is not an array, fails both commands with
-`starmap::clippy::invalid`, and neither command rewrites it. A
-[pointer](#pointer) whose `src` is an empty list needs no entries.
+starmap requires the entries for each source directory in which its scan
+reads a `.rs` file, and treats the directory that holds that source
+directory as the crate's directory. The file is the one that Clippy reads
+for the crate: `.clippy.toml` or `clippy.toml` in the crate's directory, or
+else in the nearest directory above it that has one. Clippy reads that one
+file and merges no other, so a crate with a `clippy.toml` of its own needs
+the entries there. Clippy skips a directory that has one of those names,
+and starmap does too. starmap does not read `CLIPPY_CONF_DIR`, so an
+application that sets it keeps the entries in the file that this search
+finds as well.
+
+`starmap init` adds each missing entry after the entries that a file
+lists, and keeps the file's other entries, comments, layout and mode. It
+writes through a symbolic link to the file that the link names. When no
+directory has a file, init writes `clippy.toml` beside the spec for a
+crate in or below the spec's directory, and in the crate's directory
+otherwise. `starmap init --clippy` adds only these entries and leaves the
+spec alone, for an application whose spec exists. An entry counts as
+present when it is a string that holds the method's path or a table whose
+`path` holds it, in an array or in `[[disallowed-methods]]` tables,
+whatever its reason.
+
+`starmap check` fails with `starmap::clippy::unbanned` for each file that
+lacks an entry. A `clippy.toml` that cannot be read, is over 256 KiB, is
+not UTF-8 text or valid TOML, or whose `disallowed-methods` is not an
+array, fails both commands with `starmap::clippy::invalid`, and neither
+command rewrites it. When the scan reads no `.rs` file, as in an
+application written in another language, check requires no entries and
+init writes no `clippy.toml`.
 
 ## tool table
 

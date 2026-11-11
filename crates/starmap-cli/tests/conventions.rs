@@ -323,15 +323,16 @@ const STARTS: &[Failing<'static>] = &[
     ),
     source(
         &codes::CLIPPY_INVALID,
-        &["check", "--spec", "clippy-invalid/starmap.toml"],
+        &["init", "--clippy", "--spec", "clippy-invalid/starmap.toml"],
     ),
     source(
-        &codes::CLIPPY_UNREADABLE,
-        &["check", "--spec", "clippy-unreadable/starmap.toml"],
-    ),
-    Failing::new(
         &codes::CLIPPY_UNWRITABLE,
-        &["init", "--clippy", "--spec", "missing/starmap.toml"],
+        &[
+            "init",
+            "--clippy",
+            "--spec",
+            "clippy-unwritable/starmap.toml",
+        ],
     ),
 ];
 
@@ -381,6 +382,16 @@ const VALID_SOURCE: &[&str] = &[
     "../../../starmap/tests/example/starmap.toml",
 ];
 
+/// The line that each refused `init --clippy` twins with in
+/// [`SOURCE_FIXTURES`]: the same command with the example application,
+/// whose clippy.toml has every entry, in place of the fixture.
+const VALID_BAN: &[&str] = &[
+    "init",
+    "--clippy",
+    "--spec",
+    "../../../starmap/tests/example/starmap.toml",
+];
+
 /// The line that each refused `init` twins with in a fresh copy of
 /// [`EXAMPLE`]: init with a spec path that is free and writable.
 const NEW_SPEC: &[&str] = &["init", "--spec", "new.toml"];
@@ -421,9 +432,8 @@ const PAIRS: &[Twin<'static>] = &[
     Twin::new(STARTS[35], VALID),
     Twin::new(STARTS[36], VALID_SOURCE),
     Twin::new(STARTS[37], &["check", "--spec", "starmap.toml"]),
-    Twin::new(STARTS[38], VALID_SOURCE),
-    Twin::new(STARTS[39], VALID_SOURCE),
-    Twin::new(STARTS[40], &["init", "--clippy", "--spec", "new.toml"]),
+    Twin::new(STARTS[38], VALID_BAN),
+    Twin::new(STARTS[39], VALID_BAN),
 ];
 
 /// The settings of the twin check.

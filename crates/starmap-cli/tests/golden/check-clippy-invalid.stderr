@@ -1,3 +1,8 @@
+Mode: local, because the spec has no [mode] table.
+error: clippy-invalid/src/theme.rs:6 reads SHELF_THEME, which clippy-invalid/starmap.toml does not declare
+  help:  declare SHELF_THEME in clippy-invalid/starmap.toml
+  help:  stop reading SHELF_THEME
+  code:  starmap::variable::undeclared
 error: clippy-invalid/clippy.toml sets disallowed-methods to a value that is not an array
-  help:  correct clippy-invalid/clippy.toml so that it is valid TOML and its disallowed-methods is an array
+  help:  make clippy-invalid/clippy.toml a readable file of at most 256 KiB that holds valid TOML whose disallowed-methods is an array
   code:  starmap::clippy::invalid

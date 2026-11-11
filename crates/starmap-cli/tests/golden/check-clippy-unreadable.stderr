@@ -1,4 +1,0 @@
-error: clippy-unreadable/clippy.toml cannot be read
-  cause: Is a directory (os error 21)
-  help:  make clippy-unreadable/clippy.toml a readable text file of at most 256 KiB
-  code:  starmap::clippy::unreadable

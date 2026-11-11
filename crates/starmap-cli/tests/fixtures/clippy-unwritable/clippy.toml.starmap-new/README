@@ -1,0 +1,1 @@
+This directory stands where starmap init writes the new text of clippy.toml, so the write fails.

@@ -121,8 +121,9 @@ impl fmt::Display for Checked {
 
 /// A finding that fails check: a read in src that the spec does not
 /// declare, of a variable or of a member of a family by a name that
-/// `format!` builds from a prefix, or a clippy.toml that does not disallow
-/// every method that reads the environment.
+/// `format!` builds from a prefix, a clippy.toml that does not disallow
+/// every method that reads the environment, or a clippy.toml that check
+/// cannot use.
 #[derive(Debug, Failure)]
 pub(crate) enum Finding {
     /// A variable that src reads and the spec does not declare.
@@ -159,7 +160,7 @@ pub(crate) enum Finding {
         /// The spec file, as the caller gave it.
         file: String,
     },
-    /// The clippy.toml that Clippy reads for a crate beside the spec does
+    /// A clippy.toml that Clippy reads for a crate of the application does
     /// not disallow every method of [`clippy::BANNED`], so Clippy passes a
     /// read of the environment outside the struct that derives
     /// `starmap::Env`.
@@ -179,6 +180,9 @@ pub(crate) enum Finding {
         /// The file that the caller gave as `--spec`.
         spec: String,
     },
+    /// A clippy.toml that check cannot read or parse.
+    #[failure(forward)]
+    Clippy(clippy::ClippyFailure),
 }
 
 impl fmt::Display for Finding {
@@ -214,6 +218,7 @@ impl fmt::Display for Finding {
                 "{file} does not exist, so Clippy does not disallow {}",
                 clippy::list(methods)
             ),
+            Self::Clippy(failure) => failure.fmt(formatter),
         }
     }
 }
@@ -228,13 +233,15 @@ impl std::error::Error for Finding {}
 /// reads and the spec does not declare is a failure, and so is each prefix
 /// that src builds a `format!` name from and the spec declares no family
 /// for. A `format!` read that the scan cannot resolve passes, and the
-/// result names its place. When a source directory is scanned, a
-/// clippy.toml that lacks an entry of [`clippy::BANNED`] is a failure too.
+/// result names its place. Each clippy.toml that Clippy reads for a
+/// source directory in which the scan read a `.rs` file is a failure too
+/// when it lacks an entry of [`clippy::BANNED`] or cannot be read or
+/// parsed.
 ///
 /// # Errors
 ///
-/// Returns a [`crumbkit::Error`] when the spec cannot be read or parsed, src cannot
-/// be scanned, or clippy.toml cannot be read or parsed.
+/// Returns a [`crumbkit::Error`] when the spec cannot be read or parsed, or src cannot
+/// be scanned.
 pub(crate) fn check(
     args: &CheckArgs,
     vars: Vec<(OsString, OsString)>,
@@ -246,6 +253,7 @@ pub(crate) fn check(
         checks,
         families,
         unresolved,
+        rust,
     } = scan::scan_all(&located.src)?;
     let bindings = starmap::capture(&spec, vars);
     let (mode, note) = mode::decide(&spec, &bindings);
@@ -309,17 +317,16 @@ pub(crate) fn check(
             });
         }
     }
-    // An application whose pointer lists no source directory has no Rust
-    // source for Clippy to check.
-    if !src.is_empty() {
-        let ban = clippy::open(&args.file.spec)?;
-        if !ban.missing.is_empty() {
-            undeclared.push(Finding::Unbanned {
+    for ban in clippy::open(&args.file.spec, &rust) {
+        match ban {
+            Ok(ban) if ban.missing.is_empty() => {}
+            Ok(ban) => undeclared.push(Finding::Unbanned {
                 file: ban.file.display().to_string(),
                 exists: ban.exists,
                 methods: ban.missing,
                 spec: args.file.spec.display().to_string(),
-            });
+            }),
+            Err(failure) => undeclared.push(Finding::Clippy(failure)),
         }
     }
     let checked = Checked {

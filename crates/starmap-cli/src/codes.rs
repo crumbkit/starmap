@@ -81,11 +81,8 @@ pub const SOURCE_UNREADABLE: Code = Code::new("starmap", "source", "unreadable")
 /// `check` finds that the application's clippy.toml does not disallow a
 /// method of the standard library that reads the environment.
 pub const CLIPPY_UNBANNED: Code = Code::new("starmap", "clippy", "unbanned");
-/// The application's clippy.toml exists and cannot be read, or is over
-/// 256 KiB.
-pub const CLIPPY_UNREADABLE: Code = Code::new("starmap", "clippy", "unreadable");
-/// The application's clippy.toml is not UTF-8 text or valid TOML, or its
-/// `disallowed-methods` is not an array.
+/// The application's clippy.toml cannot be read, is over 256 KiB, is not
+/// UTF-8 text or valid TOML, or its `disallowed-methods` is not an array.
 pub const CLIPPY_INVALID: Code = Code::new("starmap", "clippy", "invalid");
 /// `init` cannot create or write the application's clippy.toml.
 pub const CLIPPY_UNWRITABLE: Code = Code::new("starmap", "clippy", "unwritable");
@@ -162,7 +159,6 @@ pub const ALL: &[&Code] = &[
     &FAMILY_UNDECLARED,
     &SOURCE_UNREADABLE,
     &CLIPPY_UNBANNED,
-    &CLIPPY_UNREADABLE,
     &CLIPPY_INVALID,
     &CLIPPY_UNWRITABLE,
     &REVISION_NO_REPOSITORY,

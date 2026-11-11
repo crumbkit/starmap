@@ -1,0 +1,5 @@
+error: clippy.toml cannot be written
+  cause: File exists (os error 17)
+  help:  make clippy.toml and its directory writable, then run starmap init --spec starmap.toml --clippy
+  help:  add the entries to clippy.toml by hand, as starmap check lists them
+  code:  starmap::clippy::unwritable

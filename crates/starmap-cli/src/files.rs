@@ -71,24 +71,33 @@ pub(crate) fn write_new(path: &Path, text: &str) -> io::Result<()> {
     })
 }
 
-/// Replaces the file at `path` with `text`. It writes `text` to a new file
-/// beside `path` and renames that file over `path`, so a write that fails,
-/// such as on a full disk, leaves the file at `path` as it was.
+/// Replaces the file at `path` with `text`, and keeps its mode. It writes
+/// `text` to a new file beside the file and renames that file over it, so
+/// a write that fails, such as on a full disk, leaves the file as it was.
+/// When `path` is a symbolic link, the file that the link names is
+/// replaced, and the link stays.
 ///
 /// # Errors
 ///
-/// Returns the I/O error of a file that cannot be created, written or
-/// renamed.
+/// Returns the I/O error of a file that cannot be found, created, written
+/// or renamed.
 pub(crate) fn replace(path: &Path, text: &str) -> io::Result<()> {
+    let path = fs::canonicalize(path)?;
+    let mode = fs::metadata(&path)?.permissions();
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(".starmap-new");
     let new = path.with_file_name(name);
-    write_new(&new, text)?;
-    fs::rename(&new, path).inspect_err(|_| {
-        // The rename error is what the caller needs, so a failed removal
-        // is not reported in its place.
-        let _ = fs::remove_file(&new);
-    })
+    // A run that was killed may have left its new file behind. When the
+    // removal fails, the write that follows reports why.
+    let _ = fs::remove_file(&new);
+    write_new(&new, text)
+        .and_then(|()| fs::set_permissions(&new, mode))
+        .and_then(|()| fs::rename(&new, &path))
+        .inspect_err(|_| {
+            // The first error is what the caller needs, so a failed removal
+            // is not reported in its place.
+            let _ = fs::remove_file(&new);
+        })
 }
 
 /// Reports whether anything is at `path`. A path that cannot be checked,
@@ -98,8 +107,13 @@ pub(crate) fn exists(path: &Path) -> bool {
     path.exists()
 }
 
-/// Returns the absolute path of `path` with every symbolic link resolved,
-/// which `starmap run` reads the checkout's directory name from.
+/// Reports whether `path` names something that is not a directory, through
+/// any symbolic link, which is what Clippy takes as a configuration file.
+pub(crate) fn is_file(path: &Path) -> bool {
+    fs::metadata(path).is_ok_and(|found| !found.is_dir())
+}
+
+/// Returns the absolute path of `path` with every symbolic link resolved.
 ///
 /// # Errors
 ///

@@ -23,6 +23,12 @@ const EXAMPLE_SPEC: &str = "../starmap/tests/example/starmap.toml";
 /// methods that read the environment, relative to this package.
 const UNBANNED: &str = "../starmap/tests/example/unbanned/clippy.toml";
 
+/// The words that name the entries that init writes to a new clippy.toml.
+const ENTRIES: &str = "disallowed-methods entries for std::env::var, std::env::var_os, std::env::vars and std::env::vars_os";
+
+/// The sentence that init prints when it read no `.rs` file.
+const NO_RUST: &str = "init read no .rs file, so it wrote no clippy.toml.";
+
 /// Copies every file and directory under `from` to `to`.
 fn copy_tree(from: &Path, to: &Path) {
     fs::create_dir_all(to).unwrap();
@@ -116,13 +122,14 @@ fn init_with_clippy_adds_the_entries_beside_a_spec_that_exists_and_keeps_the_spe
 
     starmap(dir.path(), &["init", "--clippy", "--dry-run"])
         .success()
-        .stderr_eq(file!["golden/init/starmap-init-clippy-dry-run.stderr"]);
+        .stdout_eq(format!("init would write clippy.toml with {ENTRIES}.\n"))
+        .stderr_eq("This was a dry run, so nothing changed.\n");
     assert!(!dir.path().join("clippy.toml").exists());
 
     starmap(dir.path(), &["init", "--clippy"])
         .success()
-        .stdout_eq(file!["golden/init/starmap-init-clippy.txt"])
-        .stderr_eq(file!["golden/init/starmap-init-clippy.stderr"]);
+        .stdout_eq(format!("Wrote clippy.toml with {ENTRIES}.\n"))
+        .stderr_eq("");
     let written = fs::read_to_string(dir.path().join("clippy.toml")).unwrap();
     snapbox::assert_data_eq!(written, file!["../../starmap/tests/example/clippy.toml"]);
     assert_eq!(
@@ -130,6 +137,66 @@ fn init_with_clippy_adds_the_entries_beside_a_spec_that_exists_and_keeps_the_spe
         spec
     );
     starmap(dir.path(), &["check"]).success();
+}
+
+#[test]
+fn init_without_rust_source_lists_no_variables_and_writes_no_clippy_toml() {
+    let dir = tempfile::tempdir().unwrap();
+    starmap(dir.path(), &["init"])
+        .success()
+        .stdout_eq("NAME  TYPE  UNSET  SOURCE  READ_AT\n")
+        .stderr_eq(format!(
+            "note: init lists no variables\n\
+             Wrote starmap.toml with 0 variables that src reads. Each value marked ? is a guess.\n\
+             {NO_RUST}\n\
+             Next: starmap check refuses the file until each guess is confirmed and its ? deleted.\n"
+        ));
+    starmap(dir.path(), &["init", "--clippy"])
+        .success()
+        .stdout_eq(format!("{NO_RUST}\n"))
+        .stderr_eq("");
+    assert!(!dir.path().join("clippy.toml").exists());
+    starmap(dir.path(), &["check"]).success();
+}
+
+#[cfg(unix)]
+#[test]
+fn init_writes_through_a_clippy_toml_that_is_a_symbolic_link_and_keeps_the_link() {
+    let dir = checkout();
+    fs::create_dir(dir.path().join("shared")).unwrap();
+    let target = dir.path().join("shared/clippy.toml");
+    fs::copy(UNBANNED, &target).unwrap();
+    let link = dir.path().join("clippy.toml");
+    std::os::unix::fs::symlink("shared/clippy.toml", &link).unwrap();
+
+    starmap(dir.path(), &["init"]).success();
+
+    assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
+    let written = fs::read_to_string(&target).unwrap();
+    snapbox::assert_data_eq!(written, file!["golden/init/clippy-added.toml"]);
+}
+
+#[test]
+fn init_that_cannot_write_clippy_toml_keeps_the_spec_and_names_init_with_clippy() {
+    let dir = checkout();
+    fs::copy(UNBANNED, dir.path().join("clippy.toml")).unwrap();
+    // A directory stands where init writes the new text of clippy.toml.
+    let blocker = dir.path().join("clippy.toml.starmap-new");
+    fs::create_dir(&blocker).unwrap();
+
+    starmap(dir.path(), &["init"])
+        .code(1)
+        .stderr_eq(file!["golden/init/starmap-init-clippy-unwritable.stderr"]);
+    assert!(dir.path().join("starmap.toml").exists());
+    assert_eq!(
+        fs::read_to_string(dir.path().join("clippy.toml")).unwrap(),
+        fs::read_to_string(UNBANNED).unwrap()
+    );
+
+    fs::remove_dir(&blocker).unwrap();
+    starmap(dir.path(), &["init", "--clippy"]).success();
+    let written = fs::read_to_string(dir.path().join("clippy.toml")).unwrap();
+    snapbox::assert_data_eq!(written, file!["golden/init/clippy-added.toml"]);
 }
 
 #[test]

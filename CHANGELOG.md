@@ -16,29 +16,42 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `starmap init` adds a `disallowed-methods` entry for each of
   `std::env::var`, `std::env::var_os`, `std::env::vars` and
   `std::env::vars_os` to the application's `clippy.toml`, so Clippy refuses
-  a read of the environment outside the struct that derives `Env`. init
-  edits the `.clippy.toml` or `clippy.toml` that Clippy reads for a crate
-  beside the spec, which is the nearest one at or above that directory,
-  and writes `clippy.toml` beside the spec when there is none. It keeps
-  the file's entries, comments and layout, and adds only the entries that
-  are missing. `starmap init --dry-run` says what it would add.
-  `starmap init --clippy` adds only these entries, and neither reads nor
-  writes the spec, so it serves an application whose `starmap.toml` exists.
-  init refuses a `clippy.toml` that is not valid TOML, or whose
-  `disallowed-methods` is not an array, with `starmap::clippy::invalid`,
-  and one it cannot read with `starmap::clippy::unreadable`, and writes
-  nothing. `starmap::clippy::unwritable` reports a file it cannot write.
+  a read of the environment outside the struct that derives `Env`. Clippy
+  applies the entries to build scripts and tests as well, so a read there,
+  such as `OUT_DIR` in `build.rs`, takes
+  `#[expect(clippy::disallowed_methods, reason = "...")]`. For each source
+  directory in which init reads a `.rs` file, init edits the `.clippy.toml`
+  or `clippy.toml` that Clippy reads for that crate, which is the nearest
+  one in or above the directory that holds the source directory. When
+  there is none, init writes `clippy.toml` beside the spec, or in the
+  crate's directory for a crate outside the spec's directory. It keeps
+  each file's entries, comments, layout and mode, writes through a
+  symbolic link, and adds only the entries that are missing. When init
+  reads no `.rs` file, it writes no `clippy.toml` and says so. starmap
+  does not read `CLIPPY_CONF_DIR`. `starmap init --dry-run` says what it
+  would add. `starmap init --clippy` adds only these entries and leaves
+  the spec as it is, so it serves an application whose `starmap.toml`
+  exists, and prints one line for each `clippy.toml`. init refuses a
+  `clippy.toml` that it cannot read, that is over 256 KiB, that is not
+  UTF-8 text or valid TOML, or whose `disallowed-methods` is not an array,
+  with `starmap::clippy::invalid`, and writes nothing.
+  `starmap::clippy::unwritable` reports a file it cannot write, and names
+  `starmap init --clippy` as the command that finishes the work.
 
 ### Changed
 
-- **Breaking:** `starmap check` fails with `starmap::clippy::unbanned` when
-  the application's `clippy.toml` lacks a `disallowed-methods` entry for
-  `std::env::var`, `std::env::var_os`, `std::env::vars` or
-  `std::env::vars_os`, or does not exist. The failure names the file and
-  the methods, and `starmap init --clippy` adds the entries. check also
-  fails with `starmap::clippy::invalid` or `starmap::clippy::unreadable`
-  for a `clippy.toml` it cannot use. A pointer whose `src` is an empty list
-  is exempt, because it names no source for Clippy to check.
+- **Breaking:** `starmap check` fails with `starmap::clippy::unbanned` for
+  each `clippy.toml` that Clippy reads for a crate of the application and
+  that lacks a `disallowed-methods` entry for `std::env::var`,
+  `std::env::var_os`, `std::env::vars` or `std::env::vars_os`, and when no
+  such file exists. The failure names the file and the methods, and
+  `starmap init --clippy` adds the entries. check also fails with
+  `starmap::clippy::invalid` for a `clippy.toml` it cannot use, beside the
+  other findings of the run. check requires the entries only for a source
+  directory in which it reads a `.rs` file, so an application without Rust
+  source needs no `clippy.toml`.
+- `starmap init` that finds no variable prints `note: init lists no
+  variables` in place of `note: no variables match`.
 
 ## [0.3.0](https://github.com/crumbkit/starmap/compare/v0.2.0...v0.3.0) - 2026-11-11
 ### Added

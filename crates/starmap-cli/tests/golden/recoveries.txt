@@ -162,15 +162,11 @@ starmap check --spec unbanned/starmap.toml
   run starmap init --spec unbanned/starmap.toml --clippy
     exits 0
 
-starmap check --spec clippy-invalid/starmap.toml
+starmap init --clippy --spec clippy-invalid/starmap.toml
   fails with starmap::clippy::invalid
   hint
 
-starmap check --spec clippy-unreadable/starmap.toml
-  fails with starmap::clippy::unreadable
-  hint
-
-starmap init --clippy --spec missing/starmap.toml
+starmap init --clippy --spec clippy-unwritable/starmap.toml
   fails with starmap::clippy::unwritable
   hint
   hint

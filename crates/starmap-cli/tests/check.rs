@@ -4,6 +4,8 @@
 
 #![cfg(test)]
 
+use std::fs;
+
 use serde_json::{Value, json};
 use snapbox::cmd::{Command, OutputAssert};
 use snapbox::file;
@@ -144,19 +146,32 @@ fn a_clippy_toml_that_lacks_an_entry_is_a_failure_that_names_each_method_and_ini
 }
 
 #[test]
-fn a_clippy_toml_whose_disallowed_methods_is_not_an_array_fails_and_names_the_file() {
+fn a_clippy_toml_that_check_cannot_use_fails_beside_the_other_findings_of_the_run() {
     starmap(&["check", "--spec", "clippy-invalid/starmap.toml"])
         .code(1)
-        .stdout_eq("")
         .stderr_eq(file!["golden/check-clippy-invalid.stderr"]);
+    let run = starmap(&["check", "--spec", "clippy-invalid/starmap.toml", "--json"]).code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    let codes: Vec<&Value> = document["failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|failure| &failure["code"])
+        .collect();
+    assert_eq!(
+        codes,
+        ["starmap::variable::undeclared", "starmap::clippy::invalid"]
+    );
 }
 
 #[test]
-fn a_clippy_toml_that_cannot_be_read_fails_and_names_the_file() {
-    starmap(&["check", "--spec", "clippy-unreadable/starmap.toml"])
-        .code(1)
-        .stdout_eq("")
-        .stderr_eq(file!["golden/check-clippy-unreadable.stderr"]);
+fn a_spec_without_rust_source_needs_no_clippy_toml() {
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("starmap.toml");
+    fs::copy("../starmap/tests/example/unbanned/starmap.toml", &spec).unwrap();
+    fs::create_dir(dir.path().join("src")).unwrap();
+    fs::write(dir.path().join("src/serve.py"), "import os\n").unwrap();
+    starmap(&["check", "--spec", spec.to_str().unwrap()]).success();
 }
 
 #[test]

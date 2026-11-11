@@ -1,7 +1,7 @@
 //! The Clippy entries that stop an application's own code from reading the
 //! environment outside its struct that derives `starmap::Env`. `starmap
-//! init` adds them to the application's clippy.toml, and `starmap check`
-//! fails when one is missing.
+//! init` adds them to each clippy.toml that Clippy reads for a crate of the
+//! application, and `starmap check` fails when one is missing.
 
 use std::fmt;
 use std::io;
@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use crumbkit::{Failure, Recovery};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, RawString, Table, Value};
 
-use crate::codes::{CLIPPY_INVALID, CLIPPY_UNREADABLE, CLIPPY_UNWRITABLE};
+use crate::codes::{CLIPPY_INVALID, CLIPPY_UNWRITABLE};
 use crate::files;
 
 #[cfg(test)]
@@ -38,12 +38,11 @@ const NAMES: [&str; 2] = [".clippy.toml", "clippy.toml"];
 /// The most bytes that starmap reads of a clippy.toml (BASE-34).
 const MAX_BYTES: usize = 256 * 1024;
 
-/// The clippy.toml of an application, and the banned methods it does not
-/// disallow yet.
+/// A clippy.toml that Clippy reads for a crate of the application, and the
+/// banned methods it does not disallow yet.
 #[derive(Debug)]
 pub(crate) struct Ban {
-    /// The file that Clippy reads for a crate beside the spec, or the file
-    /// beside the spec that init writes when there is none.
+    /// The file, or the file that init writes when Clippy finds none.
     pub(crate) file: PathBuf,
     /// Whether the file exists.
     pub(crate) exists: bool,
@@ -57,13 +56,14 @@ pub(crate) struct Ban {
 impl Ban {
     /// Adds an entry for each missing method to the file, and creates the
     /// file when it does not exist. A file that lacks no entry is not
-    /// written.
+    /// written. `spec` is the `--spec` path, which the failure's recovery
+    /// names.
     ///
     /// # Errors
     ///
     /// Returns [`ClippyFailure::Unwritable`] when the file cannot be
     /// written, and the file is then as it was.
-    pub(crate) fn write(mut self) -> Result<(), ClippyFailure> {
+    pub(crate) fn write(mut self, spec: &Path) -> Result<(), ClippyFailure> {
         if self.missing.is_empty() {
             return Ok(());
         }
@@ -76,13 +76,14 @@ impl Ban {
         };
         written.map_err(|error| ClippyFailure::Unwritable {
             file: self.file.display().to_string(),
+            spec: spec.display().to_string(),
             error,
         })
     }
 
     /// Returns the sentence that says what init did to the file, or what
     /// it would do when `dry_run` is set.
-    pub(crate) fn sentence(&self, dry_run: bool) -> String {
+    fn sentence(&self, dry_run: bool) -> String {
         let file = self.file.display();
         let methods = list(&self.missing);
         match (self.missing.is_empty(), self.exists, dry_run) {
@@ -101,6 +102,17 @@ impl Ban {
     }
 }
 
+/// Returns one line for each file of `bans` that says what init did to it,
+/// or what it would do when `dry_run` is set. When `bans` is empty, the
+/// scan read no `.rs` file, and the one line says that init wrote no file.
+pub(crate) fn sentences(bans: &[Ban], dry_run: bool) -> String {
+    if bans.is_empty() {
+        return "init read no .rs file, so it wrote no clippy.toml.".to_owned();
+    }
+    let lines: Vec<String> = bans.iter().map(|ban| ban.sentence(dry_run)).collect();
+    lines.join("\n")
+}
+
 /// Returns `methods` as a sentence lists them, such as `std::env::var and
 /// std::env::vars`.
 pub(crate) fn list(methods: &[&str]) -> String {
@@ -111,40 +123,94 @@ pub(crate) fn list(methods: &[&str]) -> String {
     }
 }
 
-/// Reads the clippy.toml that Clippy uses for a crate beside the file
-/// `spec`, and returns it with the banned methods it does not disallow.
-/// Clippy reads `.clippy.toml` or `clippy.toml` in the crate's directory,
-/// or else in the nearest directory above it that has one. When no
-/// directory has one, the result names `clippy.toml` beside `spec`, which
-/// does not exist and lacks every entry.
+/// Reads the clippy.toml that Clippy uses for each crate of `sources`, the
+/// source directories in which the scan read a `.rs` file, and returns
+/// each file once, with the banned methods it does not disallow. A crate's
+/// directory is the parent of its source directory. Clippy reads
+/// `.clippy.toml` or `clippy.toml` in the crate's directory, or else in
+/// the nearest directory above it that has one, and reads no other file.
+/// starmap does not read `CLIPPY_CONF_DIR`.
 ///
-/// # Errors
+/// When no directory has a file, the result names the `clippy.toml` that
+/// init writes, which does not exist and lacks every entry. That file is
+/// beside `spec` when the crate is in or below the directory of `spec`,
+/// and in the crate's directory otherwise. A file in or below the
+/// directory of `spec` has a path that starts as `spec` does, and any
+/// other file has an absolute path.
 ///
-/// Returns [`ClippyFailure`] when the file cannot be read, is over 256 KiB,
-/// is not UTF-8 text or valid TOML, or sets `disallowed-methods` to a value
-/// that is not an array.
-pub(crate) fn open(spec: &Path) -> Result<Ban, ClippyFailure> {
-    let dir = spec.parent().unwrap_or(Path::new(""));
-    let Some(file) = find(dir) else {
+/// A file is an `Err` when it cannot be read, is over 256 KiB, is not
+/// UTF-8 text or valid TOML, or sets `disallowed-methods` to a value that
+/// is not an array.
+pub(crate) fn open(spec: &Path, sources: &[PathBuf]) -> Vec<Result<Ban, ClippyFailure>> {
+    let beside = spec.parent().unwrap_or(Path::new(""));
+    let base = canonical(beside);
+    let mut found: Vec<(PathBuf, bool)> = Vec::new();
+    for src in sources {
+        let krate = canonical(src.parent().unwrap_or(Path::new("")));
+        let (file, exists) = find(&krate, &base);
+        let file = match file.strip_prefix(&base) {
+            Ok(below) => beside.join(below),
+            Err(_) => file,
+        };
+        if !found.contains(&(file.clone(), exists)) {
+            found.push((file, exists));
+        }
+    }
+    found
+        .into_iter()
+        .map(|(file, exists)| read(file, exists))
+        .collect()
+}
+
+/// Returns the absolute path of the directory `dir` with every symbolic
+/// link resolved, where an empty path is the working directory. A
+/// directory that cannot be resolved keeps the path given.
+fn canonical(dir: &Path) -> PathBuf {
+    let dir = if dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        dir
+    };
+    files::canonical(dir).unwrap_or_else(|_| dir.to_path_buf())
+}
+
+/// Returns the configuration file that Clippy reads for a crate in
+/// `krate`, and whether it exists: the first of [`NAMES`] in `krate`, or
+/// else in the nearest directory above it that holds one. Clippy skips a
+/// directory that has one of those names, and so does the search. When no
+/// directory holds a file, the file is the `clippy.toml` that init writes:
+/// in `base` when `krate` is in or below it, and in `krate` otherwise.
+fn find(krate: &Path, base: &Path) -> (PathBuf, bool) {
+    let found = krate
+        .ancestors()
+        .flat_map(|dir| NAMES.map(|name| dir.join(name)))
+        .find(|file| files::is_file(file));
+    match found {
+        Some(file) => (file, true),
+        None if krate.starts_with(base) => (base.join("clippy.toml"), false),
+        None => (krate.join("clippy.toml"), false),
+    }
+}
+
+/// Reads and parses `file`, or returns a ban that lacks every entry when
+/// the file does not exist.
+fn read(file: PathBuf, exists: bool) -> Result<Ban, ClippyFailure> {
+    if !exists {
         return Ok(Ban {
-            file: dir.join("clippy.toml"),
-            exists: false,
+            file,
+            exists,
             missing: BANNED.to_vec(),
             document: DocumentMut::new(),
         });
-    };
-    let shown = file.display().to_string();
-    let unreadable = |error| ClippyFailure::Unreadable {
-        file: shown.clone(),
-        error,
-    };
+    }
     let invalid = |reason: String| ClippyFailure::Invalid {
-        file: shown.clone(),
+        file: file.display().to_string(),
         reason,
     };
-    let bytes = files::read_capped(&file, MAX_BYTES + 1).map_err(unreadable)?;
+    let bytes = files::read_capped(&file, MAX_BYTES + 1)
+        .map_err(|error| invalid(format!("cannot be read: {error}")))?;
     if bytes.len() > MAX_BYTES {
-        return Err(unreadable(io::Error::other("the file is over 256 KiB")));
+        return Err(invalid("is over 256 KiB".to_owned()));
     }
     let text = String::from_utf8(bytes).map_err(|_| invalid("is not UTF-8 text".to_owned()))?;
     let document: DocumentMut = text.parse().map_err(|error: toml_edit::TomlError| {
@@ -154,28 +220,10 @@ pub(crate) fn open(spec: &Path) -> Result<Ban, ClippyFailure> {
         .ok_or_else(|| invalid(format!("sets {KEY} to a value that is not an array")))?;
     Ok(Ban {
         file,
-        exists: true,
+        exists,
         missing,
         document,
     })
-}
-
-/// Returns the configuration file that Clippy reads for a crate in `dir`:
-/// the first of [`NAMES`] in `dir`, or else in the nearest directory above
-/// it that holds one. A file in `dir` keeps the path the caller gave, and
-/// a file above it has an absolute path.
-fn find(dir: &Path) -> Option<PathBuf> {
-    let here = if dir.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        dir
-    };
-    // A directory that does not exist has no directory above it to search.
-    let above = files::canonical(here).unwrap_or_default();
-    std::iter::once(dir)
-        .chain(above.ancestors().skip(1))
-        .flat_map(|dir| NAMES.map(|name| dir.join(name)))
-        .find(|file| files::exists(file))
 }
 
 /// Returns each method of [`BANNED`] that `document` does not disallow, or
@@ -293,23 +341,11 @@ fn append(tables: &mut ArrayOfTables, methods: &[&'static str]) {
 /// command writes a file that it refuses.
 #[derive(Debug, Failure)]
 pub(crate) enum ClippyFailure {
-    /// The file exists and cannot be read, or is over [`MAX_BYTES`].
-    #[failure(
-        code = CLIPPY_UNREADABLE,
-        hint = "make {file} a readable text file of at most 256 KiB",
-        field(file = file.as_str()),
-    )]
-    Unreadable {
-        /// The file.
-        file: String,
-        /// Why it cannot be read.
-        error: io::Error,
-    },
-    /// The file is not UTF-8 text or valid TOML, or its
-    /// `disallowed-methods` is not an array.
+    /// The file cannot be read, is over [`MAX_BYTES`], is not UTF-8 text
+    /// or valid TOML, or its `disallowed-methods` is not an array.
     #[failure(
         code = CLIPPY_INVALID,
-        hint = "correct {file} so that it is valid TOML and its disallowed-methods is an array",
+        hint = "make {file} a readable file of at most 256 KiB that holds valid TOML whose disallowed-methods is an array",
         field(file = file.as_str()),
     )]
     Invalid {
@@ -321,13 +357,15 @@ pub(crate) enum ClippyFailure {
     /// `init` cannot create or write the file.
     #[failure(
         code = CLIPPY_UNWRITABLE,
-        hint = "make {file} and its directory writable",
+        hint = "make {file} and its directory writable, then run starmap init --spec {spec} --clippy",
         alternative = Recovery::Hint(format!("add the entries to {file} by hand, as starmap check lists them")),
         field(file = file.as_str()),
     )]
     Unwritable {
         /// The file.
         file: String,
+        /// The file that the caller gave as `--spec`.
+        spec: String,
         /// Why it cannot be written.
         error: io::Error,
     },
@@ -336,19 +374,18 @@ pub(crate) enum ClippyFailure {
 impl fmt::Display for ClippyFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unreadable { file, .. } => write!(formatter, "{file} cannot be read"),
             Self::Invalid { file, reason } => write!(formatter, "{file} {reason}"),
             Self::Unwritable { file, .. } => write!(formatter, "{file} cannot be written"),
         }
     }
 }
 
-/// A file that cannot be read or written has the I/O error as its source,
-/// which prints as the failure's cause.
+/// A file that cannot be written has the I/O error as its source, which
+/// prints as the failure's cause.
 impl std::error::Error for ClippyFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Unreadable { error, .. } | Self::Unwritable { error, .. } => Some(error),
+            Self::Unwritable { error, .. } => Some(error),
             Self::Invalid { .. } => None,
         }
     }

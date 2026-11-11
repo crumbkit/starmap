@@ -225,11 +225,14 @@ pub(crate) enum Verb {
     /// #[cfg(test)]. check scans src the same way.
     ///
     /// init also adds disallowed-methods entries for std::env::var, var_os,
-    /// vars and vars_os to the clippy.toml that Clippy reads for a crate
-    /// beside the spec, and writes clippy.toml there when no directory at or
-    /// above it has one. It keeps the file's other entries and comments.
-    /// Clippy then reports a read of the environment outside the struct that
-    /// derives starmap::Env.
+    /// vars and vars_os to the clippy.toml that Clippy reads for each crate
+    /// whose source directory holds a .rs file that init reads. That file is
+    /// the nearest .clippy.toml or clippy.toml in or above the directory that
+    /// holds the source directory. init writes clippy.toml when there is
+    /// none, and keeps a file's other entries and comments. Clippy then
+    /// reports a read of the environment outside the struct that derives
+    /// starmap::Env, in build scripts and tests as well. When init reads no
+    /// .rs file, it writes no clippy.toml.
     Init(InitArgs),
     /// Check that starmap.toml follows every rule of the file, and that it
     /// declares every variable that src reads.
@@ -246,8 +249,9 @@ pub(crate) enum Verb {
     /// names the place of each one it cannot resolve.
     ///
     /// check also fails when the clippy.toml that Clippy reads for a crate
-    /// beside the spec lacks a disallowed-methods entry for std::env::var,
-    /// var_os, vars or vars_os. starmap init --clippy adds the entries.
+    /// whose source directory holds a .rs file lacks a disallowed-methods
+    /// entry for std::env::var, var_os, vars or vars_os. starmap init
+    /// --clippy adds the entries.
     Check(CheckArgs),
     /// Describe each declared variable and the value it has in this shell.
     Explain(ExplainArgs),

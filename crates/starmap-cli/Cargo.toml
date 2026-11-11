@@ -67,7 +67,7 @@ miette = { workspace = true }
 # `init` adds entries to an application's clippy.toml and keeps the file's
 # other entries, comments and layout, which toml_edit preserves.
 toml_edit = { workspace = true }
-serde ={ workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
 schemars = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
