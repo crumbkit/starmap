@@ -92,6 +92,15 @@ pub use starmap_derive::Enumeration;
 /// `Option` or not. A shown bytes variable reads into `Vec<u8>` and a
 /// withheld one into [`SecretBytes`], each holding the decoded bytes. Any
 /// other type fails to compile.
+///
+/// A field can name the application's own check of its value, as
+/// `#[starmap("SHELF_PORT", check = unprivileged)]`. The function takes a
+/// reference to the field's type without its `Option`, and returns
+/// `Result<(), String>` for a shown field, or `Result<(), &'static str>`
+/// for a withheld one, so the reason cannot hold the secret. A function of
+/// another signature fails to compile. [`Env::from_vars`] runs the check on
+/// each value, a default included, after its type and unset rule pass, and
+/// a refusal joins the other findings as [`Problem::Rejected`].
 #[cfg(feature = "derive")]
 pub use starmap_derive::Env;
 
@@ -99,7 +108,7 @@ pub use starmap_derive::Env;
 /// starmap's public API, and any release may change them (LIB-7).
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::field::{FieldType, ReadField, read_choice};
+    pub use crate::field::{FieldType, ReadField, Rule, read_choice, run_check};
 }
 
 /// A struct that holds an application's environment, which
@@ -114,6 +123,11 @@ pub trait Env: Sized {
     const SPEC_FILE: &'static str;
     /// The struct's fields, in the order the struct lists them.
     const FIELDS: &'static [Field];
+    /// The application's own check of each field that names one, which
+    /// [`Env::from_vars`] runs. The derive writes it, and it is empty
+    /// unless a field names a check.
+    #[doc(hidden)]
+    const RULES: &'static [__private::Rule] = &[];
 
     /// Reads the process environment into the struct, through
     /// [`Env::from_vars`]. The derive generates it in the application
@@ -136,13 +150,13 @@ pub trait Env: Sized {
     /// # Errors
     ///
     /// Returns [`ReadError::Spec`] when the embedded spec does not parse,
-    /// [`ReadError::Refused`] when a variable is missing or does not fit
-    /// its type, and [`ReadError::Field`] when a field cannot hold a
+    /// [`ReadError::Refused`] when a variable is missing, does not fit
+    /// its type or is refused by its field's own check, and [`ReadError::Field`] when a field cannot hold a
     /// checked value.
     fn from_vars(vars: impl IntoIterator<Item = (OsString, OsString)>) -> Result<Self, ReadError> {
         let spec = Spec::parse(Self::SPEC).map_err(ReadError::Spec)?;
         let bindings = capture(&spec, vars);
-        match check(&spec, &bindings, mode(&spec, &bindings)) {
+        match check::check_with(&spec, &bindings, mode(&spec, &bindings), Self::RULES) {
             Verdict::Ready(environment) => {
                 Self::from_environment(&environment).map_err(ReadError::Field)
             }
@@ -184,7 +198,8 @@ pub trait Enumeration: Sized {
 pub enum ReadError {
     /// The embedded `starmap.toml` does not parse.
     Spec(SpecError),
-    /// A variable is missing or does not fit its type.
+    /// A variable is missing, does not fit its type, or is refused by its
+    /// field's own check.
     Refused(Refusals),
     /// A field cannot hold its variable's checked value.
     Field(FieldError),

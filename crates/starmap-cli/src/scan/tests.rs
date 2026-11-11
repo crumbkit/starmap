@@ -7,7 +7,17 @@ fn reads(text: &str) -> Vec<(String, usize)> {
     lines_of_reads(text)
         .unwrap()
         .into_iter()
-        .map(|(name, line)| (name.as_str().to_owned(), line))
+        .map(|read| (read.name.as_str().to_owned(), read.line))
+        .collect()
+}
+
+/// Returns the names in `text` that a field attribute reads with a check.
+fn checked(text: &str) -> Vec<String> {
+    lines_of_reads(text)
+        .unwrap()
+        .into_iter()
+        .filter(|read| read.checked)
+        .map(|read| read.name.as_str().to_owned())
         .collect()
 }
 
@@ -47,6 +57,34 @@ fn a_starmap_field_attribute_is_a_read() {
 }
 
 #[test]
+fn a_starmap_field_attribute_with_a_check_is_a_checked_read() {
+    let text = "struct Env {\n    #[starmap(\"SHELF_PORT\", check = unprivileged)]\n    port: u16,\n    #[starmap(\"SHELF_HOST\")]\n    host: String,\n}\n";
+    assert_eq!(reads(text), [read("SHELF_PORT", 2), read("SHELF_HOST", 4)]);
+    assert_eq!(checked(text), ["SHELF_PORT"]);
+}
+
+#[test]
+fn env_var_with_more_than_a_name_is_not_a_read() {
+    let text = "fn f() { env::var(\"A\", check = x); }";
+    assert_eq!(reads(text), []);
+}
+
+#[test]
+fn a_scan_lists_the_first_place_of_each_checked_field() {
+    let dir = tempfile::tempdir().unwrap();
+    let text = "struct Env {\n    #[starmap(\"SHELF_PORT\", check = crate::rules::port)]\n    port: u16,\n}\n";
+    std::fs::write(dir.path().join("env.rs"), text).unwrap();
+    let scanned = scan(dir.path()).unwrap();
+    let checks: Vec<(&str, &str)> = scanned
+        .checks
+        .iter()
+        .map(|(name, at)| (name.as_str(), at.as_str()))
+        .collect();
+    let at = format!("{}:2", dir.path().join("env.rs").display());
+    assert_eq!(checks, [("SHELF_PORT", at.as_str())]);
+}
+
+#[test]
 fn a_name_in_a_comment_or_a_doc_comment_is_not_a_read() {
     let text = "//! env::var(\"A\")\n/// env::var(\"B\")\n// env::var(\"C\")\n/* env::var(\"D\") */\nfn f() {}\n";
     assert_eq!(reads(text), []);
@@ -73,8 +111,8 @@ fn text_that_is_not_rust_tokens_is_refused() {
 #[test]
 fn a_missing_source_directory_has_no_reads() {
     let dir = tempfile::tempdir().unwrap();
-    let reads = scan(&dir.path().join("src")).unwrap();
-    assert!(reads.is_empty());
+    let scanned = scan(&dir.path().join("src")).unwrap();
+    assert!(scanned.reads.is_empty());
 }
 
 #[test]
@@ -116,8 +154,8 @@ fn a_file_of_unit_tests_is_not_scanned() {
         )
         .unwrap();
     }
-    let reads = scan(dir.path()).unwrap();
-    let names: Vec<&str> = reads.keys().map(Name::as_str).collect();
+    let scanned = scan(dir.path()).unwrap();
+    let names: Vec<&str> = scanned.reads.keys().map(Name::as_str).collect();
     assert_eq!(names, ["M"]);
 }
 

@@ -312,6 +312,9 @@ pub struct Variable {
     /// The sentence that says what the application does when the variable
     /// is unset, which the file's optional `effect` field states.
     effect: Option<String>,
+    /// The sentence that states the application's own check of the value,
+    /// which the file's optional `check` field states.
+    check: Option<String>,
     value_type: Type,
     unset: UnsetRule,
     show: Show,
@@ -350,6 +353,16 @@ impl Variable {
     #[must_use]
     pub fn effect(&self) -> Option<&str> {
         self.effect.as_deref()
+    }
+
+    /// Returns the sentence that states the check the application's own
+    /// code makes of the value, if the file states one in its `check`
+    /// field, such as `The port must be above 1024.`. starmap never runs
+    /// it: a struct that derives [`Env`](crate::Env) runs the check its
+    /// field names, and the sentence tells a reader that the check exists.
+    #[must_use]
+    pub fn check(&self) -> Option<&str> {
+        self.check.as_deref()
     }
 
     /// Returns the type of the variable's value, which the file's `type`

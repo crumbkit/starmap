@@ -1,0 +1,33 @@
+error[E0308]: mismatched types
+  --> tests/compile_fail/check_signature.rs:11:44
+   |
+11 |     #[starmap("SHELF_SESSION_KEY", check = leaks)]
+   |                                            ^^^^^
+   |                                            |
+   |                                            expected fn pointer, found fn item
+   |                                            arguments to this function are incorrect
+   |
+   = note: expected fn pointer `for<'a> fn(&'a Secret) -> Result<(), &'static str>`
+                 found fn item `for<'a> fn(&'a Secret) -> Result<(), std::string::String> {leaks}`
+note: function defined here
+  --> src/field.rs
+   |
+   | pub fn run_check<T: FieldType>(
+   |        ^^^^^^^^^
+
+error[E0308]: mismatched types
+  --> tests/compile_fail/check_signature.rs:13:37
+   |
+13 |     #[starmap("SHELF_PORT", check = wrong_type)]
+   |                                     ^^^^^^^^^^
+   |                                     |
+   |                                     expected fn pointer, found fn item
+   |                                     arguments to this function are incorrect
+   |
+   = note: expected fn pointer `for<'a> fn(&'a starmap::Port) -> Result<(), String>`
+                 found fn item `for<'a> fn(&'a u16) -> Result<(), String> {wrong_type}`
+note: function defined here
+  --> src/field.rs
+   |
+   | pub fn run_check<T: FieldType>(
+   |        ^^^^^^^^^

@@ -428,6 +428,187 @@ fn without_a_mode_table_a_refusal_names_no_mode_and_no_file() {
     );
 }
 
+/// A struct over the example spec whose fields name the application's own
+/// checks.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/starmap.toml")]
+struct CheckedShelf {
+    #[starmap("SHELF_PORT", check = unprivileged)]
+    port: starmap::Port,
+    #[starmap("SHELF_CATALOGUE_URL", check = https)]
+    catalogue: Option<url::Url>,
+    #[starmap("SHELF_SESSION_KEY", check = long_key)]
+    session_key: starmap::Secret,
+}
+
+/// Refuses a port of 1024 or below, naming the port.
+fn unprivileged(port: &starmap::Port) -> Result<(), String> {
+    if port.get() > 1024 {
+        Ok(())
+    } else {
+        Err(format!(
+            "the port must be above 1024, and {} is not",
+            port.get()
+        ))
+    }
+}
+
+/// Refuses a URL whose scheme is not https.
+fn https(url: &url::Url) -> Result<(), String> {
+    if url.scheme() == "https" {
+        Ok(())
+    } else {
+        Err("the catalogue is served over https".to_owned())
+    }
+}
+
+/// Refuses a session key shorter than 16 characters.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the check reads the secret it is given"
+)]
+fn long_key(key: &starmap::Secret) -> Result<(), &'static str> {
+    if key.expose().len() >= 16 {
+        Ok(())
+    } else {
+        Err("the session key is at least 16 characters")
+    }
+}
+
+const LONG_KEY: (&str, &str) = ("SHELF_SESSION_KEY", "a-session-key-of-32-characters!!");
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test checks the secret that the struct reads"
+)]
+fn a_field_whose_check_passes_lets_the_struct_load() {
+    let env = CheckedShelf::from_vars(vars(&[
+        ("SHELF_PORT", "8080"),
+        ("SHELF_CATALOGUE_URL", "https://shelf.example.org/"),
+        LONG_KEY,
+    ]))
+    .expect("every check passes");
+
+    assert_eq!(env.port.get(), 8080);
+    assert!(env.catalogue.is_some());
+    assert_eq!(env.session_key.expose(), LONG_KEY.1);
+}
+
+#[test]
+fn a_failing_check_refuses_the_load_with_the_variable_its_reason_and_the_quoted_value() {
+    let error = CheckedShelf::from_vars(vars(&[("SHELF_PORT", "80"), LONG_KEY]))
+        .expect_err("80 is a privileged port");
+
+    let ReadError::Refused(refusals) = &error else {
+        panic!("a check refuses the load, and gave {error:?}");
+    };
+    let finding = refusals.iter().next().expect("one finding");
+    assert_eq!(finding.name.as_str(), "SHELF_PORT");
+    assert_eq!(
+        finding.problem,
+        starmap::Problem::Rejected {
+            reason: "the port must be above 1024, and 80 is not".to_owned()
+        }
+    );
+    assert_eq!(
+        error.to_string(),
+        "SHELF_PORT: the port must be above 1024, and 80 is not (the value is \"80\")"
+    );
+}
+
+#[test]
+fn a_failing_check_and_a_missing_variable_are_reported_in_one_refusal_in_the_spec_order() {
+    let error = CheckedShelf::from_vars(vars(&[("SHELF_PORT", "80")])).expect_err("two findings");
+
+    assert_eq!(
+        error.to_string(),
+        "SHELF_PORT: the port must be above 1024, and 80 is not (the value is \"80\"); \
+         SHELF_SESSION_KEY is required in local mode and has no value"
+    );
+}
+
+#[test]
+fn a_value_that_its_type_refuses_is_not_passed_to_the_check() {
+    let error = CheckedShelf::from_vars(vars(&[("SHELF_PORT", "80a"), LONG_KEY]))
+        .expect_err("80a is not a port");
+
+    assert_eq!(
+        error.to_string(),
+        "SHELF_PORT: the value is not a port from 1 to 65535 (the value is \"80a\")"
+    );
+}
+
+#[test]
+fn an_optional_field_whose_variable_is_unset_is_not_checked_and_a_set_one_is() {
+    let unset = CheckedShelf::from_vars(vars(&[("SHELF_PORT", "8080"), LONG_KEY]));
+    let plain = CheckedShelf::from_vars(vars(&[
+        ("SHELF_PORT", "8080"),
+        ("SHELF_CATALOGUE_URL", "http://shelf.example.org/"),
+        LONG_KEY,
+    ]))
+    .expect_err("the catalogue is not https");
+
+    assert!(
+        unset
+            .expect("an unset url is not checked")
+            .catalogue
+            .is_none()
+    );
+    assert_eq!(
+        plain.to_string(),
+        "SHELF_CATALOGUE_URL: the catalogue is served over https \
+         (the value is \"http://shelf.example.org/\")"
+    );
+}
+
+#[test]
+fn a_withheld_field_check_receives_the_secret_and_its_refusal_holds_only_the_reason() {
+    let error = CheckedShelf::from_vars(vars(&[
+        ("SHELF_PORT", "8080"),
+        ("SHELF_SESSION_KEY", "short-key"),
+    ]))
+    .expect_err("the session key is short");
+
+    assert_eq!(
+        error.to_string(),
+        "SHELF_SESSION_KEY: the session key is at least 16 characters"
+    );
+    assert!(!format!("{error:?}").contains("short-key"));
+}
+
+/// A struct whose check refuses the default address of `listen.toml`.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/listen.toml")]
+struct LoopbackListen {
+    #[starmap("SHELF_LISTEN_ADDRESS", check = loopback)]
+    #[expect(dead_code, reason = "the test reads the struct only to see it refused")]
+    address: SocketAddr,
+}
+
+/// Refuses an address that is not a loopback address.
+fn loopback(address: &SocketAddr) -> Result<(), String> {
+    if address.ip().is_loopback() {
+        Ok(())
+    } else {
+        Err(format!(
+            "the api listens only on loopback, and {} is not",
+            address.ip()
+        ))
+    }
+}
+
+#[test]
+fn a_default_that_fails_the_check_refuses_the_load() {
+    let error = LoopbackListen::from_vars(vars(&[("SHELF_STAGE", "dev")]))
+        .expect_err("the default address 0.0.0.0:8080 is not loopback");
+
+    assert_eq!(
+        error.to_string(),
+        "SHELF_LISTEN_ADDRESS: the api listens only on loopback, and 0.0.0.0 is not"
+    );
+}
+
 #[test]
 fn unsupported_field_types_and_misuses_fail_to_compile_with_a_clear_message() {
     trybuild::TestCases::new().compile_fail("tests/compile_fail/*.rs");

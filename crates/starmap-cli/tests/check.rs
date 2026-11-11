@@ -51,3 +51,29 @@ fn a_source_file_that_is_not_rust_fails_and_names_the_file() {
         .stdout_eq("")
         .stderr_eq(file!["golden/check-unreadable-source.stderr"]);
 }
+
+#[test]
+fn a_check_in_code_without_a_sentence_and_a_sentence_without_a_check_are_notes() {
+    starmap(&["check", "--spec", "checks/starmap.toml"])
+        .code(0)
+        .stdout_eq("checks/starmap.toml declares 2 variables, and checks/src reads all 2.\n")
+        .stderr_eq(
+            "Mode: local, because the spec has no [mode] table.\n\
+             checks/src/main.rs:3 checks SHELF_PORT in code, and checks/starmap.toml states no check sentence for it.\n\
+             checks/starmap.toml states a check sentence for SHELF_REGION, and no field in checks/src names a check for it.\n",
+        );
+}
+
+#[test]
+fn the_json_names_each_check_without_a_sentence_and_each_sentence_without_a_check() {
+    let run = starmap(&["check", "--spec", "checks/starmap.toml", "--json"]).code(0);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(
+        document["data"]["checks_without_sentence"],
+        json!(["SHELF_PORT"])
+    );
+    assert_eq!(
+        document["data"]["sentences_without_check"],
+        json!(["SHELF_REGION"])
+    );
+}

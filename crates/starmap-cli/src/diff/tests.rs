@@ -84,6 +84,25 @@ fn an_added_changed_or_removed_effect_is_a_change_of_the_effect() {
     );
 }
 
+#[test]
+fn an_added_check_sentence_is_a_change_of_the_check() {
+    let with = TOKEN.replace(
+        "purpose = \"The token.\"\n",
+        "purpose = \"The token.\"\ncheck = \"The token starts with tk_.\"\n",
+    );
+
+    assert_eq!(
+        changes(Some(&spec(TOKEN)), &spec(&with)),
+        vec![Change {
+            change: Kind::Changed,
+            name: "SHELF_TOKEN".to_owned(),
+            field: Some("check".to_owned()),
+            was: None,
+            now: Some("The token starts with tk_.".to_owned()),
+        }]
+    );
+}
+
 /// A port setting, which a later spec turns into a socket address.
 const LISTEN: &str = r#"
 [variables.SHELF_LISTEN]
