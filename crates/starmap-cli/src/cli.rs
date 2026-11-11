@@ -219,6 +219,11 @@ pub(crate) enum Verb {
     /// Check that starmap.toml follows every rule of the file, and that it
     /// declares every variable that src reads.
     ///
+    /// check counts a literal name passed to var or var_os, a
+    /// #[starmap("NAME")] field, and clap's env argument, as in
+    /// #[arg(env = "NAME")]; a bare clap env reads the upper-case form of
+    /// its field's name. It does not count a name held in a constant.
+    ///
     /// A read whose name format! builds from a name, an underscore and one
     /// trailing placeholder, such as format!("SHELF_DB_URL_{region}"),
     /// reads a member of that family, and check fails when the file

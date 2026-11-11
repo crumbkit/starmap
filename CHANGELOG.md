@@ -8,6 +8,17 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `starmap check` and `starmap init` count clap's `env` argument as a read.
+  `#[arg(env = "SHELF_PORT")]` and `#[clap(env = "SHELF_PORT")]` read
+  `SHELF_PORT`, and a bare `env`, as in `#[arg(long, env)]`, reads the
+  upper-case form of its field's name, as clap does. An application that
+  lets clap read a variable that its file does not declare now fails
+  `starmap check` with `starmap::variable::undeclared`, so its CI fails
+  until the file declares the variable. `starmap init` writes a guess for
+  each such variable. An `env` whose name is not a string literal, such as
+  `env = NAME` with a constant, is still not counted, and neither is a
+  bare `env` whose name clap changes with `id`, `rename_all_env` or its
+  own word splitting.
 - `starmap check` reads a name that `format!` builds inside `var(...)` or
   `var_os(...)`, with or without `&` and a path such as `std::format!`. A
   literal that is a name, an underscore and one trailing placeholder, such

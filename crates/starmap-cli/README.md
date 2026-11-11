@@ -4,9 +4,10 @@ starmap-cli builds the `starmap` command, which checks, explains, compares
 and runs an application's declared environment.
 
 `starmap init` scans the `.rs` files under `src` for the variables that
-the code reads through `std::env::var`, `std::env::var_os` and the
-`#[starmap("NAME")]` field attribute, and writes `starmap.toml` with a
-guess for each one. Each guessed value ends in `?`, and `starmap check`
+the code reads through `std::env::var`, `std::env::var_os`, the
+`#[starmap("NAME")]` field attribute and clap's `env` argument, as in
+`#[arg(env = "NAME")]`, and writes `starmap.toml` with a guess for each
+one. A bare clap `env` reads the upper-case form of its field's name. Each guessed value ends in `?`, and `starmap check`
 refuses the file until every guess is confirmed. `starmap check` reads
 `starmap.toml` in the current directory, or the file that `--spec` names,
 checks every rule of the file, fails for each variable that `src` reads and

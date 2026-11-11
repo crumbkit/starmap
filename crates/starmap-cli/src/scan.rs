@@ -22,6 +22,17 @@
 //! scan records only its place. A field attribute's `format!` is not a
 //! read.
 //!
+//! The scan also counts a variable that clap reads for the application. In
+//! an attribute `#[arg(...)]` or `#[clap(...)]`, an argument `env = "NAME"`
+//! with a string literal reads `NAME`, as in
+//! `#[arg(long, env = "SHELF_PORT")]`. A bare `env`, as in
+//! `#[arg(long, env)]`, reads the upper-case form of the name of the field
+//! that follows the attribute, after any other attribute and a visibility,
+//! so the field `shelf_port` reads `SHELF_PORT`. clap names the variable
+//! the same way for a field name in lower case with single underscores
+//! between its words. The place of either read is the line of the word
+//! `env`.
+//!
 //! It looks inside every bracket, so a read
 //! inside a macro call counts, and comments are not tokens, so a name in a
 //! comment does not. A word after a `.` is a method of some other type, so
@@ -47,11 +58,18 @@
 //! The scan misses a read whose name is not a literal or a `format!` at the
 //! call, such as `env::var(NAME)` with a constant, a name built with
 //! `concat!`, `+` or `push_str`, and every lookup in the map that
-//! `std::env::vars_os` returns. It also misses a variable that a library
-//! reads for the application, such as clap's `#[arg(env = "X")]`, and a
+//! `std::env::vars_os` returns. It misses a clap `env` whose value is not
+//! a string literal, such as `#[arg(env = NAME)]` with a constant, and one
+//! inside `cfg_attr`. It reads a bare clap `env` under the wrong name when
+//! clap does not name the variable after the field in upper case: when the
+//! attribute sets `id`, when the struct sets `rename_all_env`, and when
+//! the field name has a leading, trailing or doubled underscore or an
+//! upper-case letter, which clap's word splitting changes. It also misses
+//! a variable that any other library reads for the application, and a
 //! reader that matches names by prefix. It counts any call of a function
 //! named `var` or `var_os` with a literal name, including one from another
-//! crate. `starmap check` then reports a missed variable as declared and
+//! crate, and any attribute named `arg` or `clap` with an `env` argument.
+//! `starmap check` then reports a missed variable as declared and
 //! unread, and a miscounted one as undeclared. The application's own
 //! `starmap_test::check` test still compares the derived struct with the
 //! spec.
@@ -265,6 +283,7 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
     let mut before_previous: Option<TokenTree> = None;
     let mut previous: Option<TokenTree> = None;
     let mut reader = None;
+    let mut bare_env = None;
     let mut in_test_item = false;
     for token in tokens {
         if in_test_item {
@@ -296,7 +315,39 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
                     checked,
                 });
             }
+            if group.delimiter() == Delimiter::Bracket
+                && is_punct(previous.as_ref(), '#')
+                && let Some((env, line)) = clap_env(group.stream())
+            {
+                match env {
+                    ClapEnv::Named(name) => reads.push(Read {
+                        target: Target::Variable(name),
+                        line,
+                        checked: false,
+                    }),
+                    ClapEnv::Field => bare_env = Some(line),
+                }
+            }
             collect(group.stream(), reads);
+        }
+        // A bare `env` reads the name of the field that follows its
+        // attribute, after any other attribute and a visibility.
+        if let Some(line) = bare_env {
+            match &token {
+                TokenTree::Ident(word) if word != "pub" => {
+                    bare_env = None;
+                    if let Some(name) = field_env(&word.to_string()) {
+                        reads.push(Read {
+                            target: Target::Variable(name),
+                            line,
+                            checked: false,
+                        });
+                    }
+                }
+                TokenTree::Ident(_) | TokenTree::Group(_) => {}
+                TokenTree::Punct(punct) if punct.as_char() == '#' => {}
+                TokenTree::Punct(_) | TokenTree::Literal(_) => bare_env = None,
+            }
         }
         reader = match &token {
             TokenTree::Ident(word)
@@ -309,6 +360,67 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
         };
         before_previous = previous.replace(token);
     }
+}
+
+/// What the `env` argument of a clap attribute names.
+enum ClapEnv {
+    /// The variable that a string literal names, as in `env = "SHELF_PORT"`.
+    Named(Name),
+    /// The variable that clap names after the field, as in a bare `env`.
+    Field,
+}
+
+/// Returns what the `env` argument reads, and the line of the word `env`,
+/// when `attribute` is the inside of the brackets of `#[arg(...)]` or
+/// `#[clap(...)]` and one of its arguments is a bare `env` or `env` with a
+/// string literal that is a valid name. Any other value of `env`, such as a
+/// constant, is nothing the scan can resolve.
+fn clap_env(attribute: TokenStream) -> Option<(ClapEnv, usize)> {
+    let mut attribute = attribute.into_iter();
+    let (Some(TokenTree::Ident(word)), Some(TokenTree::Group(arguments)), None) =
+        (attribute.next(), attribute.next(), attribute.next())
+    else {
+        return None;
+    };
+    if !(word == "arg" || word == "clap") || arguments.delimiter() != Delimiter::Parenthesis {
+        return None;
+    }
+    let mut tokens = arguments.stream().into_iter().peekable();
+    let mut starts_argument = true;
+    while let Some(token) = tokens.next() {
+        if starts_argument
+            && let TokenTree::Ident(key) = &token
+            && key == "env"
+        {
+            let line = key.span().start().line;
+            if tokens.peek().is_none() || is_punct(tokens.peek(), ',') {
+                return Some((ClapEnv::Field, line));
+            }
+            let (Some(TokenTree::Punct(equals)), Some(TokenTree::Literal(literal))) =
+                (tokens.next(), tokens.next())
+            else {
+                return None;
+            };
+            if equals.as_char() != '=' || !(tokens.peek().is_none() || is_punct(tokens.peek(), ','))
+            {
+                return None;
+            }
+            let written = literal.to_string();
+            return Name::from_str(string_text(&written)?)
+                .ok()
+                .map(|name| (ClapEnv::Named(name), line));
+        }
+        starts_argument = is_punct(Some(&token), ',');
+    }
+    None
+}
+
+/// Returns the variable that a bare clap `env` reads for the field named
+/// `field`: the field's name in upper case, without the `r#` of a raw
+/// identifier, when that is a valid name.
+fn field_env(field: &str) -> Option<Name> {
+    let field = field.strip_prefix("r#").unwrap_or(field);
+    Name::from_str(&field.to_uppercase()).ok()
 }
 
 /// Reports whether `token` is the punctuation `character`.

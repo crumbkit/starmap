@@ -79,6 +79,37 @@ fn a_dry_run_prints_the_guesses_and_writes_nothing() {
 }
 
 #[test]
+fn init_guesses_a_variable_for_each_clap_env_attribute() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("src")).unwrap();
+    fs::write(
+        dir.path().join("src/cli.rs"),
+        "struct Cli {\n    #[arg(long, env = \"SHELF_PORT\")]\n    port: u16,\n    #[arg(long, env)]\n    shelf_host: String,\n}\n",
+    )
+    .unwrap();
+    let run = starmap(dir.path(), &["init", "--dry-run", "--json"]).success();
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    let guesses: Vec<(&str, &str)> = document["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|guess| {
+            (
+                guess["name"].as_str().unwrap(),
+                guess["read_at"][0].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        guesses,
+        [
+            ("SHELF_HOST", "src/cli.rs:4"),
+            ("SHELF_PORT", "src/cli.rs:2")
+        ]
+    );
+}
+
+#[test]
 fn check_refuses_every_guess_in_the_file_that_init_wrote() {
     let dir = checkout();
     starmap(dir.path(), &["init"]).success();
