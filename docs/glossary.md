@@ -406,6 +406,76 @@ column, and `starmap explain --json` leaves the field out for a variable
 without one. `starmap diff` reports a variable that joins, leaves or
 changes group as a change of the field `group`.
 
+## built-in variable
+
+A built-in variable is a variable that `starmap run --only-declared` passes
+from the shell to the program without a declaration, because the operating
+system and common tools need it. The list is fixed in starmap, one list per
+platform, and no `starmap.toml` adds to it. The Rust API names a
+platform's list `starmap::BuiltIns`, with `BuiltIns::UNIX`,
+`BuiltIns::WINDOWS` and `BuiltIns::current`, the list of the platform that
+starmap is built for.
+
+On Unix systems, macOS and Linux among them, the built-in variables are:
+
+| Name | Why it passes |
+| --- | --- |
+| `PATH` | The program and every program it starts are found on it. |
+| `HOME` | Tools find their configuration and caches under the home directory. |
+| `USER` | Tools read the name of the person who runs them from it. |
+| `LOGNAME` | POSIX names it as the login name, and some tools read it where others read `USER`. |
+| `SHELL` | Tools that start a shell for the person start the one it names. |
+| `TMPDIR` | Temporary files go to the directory it names, which macOS sets per user. |
+| `LANG` | It sets the locale, which decides the character encoding and the language of messages. |
+| `LC_ALL`, `LC_COLLATE`, `LC_CTYPE`, `LC_MESSAGES`, `LC_MONETARY`, `LC_NUMERIC`, `LC_TIME` | Each is a locale category of POSIX, which sets one part of the locale and overrides `LANG`. |
+| `LC_ADDRESS`, `LC_IDENTIFICATION`, `LC_MEASUREMENT`, `LC_NAME`, `LC_PAPER`, `LC_TELEPHONE` | Each is a locale category that glibc adds. |
+| `TERM` | The program holds the terminal, and it names the terminal's kind and what it can draw. |
+| `TZ` | The C library reads the time zone from it, so local times stay the same. |
+
+Any other name that starts with `LC_`, such as `LC_TERMINAL`, is not built
+in.
+
+On Windows, where a name matches in any ASCII case, they are:
+
+| Name | Why it passes |
+| --- | --- |
+| `PATH` | The program and every program it starts are found on it. |
+| `PATHEXT` | It lists the file extensions that a program name may leave out, such as `.EXE`. |
+| `SystemRoot` | Windows libraries, networking among them, fail to load without the Windows directory. |
+| `SystemDrive` | Tools build the paths of system directories from the drive that holds Windows. |
+| `windir` | Older programs read the Windows directory from it where newer ones read `SystemRoot`. |
+| `ComSpec` | A program that runs a shell command starts the command interpreter it names. |
+| `TEMP` | Temporary files go to the directory it names. |
+| `TMP` | Windows reads it before `TEMP` when it chooses the directory of temporary files. |
+| `USERPROFILE` | It names the home directory, where tools find their configuration. |
+| `USERNAME` | Tools read the name of the person who runs them from it. |
+| `APPDATA` | Tools keep each person's roaming configuration under the directory it names. |
+| `LOCALAPPDATA` | Tools keep each person's caches and local data under the directory it names. |
+
+The Windows list is not tested against a real child process, because the
+project's CI runs its tests on Linux and macOS only. A program on Windows
+may need a variable that the list leaves out, such as `ProgramFiles`, and
+the application then declares it with `source = "inherited"`.
+
+`starmap run --only-declared -- <program>` starts the program with an
+environment of only declared variables: each declared variable that has a
+value, each member of a declared family that is set, and each built-in
+variable that the shell sets. The program inherits nothing else, so a read
+of an undeclared variable finds it unset, and a test that depends on that
+variable fails. Code that falls back to a default for an unset variable
+still passes, so `starmap check` is the command that finds the undeclared
+variables that `src` reads. An application that needs another variable of
+the shell, such as `SSH_AUTH_SOCK`, declares it with
+`source = "inherited"`. A file may declare a built-in name to give it a
+type, and the program then receives the checked value, or no value when the
+check leaves the variable unset. `starmap run` adds `TRACEPARENT` and
+`TRACESTATE` when its usage log records the run, as it does without the
+flag. The flag is off by default, and `starmap run` without it lets the
+program inherit every variable of the shell. `starmap explain` without a
+name lists the built-in variables of its platform in its note. In the Rust
+API, `Environment::apply_only_declared` builds the same environment on a
+`Command` from the variables and the list that the caller passes.
+
 ## pointer
 
 A pointer is a `starmap.toml` that names the file that declares the

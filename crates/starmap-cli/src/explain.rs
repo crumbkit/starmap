@@ -10,8 +10,8 @@ use crumbkit::{Batch, Document, Failure, Recovery, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{
-    Bindings, Bound, Cache, Choices, Mode, Name, SecretRef, Source, Spec, Type, Unset, Value,
-    Variable,
+    Bindings, Bound, BuiltIns, Cache, Choices, Mode, Name, SecretRef, Source, Spec, Type, Unset,
+    Value, Variable,
 };
 
 use crate::cli::{ExplainArgs, SpecFile};
@@ -240,7 +240,9 @@ impl std::error::Error for UnknownVariable {}
 /// Reads and parses the spec that `--spec` names, and explains each
 /// variable that `names` lists, or every declared variable without names,
 /// with its value in `vars`, the process environment. The note names the
-/// mode and says that explain resolves no bind.
+/// mode and says that explain resolves no bind. Without names, the note
+/// also lists the built-in variables that `starmap run --only-declared`
+/// passes.
 ///
 /// # Errors
 ///
@@ -259,13 +261,27 @@ pub(crate) fn explain(
         args.names.clone()
     };
     let (_, note) = mode::decide(&spec, &bindings);
-    let mut batch = Batch::new(&["explain"], "names", &names).note(format!(
-        "{note} Values come from this shell, and explain resolves no bind."
-    ));
+    let mut note = format!("{note} Values come from this shell, and explain resolves no bind.");
+    if args.names.is_empty() {
+        note.push(' ');
+        note.push_str(&built_ins_sentence(BuiltIns::current()));
+    }
+    let mut batch = Batch::new(&["explain"], "names", &names).note(note);
     for name in names {
         batch.push(row(&spec, &file, &bindings, name));
     }
     Ok(batch)
+}
+
+/// Returns the sentence that lists `built_ins`, the variables that
+/// `starmap run --only-declared` passes to the program without a
+/// declaration.
+fn built_ins_sentence(built_ins: &BuiltIns) -> String {
+    let names: Vec<&str> = built_ins.names().collect();
+    format!(
+        "starmap run --only-declared also passes these built-in variables from the shell: {}.",
+        names.join(", ")
+    )
 }
 
 /// Returns the row of the variable `name`, or the failure of a name that

@@ -25,10 +25,17 @@ then the default, and `.env` and `--set` never give a secret. A secret
 comes from its 1Password bind, or from the shell or the Keychain when it
 has none. At a terminal, `run` asks for a required secret that nothing
 supplies, with hidden input, and offers to save it to the Keychain. The
-program's exit code becomes `starmap`'s. A `starmap.toml` that holds
-`spec = "config/environment.toml"` points to the file that declares the
-variables, with optional `src` and `dotenv` paths beside it, and every
-command follows it.
+program's exit code becomes `starmap`'s. The program inherits every other
+variable of the shell, unless `--only-declared` is passed: the program then
+receives only the declared variables that have a value, the members of
+declared families that are set, and a fixed list of built-in variables that
+the operating system and common tools need, such as `PATH` and `HOME`,
+which `starmap explain` lists. A read of an undeclared variable then finds
+it unset, so a test that depends on that variable fails, and
+`starmap check` is the command that finds the undeclared variables that
+`src` reads. A `starmap.toml` that holds `spec = "config/environment.toml"`
+points to the file that declares the variables, with optional `src` and
+`dotenv` paths beside it, and every command follows it.
 [docs/commands.md](https://github.com/crumbkit/starmap/blob/main/crates/starmap-cli/docs/commands.md) is the
 reference of every command. The repository's
 [README](https://github.com/crumbkit/starmap) describes the project.

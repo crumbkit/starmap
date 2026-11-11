@@ -1,4 +1,4 @@
-starmap has 13 opt-outs from the conventions.
+starmap has 14 opt-outs from the conventions.
 
 examples/run: starmap self usage
   Reason: The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.
@@ -50,6 +50,11 @@ filters/repeats-and-commas: starmap run --set
   Cost: An agent that writes the form the option does not accept gets a refusal or a wrong value.
 
 examples/run: starmap run --set SHELF_DEBUG=true -- cargo run
+  Reason: The example directory's spec reads a secret through op and keeps a generated value in the Keychain, which a test must not touch, and the examples run cargo, so tests/run.rs runs the command against fixtures without either and checks what the program receives.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+examples/run: starmap run --only-declared -- cargo test
   Reason: The example directory's spec reads a secret through op and keeps a generated value in the Keychain, which a test must not touch, and the examples run cargo, so tests/run.rs runs the command against fixtures without either and checks what the program receives.
   Cost: The example is not run, so help can show an example that fails.
   Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.

@@ -1,9 +1,10 @@
 //! The checked environment that [`check`](crate::check) builds, and the
 //! one place in the crate that reads a secret's text.
 
+use std::ffi::OsString;
 use std::process::Command;
 
-use crate::{Mode, Name, Secret, SecretBytes, Value};
+use crate::{BuiltIns, Mode, Name, Secret, SecretBytes, Value};
 
 #[cfg(test)]
 mod tests;
@@ -159,6 +160,61 @@ impl Environment {
                 None => command.env_remove(name.as_str()),
             };
         }
+    }
+
+    /// Gives `command` an environment of only declared variables: it
+    /// clears `command`'s environment, so the child inherits nothing, sets
+    /// each variable of `inherited` that `built_ins` names, and then
+    /// applies the checked values as [`Environment::apply`] does. The
+    /// child receives each declared variable that has a value, each member
+    /// of a family that has one, and the built-in variables that
+    /// `inherited` sets. A read of any other variable finds it unset.
+    ///
+    /// `inherited` is the environment that the child would have inherited,
+    /// such as `std::env::vars_os()`, and `built_ins` is usually
+    /// [`BuiltIns::current`]. A declared variable whose name is built in
+    /// takes its checked value, and stays unset when the check left it
+    /// unset. A variable that the caller sets on `command` afterwards
+    /// reaches the child.
+    ///
+    /// ```
+    /// use std::process::Command;
+    ///
+    /// let spec = starmap::Spec::parse(
+    ///     r#"
+    /// [variables.SHELF_DEBUG]
+    /// purpose = "Logs each catalogue query."
+    /// type = "boolean"
+    /// unset = { default = "false" }
+    /// show = "shown"
+    /// source = "setting"
+    /// "#,
+    /// )?;
+    /// let inherited = [("PATH", "/usr/bin"), ("EDITOR", "vi")]
+    ///     .map(|(name, value)| (name.into(), value.into()));
+    /// let bindings = starmap::capture(&spec, inherited.clone());
+    /// let starmap::Verdict::Ready(environment) = starmap::check(&spec, &bindings, starmap::Mode::Local) else {
+    ///     return Err("the default fits".into());
+    /// };
+    /// let mut command = Command::new("shelf");
+    /// environment.apply_only_declared(&mut command, &starmap::BuiltIns::UNIX, inherited);
+    /// let names: Vec<_> = command.get_envs().map(|(name, _)| name.to_owned()).collect();
+    /// assert_eq!(names, ["PATH", "SHELF_DEBUG"]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn apply_only_declared(
+        &self,
+        command: &mut Command,
+        built_ins: &BuiltIns,
+        inherited: impl IntoIterator<Item = (OsString, OsString)>,
+    ) {
+        command.env_clear();
+        for (name, value) in inherited {
+            if built_ins.passes(&name) {
+                command.env(name, value);
+            }
+        }
+        self.apply(command);
     }
 
     /// Whether the declared variable `name` has a value.

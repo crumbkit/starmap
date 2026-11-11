@@ -116,6 +116,10 @@ const HELP: Help = Help::new()
                     &["--set", "SHELF_DEBUG=true", "--", "cargo", "run"],
                     "Run the app with one setting changed for this run",
                 ),
+                Example::new(
+                    &["--only-declared", "--", "cargo", "test"],
+                    "Run the tests with only the declared and built-in variables, so a read of an undeclared one finds it unset",
+                ),
             ])
             .effects(Effects::additive())
             .passes_on_exit("the program after --"),
@@ -247,6 +251,14 @@ pub(crate) enum Verb {
     /// A secret comes from its bind, or from the shell or the Keychain when
     /// it has none; at a terminal, run asks for a missing one and offers to save it to the
     /// Keychain. .env and --set never give a secret.
+    ///
+    /// The program also inherits every other variable of the shell, unless
+    /// --only-declared is passed. With --only-declared, the program
+    /// receives each declared variable that has a value, each member of a
+    /// declared family that is set, and the built-in variables that the
+    /// operating system and common tools need, such as PATH and HOME, and a
+    /// read of any other variable finds it unset. starmap explain lists the
+    /// built-in variables.
     Run(RunArgs),
     /// Explore starmap's commands.
     Commands {
@@ -410,6 +422,10 @@ pub(crate) struct RunArgs {
     /// Give a setting or inherited variable this value for this run, as NAME=VALUE; repeat it for more
     #[arg(long, value_name = "NAME=VALUE", value_parser = parse_assignment)]
     pub(crate) set: Vec<Assignment>,
+
+    /// Start the program with only the declared variables and the built-in ones that starmap explain lists
+    #[arg(long)]
+    pub(crate) only_declared: bool,
 
     /// The program to run and its arguments, after --
     #[arg(value_name = "PROGRAM", required = true, last = true)]

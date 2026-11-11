@@ -10,7 +10,9 @@
 //! no provider. A required secret without a bind that nothing supplies is
 //! asked for at a terminal, held for this run, and saved to the Keychain
 //! when the person agrees. The program starts through crumbkit-child,
-//! which passes on its exit code.
+//! which passes on its exit code. With `--only-declared`, the program
+//! inherits nothing, and receives the declared values and the built-in
+//! variables of [`starmap::BuiltIns`].
 
 use std::ffi::OsString;
 use std::fmt;
@@ -91,6 +93,7 @@ fn run_with(
         return code;
     }
     let mut command = child::command(&args.program);
+    let inherited = args.only_declared.then(|| vars.clone());
     let gathered = match gather(args, vars) {
         Ok(gathered) => gathered,
         Err(refused) => return refuse(&mut sink, &mut output, &refused, notes),
@@ -111,7 +114,7 @@ fn run_with(
     match settled {
         Ok(ready) => {
             print_notes(notes, &ready.notes);
-            ready.environment.apply(&mut command);
+            child::apply(&ready.environment, inherited, &mut command);
             // BASE-37: hand_over ignores SIGINT and SIGQUIT, which the
             // terminal sends to the program too, and forwards no signal.
             // A SIGTERM or SIGHUP sent to starmap alone, as a process

@@ -1,1 +1,1 @@
-Mode: local, because SHELF_ENV is unset and its default is dev. Values come from this shell, and explain resolves no bind.
+Mode: local, because SHELF_ENV is unset and its default is dev. Values come from this shell, and explain resolves no bind. starmap run --only-declared also passes these built-in variables from the shell: PATH, HOME, USER, LOGNAME, SHELL, TMPDIR, LANG, LC_ALL, LC_COLLATE, LC_CTYPE, LC_MESSAGES, LC_MONETARY, LC_NUMERIC, LC_TIME, LC_ADDRESS, LC_IDENTIFICATION, LC_MEASUREMENT, LC_NAME, LC_PAPER, LC_TELEPHONE, TERM, TZ.

@@ -9,11 +9,13 @@ Options:
       --spec <FILE>       Read the spec from this file [default: starmap.toml]
       --workspace <NAME>  Name the Keychain items of this checkout after this workspace; default: the checkout's directory name
       --set <NAME=VALUE>  Give a setting or inherited variable this value for this run, as NAME=VALUE; repeat it for more
+      --only-declared     Start the program with only the declared variables and the built-in ones that starmap explain lists
   -h, --help              Print help (see more with '--help')
 
 Examples:
   starmap run -- cargo run
   starmap run --set SHELF_DEBUG=true -- cargo run
+  starmap run --only-declared -- cargo test
 
 Effects: additive, not idempotent, closed-world.
 Exit code: the command passes on the exit code of the program after --.
