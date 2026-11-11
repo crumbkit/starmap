@@ -162,6 +162,7 @@ fn check_names_the_clippy_toml_of_a_member_crate_that_lacks_the_entries_and_init
     let read = "fn size() {\n    let _ = std::env::var(\"SHELF_PAGE_SIZE\");\n}\n";
     write(dir.path(), "crates/a/src/lib.rs", read);
     write(dir.path(), "crates/b/src/lib.rs", read);
+    write(dir.path(), "Cargo.toml", "[workspace]\n");
     write(dir.path(), "crates/a/Cargo.toml", "");
     write(dir.path(), "crates/b/Cargo.toml", "");
     // Clippy reads only this file for crate b, and the file at the root
@@ -218,6 +219,83 @@ fn check_with_the_checkout_as_src_reads_the_clippy_toml_beside_its_cargo_toml() 
 }
 
 #[test]
+fn check_with_the_crate_as_src_reads_its_clippy_toml_when_the_spec_path_names_a_directory() {
+    // The crate is in `shelf`, and the directory above it has no
+    // clippy.toml.
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        dir.path(),
+        "shelf/starmap.toml",
+        "spec = \"config/environment.toml\"\nsrc = [\".\"]\n",
+    );
+    write(dir.path(), "shelf/config/environment.toml", SPEC);
+    write(dir.path(), "shelf/Cargo.toml", "");
+    write(dir.path(), "shelf/clippy.toml", CLIPPY);
+    write(
+        dir.path(),
+        "shelf/main.rs",
+        "fn main() {\n    let _ = std::env::var(\"SHELF_PAGE_SIZE\");\n}\n",
+    );
+
+    starmap(dir.path(), &["check", "--spec", "shelf/starmap.toml"]).success();
+    let absolute = dir.path().join("shelf/starmap.toml");
+    starmap(dir.path(), &["check", "--spec", absolute.to_str().unwrap()]).success();
+}
+
+#[test]
+fn a_pointer_outside_the_crate_reads_and_writes_the_clippy_toml_of_the_crate() {
+    // The checkout has no repository and no workspace.
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        dir.path(),
+        "deploy/starmap.toml",
+        "spec = \"environment.toml\"\nsrc = [\"../app/src\"]\n",
+    );
+    write(dir.path(), "deploy/environment.toml", SPEC);
+    write(dir.path(), "app/Cargo.toml", "");
+    write(
+        dir.path(),
+        "app/src/main.rs",
+        "fn main() {\n    let _ = std::env::var(\"SHELF_PAGE_SIZE\");\n}\n",
+    );
+    let spec = ["--spec", "deploy/starmap.toml"];
+
+    let run = starmap(dir.path(), &[&["check", "--json"], &spec[..]].concat()).code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    let failures = document["failures"].as_array().unwrap();
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert_eq!(failures[0]["code"], "starmap::clippy::unbanned");
+    let file = failures[0]["fields"]["file"].as_str().unwrap();
+    assert!(file.ends_with("/app/clippy.toml"), "{file}");
+
+    starmap(dir.path(), &[&["init", "--clippy"], &spec[..]].concat()).success();
+    assert_eq!(
+        fs::read_to_string(dir.path().join("app/clippy.toml")).unwrap(),
+        CLIPPY
+    );
+    assert!(!dir.path().join("deploy/clippy.toml").exists());
+    starmap(dir.path(), &[&["check"], &spec[..]].concat()).success();
+}
+
+#[test]
+fn a_spec_in_a_member_crate_passes_with_the_clippy_toml_at_the_workspace_root() {
+    // The checkout has no repository.
+    let dir = tempfile::tempdir().unwrap();
+    write(dir.path(), "Cargo.toml", "[workspace]\n");
+    write(dir.path(), "clippy.toml", CLIPPY);
+    write(dir.path(), "crates/shelf/Cargo.toml", "");
+    write(dir.path(), "crates/shelf/starmap.toml", SPEC);
+    write(
+        dir.path(),
+        "crates/shelf/src/main.rs",
+        "fn main() {\n    let _ = std::env::var(\"SHELF_PAGE_SIZE\");\n    let _ = std::env::var(\"SHELF_DEBUG\");\n}\n",
+    );
+
+    starmap(&dir.path().join("crates/shelf"), &["check"]).success();
+    assert!(!dir.path().join("crates/shelf/clippy.toml").exists());
+}
+
+#[test]
 fn check_with_a_directory_of_crates_as_src_reads_the_clippy_toml_of_each_crate() {
     let dir = checkout();
     write(
@@ -226,6 +304,7 @@ fn check_with_a_directory_of_crates_as_src_reads_the_clippy_toml_of_each_crate()
         "spec = \"config/environment.toml\"\nsrc = [\"crates\"]\n",
     );
     let read = "fn size() {\n    let _ = std::env::var(\"SHELF_PAGE_SIZE\");\n}\n";
+    write(dir.path(), "Cargo.toml", "[workspace]\n");
     for krate in ["a", "b"] {
         write(dir.path(), &format!("crates/{krate}/Cargo.toml"), "");
         write(dir.path(), &format!("crates/{krate}/src/lib.rs"), read);
@@ -248,8 +327,8 @@ fn a_relative_spec_path_names_the_clippy_toml_beside_the_spec() {
     write(dir.path(), "shelf/config/environment.toml", SPEC);
     write(dir.path(), "shelf/Cargo.toml", "");
     fs::rename(dir.path().join("app"), dir.path().join("shelf/app")).unwrap();
-    // The checkout has no repository, so the file above the spec is not
-    // read.
+    // The checkout has no repository and no workspace, so the file above
+    // the crate is not read.
     let spec = ["--spec", "shelf/starmap.toml"];
 
     let run = starmap(dir.path(), &[&["check", "--json"], &spec[..]].concat()).code(1);

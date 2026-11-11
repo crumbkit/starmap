@@ -23,9 +23,9 @@ the file that declares the variables.
 
 - `starmap init` starts a spec for code that reads variables. It scans `.rs`
   files under `src` and writes starmap.toml with a guess for each variable,
-  each ending in `?`. It also adds clippy.toml entries that make Clippy
-  refuse `std::env::var`, `var_os`, `vars` and `vars_os`, in build scripts
-  and tests too. A read there takes `#[expect(clippy::disallowed_methods)]`.
+  each ending in `?`. It also adds clippy.toml entries so Clippy refuses
+  `std::env::var`, `var_os`, `vars` and `vars_os`. A read in a build script
+  or test takes `#[expect(clippy::disallowed_methods, reason = "...")]`.
   `starmap init --dry-run` prints the guesses and writes nothing.
 - `starmap check` confirms that the spec is valid and complete. It checks
   every rule of the file, fails for each variable that `src` reads and the

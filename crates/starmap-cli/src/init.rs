@@ -3,7 +3,7 @@
 
 use std::fmt;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crumbkit::schemars::{Schema, SchemaGenerator};
 use crumbkit::serde::Serializer;
@@ -13,7 +13,7 @@ use serde::Serialize;
 use starmap::Name;
 
 use crate::cli::{InitArgs, SpecFile};
-use crate::clippy::{self, ClippyFailure};
+use crate::clippy;
 use crate::files;
 use crate::scan::{self, Dirs};
 use crate::spec::{self, Located, SpecFailure};
@@ -135,7 +135,9 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
     let scanned = scan::scan_all(&located.src)?;
     // init refuses a clippy.toml that it cannot edit before it writes the
     // spec, so a refused run writes nothing.
-    let bans = open(path, &scanned.rust)?;
+    let bans: Vec<clippy::Ban> = clippy::open(path, &scanned.rust)
+        .into_iter()
+        .collect::<Result<_, _>>()?;
     let banned = clippy::sentences(&bans, dry_run);
     let guesses: Vec<Guess> = scanned
         .reads
@@ -192,7 +194,9 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
 /// read, parsed or written.
 pub(crate) fn ban(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, crumbkit::Error> {
     let located = spec::locate(&args.spec)?;
-    let bans = open(&args.spec, &scan::scan_all(&located.src)?.rust)?;
+    let bans: Vec<clippy::Ban> = clippy::open(&args.spec, &scan::scan_all(&located.src)?.rust)
+        .into_iter()
+        .collect::<Result<_, _>>()?;
     let banned = clippy::sentences(&bans, dry_run);
     if !dry_run {
         for ban in bans {
@@ -200,16 +204,6 @@ pub(crate) fn ban(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, crum
         }
     }
     Ok(Listing::new(Vec::new(), 0).note(banned))
-}
-
-/// Returns each clippy.toml that Clippy reads for `dirs`, as
-/// [`clippy::open`] does.
-///
-/// # Errors
-///
-/// Returns the failure of the first file that init cannot edit.
-fn open(spec: &Path, dirs: &[PathBuf]) -> Result<Vec<clippy::Ban>, ClippyFailure> {
-    clippy::open(spec, dirs).into_iter().collect()
 }
 
 /// Returns where init writes the spec that `path` names. A file that

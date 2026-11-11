@@ -207,6 +207,12 @@ fn crates(root: &Path, crates: &[&str]) {
     }
 }
 
+/// Makes `root` the root of a Cargo workspace.
+fn workspace(root: &Path) {
+    fs::create_dir_all(root).unwrap();
+    fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
+}
+
 #[test]
 fn the_file_is_the_nearest_one_from_the_crate_up_to_the_repository_root() {
     let (_dir, root) = root();
@@ -229,6 +235,7 @@ fn the_file_is_the_nearest_one_from_the_crate_up_to_the_repository_root() {
 #[test]
 fn each_crate_has_its_own_nearest_file_and_a_shared_file_is_listed_once() {
     let (_dir, root) = root();
+    workspace(&root);
     crates(&root, &["crates/a", "crates/b", "crates/c"]);
     let sources = ["crates/a/src", "crates/b/src", "crates/c/src"];
     // No file anywhere: init writes one beside the spec for every crate.
@@ -262,6 +269,7 @@ fn a_crate_outside_the_directory_of_the_spec_gains_a_file_in_its_own_directory()
 #[test]
 fn the_crate_of_a_source_file_is_the_nearest_directory_above_it_with_a_cargo_toml() {
     let (_dir, root) = root();
+    workspace(&root);
     crates(&root, &["crates/a", "crates/b"]);
     fs::write(root.join("crates/b/clippy.toml"), "").unwrap();
     // The scan of `src = ["crates"]` reads files in these directories.
@@ -273,7 +281,7 @@ fn the_crate_of_a_source_file_is_the_nearest_directory_above_it_with_a_cargo_tom
             ("crates/b/clippy.toml".to_owned(), true)
         ]
     );
-    // A directory with no Cargo.toml above it is in the crate of the spec.
+    // A directory outside the member crates is in the crate at the root.
     assert_eq!(
         found(&root, "starmap.toml", &["scripts"]),
         [("clippy.toml".to_owned(), false)]
@@ -298,17 +306,54 @@ fn a_file_above_the_repository_root_is_not_read() {
 }
 
 #[test]
-fn without_a_repository_the_search_stops_at_the_directory_of_the_spec() {
+fn without_a_repository_the_search_stops_at_the_workspace_root() {
     let (_dir, root) = root();
     fs::write(root.join("clippy.toml"), "").unwrap();
-    crates(&root, &["app/core"]);
+    workspace(&root.join("work"));
+    crates(&root, &["work/crates/app"]);
+    let found = |spec| found(&root, spec, &["work/crates/app/src"]);
+    // The file above the workspace is not read. init writes beside a spec
+    // in the workspace, at or above the crate.
+    for (spec, file) in [
+        (
+            "work/crates/app/starmap.toml",
+            "work/crates/app/clippy.toml",
+        ),
+        ("work/starmap.toml", "work/clippy.toml"),
+        ("starmap.toml", "work/crates/app/clippy.toml"),
+    ] {
+        assert_eq!(found(spec), [(file.to_owned(), false)], "{spec}");
+    }
+    // A spec in a member crate reads the file at the workspace root.
+    fs::write(root.join("work/clippy.toml"), "").unwrap();
     assert_eq!(
-        found(&root, "app/starmap.toml", &["app/core/src"]),
-        [("app/clippy.toml".to_owned(), false)]
+        found("work/crates/app/starmap.toml"),
+        [("work/clippy.toml".to_owned(), true)]
     );
+}
+
+#[test]
+fn without_a_repository_or_a_workspace_the_search_stays_in_the_crate() {
+    let (_dir, root) = root();
+    fs::write(root.join("clippy.toml"), "").unwrap();
+    crates(&root, &["app"]);
+    // A pointer outside the crate, a spec in a directory of the crate, and
+    // a spec above the crate all leave the file in the crate.
+    for spec in [
+        "deploy/starmap.toml",
+        "app/config/starmap.toml",
+        "starmap.toml",
+    ] {
+        fs::create_dir_all(root.join(spec).parent().unwrap()).unwrap();
+        assert_eq!(
+            found(&root, spec, &["app/src"]),
+            [("app/clippy.toml".to_owned(), false)],
+            "{spec}"
+        );
+    }
     fs::write(root.join("app/.clippy.toml"), "").unwrap();
     assert_eq!(
-        found(&root, "app/starmap.toml", &["app/core/src"]),
+        found(&root, "deploy/starmap.toml", &["app/src"]),
         [("app/.clippy.toml".to_owned(), true)]
     );
 }

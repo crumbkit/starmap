@@ -229,8 +229,9 @@ pub(crate) enum Verb {
     /// of each .rs file that init reads. The crate's directory is the
     /// nearest one above the file that holds a Cargo.toml, and the file is
     /// the nearest .clippy.toml or clippy.toml in or above it. The search
-    /// stops at the directory that holds .git, so init never reads a
-    /// clippy.toml above the repository. init writes clippy.toml when there
+    /// stops at the directory that holds .git, or without one at the root
+    /// of the crate's Cargo workspace, so init never reads a clippy.toml
+    /// above that. init writes clippy.toml when there
     /// is none, and keeps a file's other entries and comments. Clippy then
     /// reports a read of the environment outside the struct that derives
     /// starmap::Env, in build scripts and tests as well. When init reads no

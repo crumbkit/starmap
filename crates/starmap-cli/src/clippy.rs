@@ -126,8 +126,10 @@ pub(crate) fn list(methods: &[&str]) -> String {
 /// Reads the clippy.toml that Clippy uses for the crate of each directory
 /// of `dirs`, the directories that hold a `.rs` file that the scan read,
 /// and returns each file once, with the banned methods it does not
-/// disallow. [`find`] states which file that is. starmap does not read
-/// `CLIPPY_CONF_DIR`.
+/// disallow. The crate's directory is the nearest directory at or above
+/// the source directory that holds a Cargo.toml, however far above, and
+/// the directory of `spec` when none does. [`find`] states which file
+/// Clippy reads for a crate. starmap does not read `CLIPPY_CONF_DIR`.
 ///
 /// When [`find`] finds no file, the result names the `clippy.toml` that
 /// init writes, which does not exist and lacks every entry. A file in or
@@ -141,9 +143,20 @@ pub(crate) fn list(methods: &[&str]) -> String {
 pub(crate) fn open(spec: &Path, dirs: &[PathBuf]) -> Vec<Result<Ban, ClippyFailure>> {
     let beside = spec.parent().unwrap_or(Path::new(""));
     let base = canonical(beside);
-    let mut found: Vec<(PathBuf, bool)> = Vec::new();
+    let mut crates: Vec<PathBuf> = Vec::new();
     for dir in dirs {
-        let (file, exists) = find(&canonical(dir), &base);
+        let dir = canonical(dir);
+        let krate = dir
+            .ancestors()
+            .find(|above| files::is_file(&above.join("Cargo.toml")))
+            .unwrap_or(&base);
+        if !crates.iter().any(|found| found == krate) {
+            crates.push(krate.to_path_buf());
+        }
+    }
+    let mut found: Vec<(PathBuf, bool)> = Vec::new();
+    for krate in crates {
+        let (file, exists) = find(&krate, &base);
         let file = match file.strip_prefix(&base) {
             Ok(below) => beside.join(below),
             Err(_) => file,
@@ -170,50 +183,56 @@ fn canonical(dir: &Path) -> PathBuf {
     files::canonical(dir).unwrap_or_else(|_| dir.to_path_buf())
 }
 
-/// Returns the configuration file that Clippy reads for the crate that
-/// holds the source directory `dir`, and whether it exists. `dir` and
-/// `base`, the directory of the spec, have every symbolic link resolved.
+/// Returns the configuration file that Clippy reads for the crate in the
+/// directory `krate`, and whether it exists. `krate` and `base`, the
+/// directory of the spec, have every symbolic link resolved.
 ///
-/// The search stays inside the repository, whose root is the nearest
-/// directory at or above `dir` that holds `.git`. Without one, the root is
-/// `base` when `dir` is in or below it, and `dir` otherwise. The crate's
-/// directory is the nearest directory from `dir` up to the root that holds
-/// a Cargo.toml, and `base` when none does. The file is the first of
+/// The search stays inside a root, which is the nearest directory at or
+/// above `krate` that holds `.git`. Without one, the root is the nearest
+/// directory at or above `krate` whose Cargo.toml has a `[workspace]`
+/// table, and `krate` itself when none has. The file is the first of
 /// [`NAMES`] in the crate's directory, or else in the nearest directory
 /// from there up to the root that holds one. Clippy skips a directory that
 /// has one of those names, and so does the search. Clippy also reads a
 /// file above the root, which starmap never reads or edits.
 ///
 /// When no directory holds a file, the file is the `clippy.toml` that init
-/// writes: in `base` when the crate's directory is in or below it and
-/// `base` is inside the repository, and in the crate's directory
-/// otherwise. A file that is a symbolic link is returned as the file that
-/// the link leads to, when it leads to one.
-fn find(dir: &Path, base: &Path) -> (PathBuf, bool) {
-    let root = dir
+/// writes: in `base` when `base` is the crate's directory or a directory
+/// above it inside the root, and in the crate's directory otherwise. A
+/// file that is a symbolic link is returned as the file that the link
+/// leads to, when it leads to one.
+fn find(krate: &Path, base: &Path) -> (PathBuf, bool) {
+    let root = krate
         .ancestors()
         .find(|above| files::exists(&above.join(".git")))
-        .unwrap_or(if dir.starts_with(base) { base } else { dir });
-    let krate = dir
+        .or_else(|| krate.ancestors().find(|above| is_workspace(above)))
+        .unwrap_or(krate);
+    let found = krate
         .ancestors()
         .take_while(|above| above.starts_with(root))
-        .find(|above| files::is_file(&above.join("Cargo.toml")))
-        .unwrap_or(base);
-    let above = krate
-        .ancestors()
-        .skip(1)
-        .take_while(|above| above.starts_with(root));
-    let found = std::iter::once(krate)
-        .chain(above)
         .flat_map(|dir| NAMES.map(|name| dir.join(name)))
         .find(|file| files::is_file(file));
     match found {
         Some(file) => (files::canonical(&file).unwrap_or(file), true),
-        None if krate.starts_with(base) && base.starts_with(root) => {
-            (base.join("clippy.toml"), false)
+        None => {
+            let beside_spec = krate.starts_with(base) && base.starts_with(root);
+            let dir = if beside_spec { base } else { krate };
+            (dir.join("clippy.toml"), false)
         }
-        None => (krate.join("clippy.toml"), false),
     }
+}
+
+/// Reports whether the Cargo.toml in `dir` has a `[workspace]` table,
+/// which makes `dir` the root of a Cargo workspace. A Cargo.toml that
+/// cannot be read or parsed, or is over 256 KiB, counts as having none, so
+/// the search for a clippy.toml then stops nearer the crate, and Cargo
+/// itself reports the manifest.
+fn is_workspace(dir: &Path) -> bool {
+    files::read_capped(&dir.join("Cargo.toml"), MAX_BYTES)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .and_then(|text| text.parse::<DocumentMut>().ok())
+        .is_some_and(|manifest| manifest.get("workspace").is_some_and(Item::is_table_like))
 }
 
 /// Reads and parses `file`, or returns a ban that lacks every entry when

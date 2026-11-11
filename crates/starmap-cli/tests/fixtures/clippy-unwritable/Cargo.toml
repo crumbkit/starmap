@@ -5,3 +5,6 @@ name = "shelf-clippy-unwritable"
 version = "0.0.0"
 edition = "2024"
 publish = false
+
+# Keeps this crate out of the workspace of the repository.
+[workspace]

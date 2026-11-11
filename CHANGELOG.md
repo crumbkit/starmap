@@ -24,12 +24,14 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   above the file that holds a `Cargo.toml`, and init edits the
   `.clippy.toml` or `clippy.toml` that Clippy reads for that crate, which
   is the nearest one in or above the crate's directory. The search stops
-  at the repository's root, the nearest directory that holds `.git`, or at
-  the spec's directory without a repository, so init never reads or edits
-  a `clippy.toml` above it. When there is none inside, init writes
-  `clippy.toml` beside the spec, or in the crate's directory for a crate
-  outside the spec's directory, and Clippy then reads that file in place
-  of one above the repository. It keeps each file's entries, comments,
+  at the repository's root, the nearest directory that holds `.git`.
+  Without a repository it stops at the root of the crate's Cargo
+  workspace, and without a workspace it reads only the crate's directory,
+  so init never reads or edits a `clippy.toml` above that. When there is
+  none inside, init writes `clippy.toml` beside the spec when the spec is
+  in the crate's directory or in a directory above it that the search
+  reaches, and in the crate's directory otherwise. Clippy then reads that
+  file in place of one further above. It keeps each file's entries, comments,
   layout and mode, writes through a symbolic link, and adds only the
   entries that are missing. When init reads no `.rs` file, it writes no
   `clippy.toml` and says so. starmap does not read `CLIPPY_CONF_DIR`.
