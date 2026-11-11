@@ -39,11 +39,31 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
 - `{ string = { pattern = "[0-9a-f]{40}" } }` is Unicode text that the
   pattern matches as a whole. `{ string = {} }` is the same type as the word
   `string`, which takes any Unicode text.
+- `{ boolean = { true = ["1", "yes"], false = ["0", "no"] } }` is a boolean
+  that takes only the listed spellings, which the paragraph on booleans
+  below describes.
 
 - `{ bytes = { encoding = "base64", length = 32 } }` is bytes written as
   text in an encoding, whose length after decoding is exactly `length`, or
   at least `min-length` when the table sets that key instead. A bytes table
   takes exactly one of the two lengths.
+
+The word `boolean` reads the eight words `1`, `true`, `yes` and `on` as
+true and `0`, `false`, `no` and `off` as false, in any mix of ASCII case,
+and the value reaches the child process as `true` or `false`. A boolean
+table declares its own spellings for an application that reads other
+words. The table needs both a `true` list and a `false` list. A value
+matches a spelling exactly, so `yes` in a list does not accept `YES`, and
+the eight words are accepted only where a list holds them. The value
+reaches the child process in the spelling it was set in, and a default is
+one of the spellings. The parser refuses an empty list, an empty spelling
+and a spelling listed twice, in one list or in both, with
+`starmap::spec::empty_enumeration`. A value that is no listed spelling
+fails with a text such as
+`the value is not one of 1, yes for true and 0, no for false`. The Rust API
+names the lists `starmap::Spellings`, holds them in `Type::Boolean`, and
+holds a value read through them as `Value::Spelled`, which a `bool` field
+reads.
 
 A bytes type's `encoding` is `hex`, `base64` or `base64url`. `hex` takes two
 digits per byte in upper or lower case. `base64` is RFC 4648 section 4 with

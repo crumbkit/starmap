@@ -14,6 +14,16 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are two variables. `Name::from_str` accepts such a name, and the
   glossary's new name entry states the rule. Family keys and group names
   keep their rules.
+- A boolean type may declare its spellings, as
+  `type = { boolean = { true = ["1", "yes"], false = ["0", "no"] } }`. Both
+  lists are required. A value matches a spelling exactly and reaches the
+  child process in the spelling it was set in, and a default is one of the
+  spellings. The parser refuses an empty list, an empty spelling and a
+  spelling listed twice with `starmap::spec::empty_enumeration`.
+  `type = "boolean"` keeps its eight words in any ASCII case. The Rust API
+  gains `Spellings`, `SpellingsError`, `Value::Spelled`, which a `bool`
+  field reads, and `TypeError::NotSpelling`. `starmap explain` shows the
+  spellings in the type, as `boolean (1, yes for true and 0, no for false)`.
 - The README and the glossary's new flag override entry show how a
   command-line flag replaces a variable's value without clap's `env`
   argument: the flag is an `Option`, and the application writes
@@ -54,6 +64,10 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** `Type::Boolean` is now the struct variant
+  `Type::Boolean { spellings: Option<Spellings> }`, where `None` is the
+  boolean of the eight words. Code that builds or matches `Type::Boolean`
+  writes `Type::Boolean { spellings: None }` or `Type::Boolean { .. }`.
 - **Breaking:** `starmap check` fails with `starmap::clippy::unbanned` for
   each `clippy.toml` that Clippy reads for a crate of the application and
   that lacks a `disallowed-methods` entry for `std::env::var`,

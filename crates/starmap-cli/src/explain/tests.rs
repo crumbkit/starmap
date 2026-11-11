@@ -494,6 +494,45 @@ fn a_url_whose_scheme_is_not_listed_is_marked_invalid() {
     assert_eq!(row["value"]["state"], "invalid");
 }
 
+/// Returns the row of `SHELF_DEBUG`, a shown setting with the fields
+/// `fields`, when the shell holds `value`, as `starmap explain --json`
+/// prints it.
+fn debug_row(fields: &str, value: Option<&str>) -> serde_json::Value {
+    let text = format!(
+        "[variables.SHELF_DEBUG]\npurpose = \"Logs each catalogue query.\"\n{fields}\n\
+         show = \"shown\"\nsource = \"setting\"\n"
+    );
+    let spec = Spec::parse(&text).unwrap();
+    let vars = value.map(|value| (OsString::from("SHELF_DEBUG"), OsString::from(value)));
+    let bindings = starmap::capture(&spec, vars);
+    let name: Name = "SHELF_DEBUG".parse().unwrap();
+    serde_json::to_value(row(&spec, "starmap.toml", &bindings, name).unwrap()).unwrap()
+}
+
+/// A boolean spelled `1` or `yes` for true and `0` or `no` for false, with
+/// the default `0`.
+const SPELLED: &str = "type = { boolean = { true = [\"1\", \"yes\"], false = [\"0\", \"no\"] } }\n\
+     unset = { default = \"0\" }";
+
+#[test]
+fn a_boolean_with_spellings_shows_them_in_its_type_and_its_value_as_it_is_spelled() {
+    let row = debug_row(SPELLED, Some("yes"));
+
+    assert_eq!(row["type"], "boolean (1, yes for true and 0, no for false)");
+    assert_eq!(row["value"]["state"], "set");
+    assert_eq!(row["value"]["text"], "yes");
+}
+
+#[test]
+fn a_boolean_with_spellings_shows_its_default_and_marks_another_word_invalid() {
+    let unset = debug_row(SPELLED, None);
+    let other = debug_row(SPELLED, Some("true"));
+
+    assert_eq!(unset["value"]["state"], "default");
+    assert_eq!(unset["value"]["text"], "0");
+    assert_eq!(other["value"]["state"], "invalid");
+}
+
 /// A spec with a named enumeration `log-level`, which `SHELF_LOG_LEVEL`
 /// uses, and an inline one, which `SHELF_STAGE` uses.
 const LOG_LEVEL: &str = r#"

@@ -240,7 +240,7 @@ fn shape(file: &str, field: &Field, ty: &Type) -> Vec<String> {
         | (Shape::Port, Type::Port)
         | (Shape::Url, Type::Url { .. })
         | (Shape::SocketAddress, Type::SocketAddress)
-        | (Shape::Boolean, Type::Boolean)
+        | (Shape::Boolean, Type::Boolean { .. })
         | (Shape::String | Shape::OsString, Type::String { .. })
         | (Shape::Bytes, Type::Bytes(_))
         | (Shape::OsString, Type::Path { .. }) => Vec::new(),

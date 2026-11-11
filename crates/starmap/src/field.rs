@@ -240,7 +240,7 @@ shown!(SocketAddr, Shape::SocketAddress, |value| match value {
     _ => None,
 });
 shown!(bool, Shape::Boolean, |value| match value {
-    Value::Boolean(boolean) => Some(*boolean),
+    Value::Boolean(boolean) | Value::Spelled { value: boolean, .. } => Some(*boolean),
     _ => None,
 });
 shown!(Vec<u8>, Shape::Bytes, |value| match value {

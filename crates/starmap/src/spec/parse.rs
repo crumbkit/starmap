@@ -49,7 +49,15 @@ const EFFECT_SAYS: &str = "what the application does when the variable is unset"
 /// What a check sentence says, as a refusal of one names it.
 const CHECK_SAYS: &str = "what the application's own code checks of the value";
 /// The keys of a type table.
-const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "string", "url", "bytes"];
+const TYPE_TABLES: &[&str] = &[
+    "path",
+    "integer",
+    "enumeration",
+    "string",
+    "url",
+    "bytes",
+    "boolean",
+];
 /// The keys of an unset table.
 const UNSET_FIELDS: &[&str] = &["local", "default", "production"];
 
@@ -516,13 +524,14 @@ impl Parser {
             ["string"] => self.string_type(&field.child(table, "string")?),
             ["bytes"] => self.bytes_type(&field.child(table, "bytes")?),
             ["url"] => self.url_type(&field.child(table, "url")?),
+            ["boolean"] => self.boolean_type(&field.child(table, "boolean")?),
             // Each unknown key was reported above.
             [] if !table.is_empty() => None,
             [] => {
                 let message = format!(
-                    "`{}` is an empty table, and it takes one of path, integer, enumeration, \
-                     string, url and bytes",
-                    field.path
+                    "`{}` is an empty table, and it takes one of {}",
+                    field.path,
+                    list(TYPE_TABLES, "")
                 );
                 self.report(field.span(), Kind::MissingField, message);
                 None

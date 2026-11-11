@@ -117,6 +117,8 @@ fn apply_writes_a_value_as_text_its_type_reads_back() {
     assert_eq!(debug, Some(OsStr::new("true")));
 }
 
+mod boolean;
+
 #[test]
 fn a_withheld_value_is_reachable_only_through_secret() {
     let environment = environment(&[("SHELF_MIRROR_TOKEN", "hunter2")]);

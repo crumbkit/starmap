@@ -77,7 +77,7 @@ pub use url;
 pub use value_type::{
     ByteLength, ByteRule, Choice, ChoiceError, Choices, ChoicesError, Encoding, EnumerationName,
     EnumerationNameError, IntegerRange, Pattern, PatternError, Port, PortError, RangeError, Scheme,
-    SchemeError, Schemes, SchemesError, Type, TypeError, Value,
+    SchemeError, Schemes, SchemesError, Spellings, SpellingsError, Type, TypeError, Value,
 };
 
 /// Derives [`Enumeration`] for an enum of unit variants. A variant reads as

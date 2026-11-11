@@ -23,6 +23,7 @@ use crate::Secret;
 
 mod enumeration;
 mod scheme;
+mod spelling;
 #[cfg(test)]
 mod tests;
 
@@ -30,6 +31,7 @@ pub use enumeration::{
     Choice, ChoiceError, Choices, ChoicesError, EnumerationName, EnumerationNameError,
 };
 pub use scheme::{Scheme, SchemeError, Schemes, SchemesError};
+pub use spelling::{Spellings, SpellingsError};
 
 /// The words the boolean type reads as `true`.
 const TRUE_WORDS: [&str; 4] = ["1", "true", "yes", "on"];
@@ -60,9 +62,13 @@ pub enum Type {
     /// `localhost:8080` and a named zone id such as `[fe80::1%eth0]:80` are
     /// refused.
     SocketAddress,
-    /// One of the words 1, 0, true, false, yes, no, on and off, in any mix
-    /// of ASCII case.
-    Boolean,
+    /// A boolean. Without `spellings`, it is one of the words 1, 0, true,
+    /// false, yes, no, on and off, in any mix of ASCII case. With them, it
+    /// is one of the declared spellings, matched exactly.
+    Boolean {
+        /// The spellings the type declares, or `None` for the eight words.
+        spellings: Option<Spellings>,
+    },
     /// A whole number within a range.
     Integer(IntegerRange),
     /// One of a fixed set of values.
@@ -130,7 +136,19 @@ impl Type {
                     .parse()
                     .map_err(|_| TypeError::NotSocketAddress)?,
             ),
-            Self::Boolean => Value::Boolean(boolean(text(raw)?)?),
+            Self::Boolean { spellings: None } => Value::Boolean(boolean(text(raw)?)?),
+            Self::Boolean {
+                spellings: Some(spellings),
+            } => {
+                let text = text(raw)?;
+                let value = spellings
+                    .read(text)
+                    .ok_or_else(|| TypeError::NotSpelling(spellings.clone()))?;
+                Value::Spelled {
+                    value,
+                    spelling: text.to_owned(),
+                }
+            }
             Self::Integer(range) => Value::Integer(range.parse(text(raw)?)?),
             Self::Enumeration(choices) => {
                 let text = text(raw)?;
@@ -177,7 +195,7 @@ impl Type {
             | Self::Port
             | Self::Url { .. }
             | Self::SocketAddress
-            | Self::Boolean
+            | Self::Boolean { .. }
             | Self::Integer(_)
             | Self::Enumeration(_) => Ok(()),
         }
@@ -197,7 +215,10 @@ impl fmt::Display for Type {
                 schemes: Some(schemes),
             } => write!(formatter, "a url whose scheme is one of {schemes}"),
             Self::SocketAddress => formatter.write_str("an ip socket address"),
-            Self::Boolean => formatter.write_str("a boolean"),
+            Self::Boolean { spellings: None } => formatter.write_str("a boolean"),
+            Self::Boolean {
+                spellings: Some(spellings),
+            } => write!(formatter, "a boolean spelled {spellings}"),
             Self::Integer(range) => write!(
                 formatter,
                 "a whole number from {} to {}",
@@ -244,6 +265,14 @@ pub enum Value {
     SocketAddress(SocketAddr),
     /// The value of the boolean type.
     Boolean(bool),
+    /// The value of a boolean type that declares its spellings.
+    Spelled {
+        /// The value the spelling stands for.
+        value: bool,
+        /// The declared spelling the value was written in, which is the
+        /// text an environment holds.
+        spelling: String,
+    },
     /// The value of an integer type, which lies in the type's range.
     Integer(i64),
     /// The value of an enumeration type, which is one of the type's choices.
@@ -271,6 +300,7 @@ impl Value {
             Self::Url(url) => url.as_str().into(),
             Self::SocketAddress(address) => address.to_string().into(),
             Self::Boolean(boolean) => boolean.to_string().into(),
+            Self::Spelled { spelling, .. } => spelling.into(),
             Self::Integer(number) => number.to_string().into(),
             Self::Choice(choice) => choice.as_str().into(),
             Self::Bytes { bytes, encoding } => encoding.encode(bytes).as_str().into(),
@@ -305,6 +335,8 @@ pub enum TypeError {
     NotSocketAddress,
     /// The value is not one of the eight boolean words.
     NotBoolean,
+    /// The value is not one of these spellings of a boolean.
+    NotSpelling(Spellings),
     /// The value is not a whole number.
     NotInteger,
     /// The value is a whole number outside the type's range.
@@ -342,6 +374,9 @@ impl fmt::Display for TypeError {
             Self::NotBoolean => formatter.write_str(
                 "the value is not one of the words 1, 0, true, false, yes, no, on and off",
             ),
+            Self::NotSpelling(spellings) => {
+                write!(formatter, "the value is not one of {spellings}")
+            }
             Self::NotInteger => formatter.write_str("the value is not a whole number"),
             Self::OutOfRange { min, max } => write!(
                 formatter,

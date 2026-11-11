@@ -146,6 +146,16 @@ fn value_type(value_type: &Type) -> Toml {
         Type::String {
             pattern: Some(pattern),
         } => inline([("string", inline([("pattern", pattern.as_str().into())]))]),
+        Type::Boolean {
+            spellings: Some(spellings),
+        } => {
+            let list = |spellings: &[String]| Toml::Array(spellings.iter().collect::<Array>());
+            let lists = [
+                ("true", list(spellings.for_true())),
+                ("false", list(spellings.for_false())),
+            ];
+            inline([("boolean", inline(lists))])
+        }
         word => word_of(TYPE_WORDS, word).into(),
     }
 }

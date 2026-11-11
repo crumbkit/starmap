@@ -359,7 +359,7 @@ pub(crate) fn value_text(value: &Value) -> String {
         Value::Integer(number) => number.to_string(),
         Value::Choice(choice) => choice.to_string(),
         Value::String(string) => string.clone(),
-        Value::Bytes { .. } => value.to_string(),
+        Value::Bytes { .. } | Value::Spelled { .. } => value.to_string(),
         // A kind of value that a later release of starmap adds.
         _ => "a value".to_owned(),
     }
@@ -376,7 +376,10 @@ pub(crate) fn type_text(ty: &Type) -> String {
             schemes: Some(schemes),
         } => format!("url ({schemes})"),
         Type::SocketAddress => "ip socket address".to_owned(),
-        Type::Boolean => "boolean".to_owned(),
+        Type::Boolean { spellings: None } => "boolean".to_owned(),
+        Type::Boolean {
+            spellings: Some(spellings),
+        } => format!("boolean ({spellings})"),
         Type::Integer(range) => format!("integer {}..={}", range.min(), range.max()),
         Type::Enumeration(choices) => match choices.name() {
             Some(name) => format!("{name}: one of {choices}"),

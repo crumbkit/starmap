@@ -347,7 +347,7 @@ fn type_word(ty: &Type) -> &'static str {
         Type::Port => "port",
         Type::Url { .. } => "url",
         Type::SocketAddress => "ip socket address",
-        Type::Boolean => "boolean",
+        Type::Boolean { .. } => "boolean",
         Type::Integer(_) => "integer",
         Type::Enumeration(_) => "enumeration",
         Type::String { .. } => "string",

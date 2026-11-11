@@ -671,7 +671,8 @@ pub enum SpecProblemKind {
     /// or does not compile.
     BadPattern,
     /// An enumeration, a url type's scheme list, or the mode's production
-    /// list has no values or repeats one.
+    /// list has no values or repeats one; or a boolean type's spellings
+    /// have an empty list, an empty spelling or a spelling listed twice.
     EmptyEnumeration,
     /// A secret or generated variable is shown.
     ShownSecret,
@@ -769,7 +770,7 @@ const TYPE_WORDS: &[(&str, Type)] = &[
     ("port", Type::Port),
     ("url", Type::Url { schemes: None }),
     ("socket-address", Type::SocketAddress),
-    ("boolean", Type::Boolean),
+    ("boolean", Type::Boolean { spellings: None }),
     ("string", Type::String { pattern: None }),
 ];
 /// The words a bytes type's `encoding` takes.
