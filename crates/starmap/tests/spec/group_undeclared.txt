@@ -1,0 +1,4 @@
+starmap::spec::group_undeclared: `groups.mirror.variables` lists "SHELF_MIRROR_KEY", which the file does not declare
+  at: 3:38 to 3:56, bytes 107..125
+   3 | variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY"]
+     |                                      ^^^^^^^^^^^^^^^^^^

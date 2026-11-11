@@ -521,6 +521,12 @@ fn hint(kind: SpecProblemKind) -> &'static str {
         SpecProblemKind::EnumerationUndeclared => {
             "declare the enumeration in an [enumerations.<name>] table, or correct the name"
         }
+        SpecProblemKind::GroupUndeclared => {
+            "declare the variable, or remove it from the group's variables"
+        }
+        SpecProblemKind::BadGroup => {
+            "list at least two variables in each group, each once and in one group only, and none with a default or a generated value"
+        }
         // `Syntax`, and any kind that a later release adds.
         _ => "fix the line the failure points at",
     }

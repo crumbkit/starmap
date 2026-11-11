@@ -140,12 +140,21 @@ starmap check --spec enumeration_undeclared.toml
   fails with starmap::spec::enumeration_undeclared
   hint
 
+starmap check --spec group_undeclared.toml
+  fails with starmap::spec::group_undeclared
+  hint
+
+starmap check --spec bad_group.toml
+  fails with starmap::spec::bad_group
+  hint
+
 codes that no start provokes:
   starmap::spec::too_large: Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.
   starmap::revision::no_repository: Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.
   starmap::revision::unreadable: Only a git that cannot start or cannot read the repository provokes it, which no fixture can set up portably.
   starmap::variable::missing: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
   starmap::variable::invalid: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
+  starmap::group::incomplete: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
   starmap::bind::no_provider: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
   starmap::bind::no_place: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.
   starmap::secret::unbound: The recovery and twin checks run each line with --json, which run refuses before it asks a secret store, so only a text run reaches this failure, and src/run/tests.rs provokes it beside an admitted line.

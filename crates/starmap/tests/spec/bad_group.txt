@@ -1,0 +1,4 @@
+starmap::spec::bad_group: `groups.mirror.variables` lists "SHELF_MIRROR_REGION", which has a default, and a member of a group has none, because a default always counts as set
+  at: 3:38 to 3:59, bytes 128..149
+   3 | variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_REGION"]
+     |                                      ^^^^^^^^^^^^^^^^^^^^^

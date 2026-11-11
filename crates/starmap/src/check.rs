@@ -6,7 +6,8 @@ use std::fmt::{self, Write as _};
 
 use crate::env::Held;
 use crate::{
-    Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, Type, TypeError, Unset, Variable,
+    Bindings, Bound, Environment, GroupName, Mode, Name, Secret, Show, Spec, Type, TypeError,
+    Unset, Variable,
 };
 
 #[cfg(test)]
@@ -121,7 +122,10 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 /// When the bindings decide another mode than `mode`, the mode variable has
 /// a finding too, so a ready environment fits the mode its child decides.
 /// A spec without a `[mode]` table is always checked in local mode, which
-/// is the only mode its child can decide. An invalid mode value checked in
+/// is the only mode its child can decide. When a group is partly set, each
+/// of its members that is unset and has no finding of its own gets
+/// [`Problem::GroupIncomplete`]. A member counts as set when the check
+/// holds a value for it. An invalid mode value checked in
 /// production gives the mode variable two findings: `Invalid`, and
 /// `ModeMismatch { decided: Local }`.
 ///
@@ -135,15 +139,30 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
     } else {
         Mode::Local
     };
+    let held: Vec<Holding<'_>> = spec
+        .variables()
+        .map(|(name, variable)| (name, variable, hold(variable, bindings.get(name), mode)))
+        .collect();
+    let incomplete: Vec<Option<Problem>> = held
+        .iter()
+        .map(|(name, _, result)| match result {
+            Ok(None) => incomplete(spec, &held, name),
+            _ => None,
+        })
+        .collect();
     let mut entries = Vec::new();
     let mut findings = Vec::new();
-    for (name, variable) in spec.variables() {
-        let bound = bindings.get(name);
-        match hold(variable, bound, mode) {
-            Ok(held) => entries.push((name.clone(), held)),
-            Err(problem) => findings.push(Finding {
+    for ((name, variable, result), incomplete) in held.into_iter().zip(incomplete) {
+        match (result, incomplete) {
+            (Ok(held), None) => entries.push((name.clone(), held)),
+            (Ok(_), Some(problem)) => findings.push(Finding {
                 name: name.clone(),
-                value: quote(variable, bound, &problem),
+                value: None,
+                problem,
+            }),
+            (Err(problem), _) => findings.push(Finding {
+                name: name.clone(),
+                value: quote(variable, bindings.get(name), &problem),
                 problem,
             }),
         }
@@ -166,6 +185,29 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
             modes: spec.mode().is_some(),
         })
     }
+}
+
+/// One declared variable with the result of holding its value: the value,
+/// `None` when it stays unset, or the problem that stops the check.
+type Holding<'a> = (&'a Name, &'a Variable, Result<Option<Held>, Problem>);
+
+/// Returns the finding of `name`, which is unset, when its group is partly
+/// set: the group, and each member that `held` holds a value for.
+fn incomplete(spec: &Spec, held: &[Holding<'_>], name: &Name) -> Option<Problem> {
+    let group = spec.group_of(name)?;
+    let set: Vec<Name> = group
+        .variables()
+        .iter()
+        .filter(|member| {
+            held.iter()
+                .any(|(held, _, result)| held == member && matches!(result, Ok(Some(_))))
+        })
+        .cloned()
+        .collect();
+    (!set.is_empty()).then(|| Problem::GroupIncomplete {
+        group: group.name().clone(),
+        set,
+    })
 }
 
 /// Holds the checked value of `variable` in `mode`, or `None` when it stays
@@ -288,6 +330,14 @@ impl fmt::Display for Refusals {
                 Problem::ModeMismatch { decided } => {
                     write!(formatter, "{name} decides {decided} mode")
                 }
+                Problem::GroupIncomplete { group, set } => {
+                    let verb = if set.len() == 1 { "is" } else { "are" };
+                    write!(
+                        formatter,
+                        "{name} is unset, and the group {group} needs it because {} {verb} set",
+                        Names(set)
+                    )
+                }
             }?;
         }
         Ok(())
@@ -391,4 +441,32 @@ pub enum Problem {
         /// The mode the bindings decide.
         decided: Mode,
     },
+    /// The variable is unset, and other members of its group are set, so
+    /// the group is partly set.
+    GroupIncomplete {
+        /// The variable's group.
+        group: GroupName,
+        /// The members of the group that are set, in the group's order.
+        set: Vec<Name>,
+    },
+}
+
+/// Names written as `A`, `A and B`, or `A, B and C`.
+struct Names<'a>(&'a [Name]);
+
+impl fmt::Display for Names<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, name) in self.0.iter().enumerate() {
+            if index > 0 {
+                let joiner = if index + 1 == self.0.len() {
+                    " and "
+                } else {
+                    ", "
+                };
+                formatter.write_str(joiner)?;
+            }
+            write!(formatter, "{name}")?;
+        }
+        Ok(())
+    }
 }

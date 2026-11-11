@@ -505,10 +505,72 @@ fn a_variable_without_a_named_enumeration_has_no_enumeration_or_values_in_json()
 }
 
 #[test]
-fn the_values_are_the_last_long_column() {
+fn the_values_are_the_long_column_after_the_effect() {
     use crumbkit::Row;
 
-    assert_eq!(super::Explained::LONG_COLUMNS.last(), Some(&"values"));
+    let long = super::Explained::LONG_COLUMNS;
+    let effect = long.iter().position(|column| *column == "effect");
+    let values = long.iter().position(|column| *column == "values");
+
+    assert_eq!(values, effect.map(|effect| effect + 1));
+}
+
+/// A spec with the group `mirror` of two optional settings, and a port
+/// outside it.
+const MIRROR: &str = r#"
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY"]
+
+[variables.SHELF_MIRROR_ACCOUNT]
+purpose = "The account shelf uses at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_KEY]
+purpose = "The key of the account at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "optional"
+show = "shown"
+source = "setting"
+"#;
+
+/// Returns the JSON row of `name` in [`MIRROR`] with no value in the shell.
+fn mirror_json(name: &str) -> serde_json::Value {
+    let spec = Spec::parse(MIRROR).unwrap();
+    let bindings = starmap::capture(&spec, Vec::<(OsString, OsString)>::new());
+    serde_json::to_value(row(&spec, "starmap.toml", &bindings, name.parse().unwrap()).unwrap())
+        .unwrap()
+}
+
+#[test]
+fn a_member_of_a_group_names_its_group_in_json() {
+    assert_eq!(
+        mirror_json("SHELF_MIRROR_KEY")["group"],
+        serde_json::json!("mirror")
+    );
+}
+
+#[test]
+fn a_variable_outside_any_group_has_no_group_field_in_json() {
+    let json = mirror_json("SHELF_PORT");
+
+    assert!(json.get("group").is_none(), "{json}");
+}
+
+#[test]
+fn the_group_is_the_last_long_column() {
+    use crumbkit::Row;
+
+    assert_eq!(super::Explained::LONG_COLUMNS.last(), Some(&"group"));
 }
 
 /// A spec with a shown path and a shown port, for the tests of a value
