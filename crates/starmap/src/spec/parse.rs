@@ -37,6 +37,8 @@ const MODE_FIELDS: &[&str] = &["variable", "production"];
 const VARIABLE_FIELDS: &[&str] = &[
     "purpose", "effect", "check", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
+/// What an effect sentence says, as a refusal of one names it.
+const EFFECT_SAYS: &str = "what the application does when the variable is unset";
 /// What a check sentence says, as a refusal of one names it.
 const CHECK_SAYS: &str = "what the application's own code checks of the value";
 /// The keys of a type table.
@@ -373,7 +375,7 @@ impl Parser {
             .and_then(|purpose| self.purpose(&purpose));
         let effect = match field.child(table, "effect") {
             None => Some(None),
-            Some(effect) => self.effect(&effect).map(Some),
+            Some(effect) => self.sentence(&effect, "an effect", EFFECT_SAYS).map(Some),
         };
         let check = match field.child(table, "check") {
             None => Some(None),
@@ -459,15 +461,6 @@ impl Parser {
     /// Parses the purpose sentence.
     fn purpose(&mut self, field: &Field<'_>) -> Option<String> {
         self.sentence(field, "a purpose", "what the variable is for")
-    }
-
-    /// Parses the effect sentence, which follows the rules of the purpose.
-    fn effect(&mut self, field: &Field<'_>) -> Option<String> {
-        self.sentence(
-            field,
-            "an effect",
-            "what the application does when the variable is unset",
-        )
     }
 
     /// Parses a sentence field, which is text that is neither blank nor
