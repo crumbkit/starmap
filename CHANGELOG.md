@@ -12,8 +12,7 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   command-line flag replaces a variable's value without clap's `env`
   argument: the flag is an `Option`, and the application writes
   `cli.port.unwrap_or(env.port)`, or `cli.catalogue.or(env.catalogue)` for
-  an `Option` field. The variable is then read only through the struct
-  that derives `Env`. No API is added.
+  an `Option` field. No API is added.
 
 ## [0.3.0](https://github.com/crumbkit/starmap/compare/v0.2.0...v0.3.0) - 2026-11-11
 ### Added

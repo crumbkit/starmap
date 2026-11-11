@@ -41,29 +41,28 @@ port: u16,
 That read happens outside the struct, so the variable's declared type, its
 default and its check do not apply to it. Remove `env` from the argument,
 make the flag an `Option`, and use the struct's field when the flag is not
-given:
+given. The flag takes the field's type, `starmap::Port` here, in place of the
+`u16` above, so clap refuses the values that type refuses:
 
 ```rust
+#[derive(clap::Parser)]
 struct Cli {
     #[arg(long)]
     port: Option<starmap::Port>,
 }
 ```
 
+In the next block, `ShelfEnv` is the struct that derives `Env` and declares
+`SHELF_PORT` as a `Port`, and `cli` is the parsed `Cli`:
+
 ```rust
 let env = ShelfEnv::load()?;
 let port = cli.port.unwrap_or(env.port);
 ```
 
-`unwrap_or` fits a field of a required variable or one with a default, and
-`cli.catalogue.or(env.catalogue)` fits an `Option` field. A switch is
-`cli.debug || env.debug`. starmap adds no function for this, because the
-methods of `Option` cover every shown single variable. A withheld variable
-should not get a flag override, because a secret on a command line shows in
-the process list, and a family should not get one, because it has no single
-flag. The glossary's
-[flag override](docs/glossary.md#flag-override) entry covers a variable
-that is required only when its flag is not given.
+starmap adds no function for this. The glossary's
+[flag override](docs/glossary.md#flag-override) entry gives the `Option`
+method for each kind of variable and the limits of the pattern.
 
 ## Contributing
 

@@ -330,21 +330,21 @@ flag is not given is therefore declared `unset = "optional"`, and the
 application reports the missing value itself, as in
 `cli.port.or(env.port).ok_or("pass --port or set SHELF_PORT")?`.
 
-That choice has a cost. The field becomes an `Option<Port>`, and `starmap
-check`, `starmap run` and `starmap explain` stop reporting the variable as
-missing, so a deployment that sets neither the flag nor the variable fails
-only at the application's own `ok_or`. The variable's purpose text should
-name the flag.
+The field becomes an `Option<Port>`. `Env::load` and `starmap run` then
+accept a missing SHELF_PORT, and `starmap explain` lists it as optional, so a
+deployment that sets neither the flag nor the variable fails only at the
+application's own `ok_or`. The variable's purpose text should name the flag.
 
 The flag's value does not pass through the variable's declared type or its
 field's check. Giving the flag the field's type, such as `starmap::Port`,
-makes the command-line parser refuse the same values where that type
-implements `FromStr`.
+makes clap refuse what that type's `FromStr` refuses. The spec's further
+rules, such as the allowed schemes of a URL or the range of an integer, and
+the field's check do not apply to the flag's value.
 
 A flag override replaces clap's `env` argument, as in
 `#[arg(env = "SHELF_PORT")]`, which reads the variable outside the struct.
-clap's help then no longer names the variable. Name the variable in the
-flag's help text, because clap no longer adds it.
+clap's help then no longer names the variable, so name it in the flag's help
+text.
 
 ## family
 
