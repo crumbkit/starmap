@@ -8,6 +8,24 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A field of a struct that derives `Env` can name the application's own
+  check, as `#[starmap("SHELF_PORT", check = unprivileged)]`. A shown
+  field's check returns `Result<(), String>` and a withheld field's check
+  returns `Result<(), &'static str>`, so its reason cannot hold the secret.
+  `Env::from_vars` runs the check on each value, a default included, after
+  the value's type and unset rule pass, and a refusal is the new finding
+  `Problem::Rejected` among the other findings, written as
+  `SHELF_PORT: the port must be above 1024`. A variable may state its
+  check for a reader in one sentence in the optional `check` field, which
+  starmap never runs. The parser refuses an empty sentence with
+  `starmap::spec::bad_value` and `?` with `starmap::spec::guess`.
+  `Variable::check` returns it, `starmap explain` prints it in the long
+  column `check` and an optional JSON field, and `starmap diff` reports a
+  changed check. `starmap check` notes a check in code without a sentence
+  and a sentence without a check in code, and lists them in the JSON fields
+  `checks_without_sentence` and `sentences_without_check`. The sentence
+  counts toward the digest, and the digest of an existing file does not
+  change.
 - A file can declare named enumerations, each value with a description, as
   `[enumerations.log-level]` with `debug = "Logs every request."`, and a
   variable can name one with `type = { enumeration = "log-level" }`. Any

@@ -80,6 +80,7 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
             const SHAPE: ::starmap::Shape =
                 ::starmap::Shape::Enumeration(<Self as ::starmap::Enumeration>::VALUES);
             const SHOW: ::starmap::Show = ::starmap::Show::Shown;
+            type Reason = ::std::string::String;
 
             fn read(
                 environment: &::starmap::Environment,

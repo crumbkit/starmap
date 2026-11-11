@@ -1,0 +1,17 @@
+# src checks SHELF_PORT in code, and this file states no check sentence for
+# it. This file states a check sentence for SHELF_REGION, and src names no
+# check for it.
+[variables.SHELF_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_REGION]
+purpose = "The region that holds the catalogue."
+check = "The region is one of the regions the catalogue is copied to."
+type = "string"
+unset = "required"
+show = "shown"
+source = "setting"

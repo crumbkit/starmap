@@ -526,6 +526,63 @@ fn adding_an_effect_changes_the_digest() {
 }
 
 #[test]
+fn a_variable_with_a_check_sentence_parses_and_returns_it() {
+    let spec = spec(&with_effect("check = \"The bucket is in eu-west-1.\"\n"));
+
+    let variable = spec.variable(&name("SHELF_X")).unwrap();
+    assert_eq!(variable.check(), Some("The bucket is in eu-west-1."));
+}
+
+#[test]
+fn a_variable_without_a_check_sentence_has_none() {
+    let spec = spec(&with_effect(""));
+
+    assert_eq!(spec.variable(&name("SHELF_X")).unwrap().check(), None);
+}
+
+#[test]
+fn an_empty_check_sentence_its_guess_and_one_that_is_not_text_are_refused() {
+    for (check, kind) in [
+        ("\"\"", SpecProblemKind::BadValue),
+        ("\"  \"", SpecProblemKind::BadValue),
+        ("\"?\"", SpecProblemKind::Guess),
+        ("3", SpecProblemKind::BadValue),
+    ] {
+        let text = with_effect(&format!("check = {check}\n"));
+
+        assert_eq!(kinds(&text), [kind], "{check}");
+    }
+}
+
+#[test]
+fn the_canonical_form_writes_a_check_sentence_after_the_effect() {
+    let fields = "effect = \"Calls are not recorded.\"\ncheck = \"The bucket is in eu-west-1.\"\n";
+    let canonical = spec(&with_effect(fields)).to_toml();
+
+    assert!(
+        canonical.contains(
+            "effect = \"Calls are not recorded.\"\n\
+             check = \"The bucket is in eu-west-1.\"\ntype = "
+        ),
+        "{canonical}"
+    );
+    assert_eq!(spec(&canonical), spec(&with_effect(fields)));
+}
+
+#[test]
+fn a_check_sentence_counts_toward_the_digest_and_a_file_without_one_keeps_its_digest() {
+    let without = spec(&with_effect(""));
+    let with = spec(&with_effect("check = \"The bucket is in eu-west-1.\"\n"));
+
+    assert!(
+        !without.to_toml().contains("check"),
+        "{}",
+        without.to_toml()
+    );
+    assert_ne!(without.digest(), with.digest());
+}
+
+#[test]
 fn a_generated_variable_is_shown_secret_when_it_is_shown() {
     let text = one(
         "purpose = \"Signs cookies.\"\ntype = \"string\"\nunset = \"required\"\n\

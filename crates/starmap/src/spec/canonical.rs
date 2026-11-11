@@ -57,6 +57,9 @@ fn variable(variable: &Variable) -> Table {
     if let Some(effect) = variable.effect() {
         table.insert("effect", value(effect));
     }
+    if let Some(check) = variable.check() {
+        table.insert("check", value(check));
+    }
     table.insert("type", value(value_type(variable.value_type())));
     table.insert("unset", value(unset(variable.unset())));
     table.insert("show", value(word_of(SHOW_WORDS, &variable.show())));

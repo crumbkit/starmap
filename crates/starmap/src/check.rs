@@ -5,6 +5,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Write as _};
 
 use crate::env::Held;
+use crate::field::Rule;
 use crate::{
     Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, Type, TypeError, Unset, Variable,
 };
@@ -128,24 +129,53 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 /// and a mode mismatch last (BASE-44).
 #[must_use]
 pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
+    check_with(spec, bindings, mode, &[])
+}
+
+/// Checks `bindings` as [`check`] does, and runs each of `rules`, the
+/// application's own checks of a struct's fields, on its variable when the
+/// variable holds a checked value, its default included. A rule that
+/// refuses the value adds a [`Problem::Rejected`] finding, which takes its
+/// variable's place in the spec's order. A variable that stays unset, or
+/// whose value its type refuses, is not passed to its rule.
+pub(crate) fn check_with(spec: &Spec, bindings: &Bindings, mode: Mode, rules: &[Rule]) -> Verdict {
     let mode = if spec.mode().is_some() {
         mode
     } else {
         Mode::Local
     };
     let mut entries = Vec::new();
+    // Each finding with the place of its variable in the spec.
     let mut findings = Vec::new();
-    for (name, variable) in spec.variables() {
+    for (place, (name, variable)) in spec.variables().enumerate() {
         let bound = bindings.get(name);
         match hold(variable, bound, mode) {
             Ok(held) => entries.push((name.clone(), held)),
-            Err(problem) => findings.push(Finding {
-                name: name.clone(),
-                value: quote(variable, bound, &problem),
-                problem,
-            }),
+            Err(problem) => findings.push((place, finding(name, variable, bound, problem))),
         }
     }
+    let environment = Environment::new(mode, entries);
+    for rule in rules {
+        let Ok(name) = rule.name.parse::<Name>() else {
+            continue;
+        };
+        let Some((place, variable)) =
+            spec.variables()
+                .enumerate()
+                .find_map(|(place, (declared, variable))| {
+                    (*declared == name).then_some((place, variable))
+                })
+        else {
+            continue;
+        };
+        if let Err(reason) = (rule.run)(&environment, &name) {
+            let problem = Problem::Rejected { reason };
+            let bound = bindings.get(&name);
+            findings.push((place, finding(&name, variable, bound, problem)));
+        }
+    }
+    findings.sort_by_key(|(place, _)| *place);
+    let mut findings: Vec<Finding> = findings.into_iter().map(|(_, finding)| finding).collect();
     let decided = self::mode(spec, bindings);
     if let Some(rule) = spec.mode()
         && decided != mode
@@ -157,7 +187,7 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
         });
     }
     if findings.is_empty() {
-        Verdict::Ready(Environment::new(mode, entries))
+        Verdict::Ready(environment)
     } else {
         Verdict::Refused(Refusals {
             findings,
@@ -183,12 +213,24 @@ fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option
     }
 }
 
+/// Returns the finding of `variable`, called `name`, whose bound value is
+/// `bound`.
+fn finding(name: &Name, variable: &Variable, bound: Option<&Bound>, problem: Problem) -> Finding {
+    Finding {
+        name: name.clone(),
+        value: quote(variable, bound, &problem),
+        problem,
+    }
+}
+
 /// Returns the quote of the value that `problem` refuses, which only an
-/// invalid plain value of a shown variable has. A withheld variable's
+/// invalid or rejected plain value of a shown variable has. A withheld variable's
 /// value, and any value held as a secret, is never quoted.
 fn quote(variable: &Variable, bound: Option<&Bound>, problem: &Problem) -> Option<Quote> {
     match (problem, variable.show(), bound) {
-        (Problem::Invalid(_), Show::Shown, Some(Bound::Plain(raw))) => Some(Quote::new(raw)),
+        (Problem::Invalid(_) | Problem::Rejected { .. }, Show::Shown, Some(Bound::Plain(raw))) => {
+            Some(Quote::new(raw))
+        }
         _ => None,
     }
 }
@@ -254,7 +296,9 @@ impl fmt::Display for Refusals {
     /// such as `SHELF_PORT is required and has no value; SHELF_DEBUG: the
     /// value is not one of the words 1, 0, true, false, yes, no, on and
     /// off`. A missing variable names its mode only when the spec has a
-    /// `[mode]` table. An invalid value of a shown variable is quoted after
+    /// `[mode]` table. A value that a field's own check refuses is written
+    /// with the check's reason, as in `SHELF_PORT: the port must be above
+    /// 1024`. An invalid or refused value of a shown variable is quoted after
     /// the reason, as in `SHELF_PORT: the value is not a port from 1 to
     /// 65535 (the value is "80a")`, as [`Quote`] writes it. The text never
     /// repeats a withheld variable's value or a value held as a secret.
@@ -274,10 +318,11 @@ impl fmt::Display for Refusals {
                 Problem::Missing { .. } => write!(formatter, "{name} is required and has no value"),
                 Problem::Invalid(error) => {
                     write!(formatter, "{name}: {error}")?;
-                    match &finding.value {
-                        Some(quote) => write!(formatter, " (the value is {quote})"),
-                        None => Ok(()),
-                    }
+                    finding.write_quote(formatter)
+                }
+                Problem::Rejected { reason } => {
+                    write!(formatter, "{name}: {reason}")?;
+                    finding.write_quote(formatter)
                 }
                 Problem::ShowMismatch { show } => write!(
                     formatter,
@@ -300,11 +345,22 @@ pub struct Finding {
     pub name: Name,
     /// Why the variable stops the check.
     pub problem: Problem,
-    /// The quote of the refused value. Only a [`Problem::Invalid`] of a
-    /// shown variable whose value is bound as [`Bound::Plain`] has one; a
-    /// withheld variable, a value held as a secret, a missing variable and
-    /// a mode mismatch never do.
+    /// The quote of the refused value. Only a [`Problem::Invalid`] or a
+    /// [`Problem::Rejected`] of a shown variable whose value is bound as
+    /// [`Bound::Plain`] has one; a withheld variable, a value held as a
+    /// secret, a default, a missing variable and a mode mismatch never do.
     pub value: Option<Quote>,
+}
+
+impl Finding {
+    /// Writes ` (the value is "…")` after the reason when the finding
+    /// quotes its value.
+    fn write_quote(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.value {
+            Some(quote) => write!(formatter, " (the value is {quote})"),
+            None => Ok(()),
+        }
+    }
 }
 
 /// A shown value as a refusal quotes it: its first 64 characters, counted
@@ -382,6 +438,14 @@ pub enum Problem {
     ShowMismatch {
         /// The variable's show.
         show: Show,
+    },
+    /// The application's own check of the field that reads the variable,
+    /// which a struct that derives [`Env`](crate::Env) names, refuses the
+    /// value. A withheld field's check gives its reason as fixed text, so
+    /// the reason never holds the secret.
+    Rejected {
+        /// Why the check refuses the value, in the application's words.
+        reason: String,
     },
     /// The variable is the mode variable, and the bindings decide another
     /// mode than the check ran in.

@@ -34,7 +34,7 @@ const ROOT_FIELDS: &[&str] = &["mode", "enumerations", "variables", "tool"];
 const MODE_FIELDS: &[&str] = &["variable", "production"];
 /// The keys of a variable's table.
 const VARIABLE_FIELDS: &[&str] = &[
-    "purpose", "effect", "type", "unset", "show", "source", "bind", "bytes", "tool",
+    "purpose", "effect", "check", "type", "unset", "show", "source", "bind", "bytes", "tool",
 ];
 /// The keys of a type table.
 const TYPE_TABLES: &[&str] = &["path", "integer", "enumeration", "string", "url", "bytes"];
@@ -368,6 +368,10 @@ impl Parser {
             None => Some(None),
             Some(effect) => self.effect(&effect).map(Some),
         };
+        let check = match field.child(table, "check") {
+            None => Some(None),
+            Some(check) => self.check(&check).map(Some),
+        };
         let ty = self
             .required(field, table, "type")
             .and_then(|type_field| Some((self.value_type(&type_field)?, type_field)));
@@ -420,10 +424,11 @@ impl Parser {
         let source = kind
             .as_ref()
             .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes));
-        let variable = match (purpose, effect, ty, unset, show, source, tools) {
+        let variable = match (purpose, effect, check, ty, unset, show, source, tools) {
             (
                 Some(purpose),
                 Some(effect),
+                Some(check),
                 Some((ty, _)),
                 Some(unset),
                 Some((show, _)),
@@ -432,6 +437,7 @@ impl Parser {
             ) => Some(Variable {
                 purpose,
                 effect,
+                check,
                 value_type: ty,
                 unset,
                 show,
@@ -454,6 +460,15 @@ impl Parser {
             field,
             "an effect",
             "what the application does when the variable is unset",
+        )
+    }
+
+    /// Parses the check sentence, which follows the rules of the purpose.
+    fn check(&mut self, field: &Field<'_>) -> Option<String> {
+        self.sentence(
+            field,
+            "a check",
+            "what the application's own code checks of the value",
         )
     }
 

@@ -61,6 +61,9 @@ pub(crate) struct Explained {
     /// The sentence that says what the application does when the variable is unset; empty, and left out of `--json`, when the spec states none.
     #[serde(skip_serializing_if = "Option::is_none")]
     effect: Option<String>,
+    /// The sentence that states the check the application's own code makes of the value, which starmap never runs; empty, and left out of `--json`, when the spec states none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    check: Option<String>,
     /// The name of the named enumeration that the variable's type is; left out of `--json` for any other type.
     #[serde(skip_serializing_if = "Option::is_none")]
     enumeration: Option<String>,
@@ -71,8 +74,9 @@ pub(crate) struct Explained {
 
 impl Row for Explained {
     const COLUMNS: &'static [&'static str] = &["name", "type", "unset", "source", "value"];
-    const LONG_COLUMNS: &'static [&'static str] =
-        &["show", "bind", "cache", "purpose", "effect", "values"];
+    const LONG_COLUMNS: &'static [&'static str] = &[
+        "show", "bind", "cache", "purpose", "effect", "check", "values",
+    ];
     const UNCUT_COLUMNS: &'static [&'static str] = &["name"];
 }
 
@@ -285,6 +289,7 @@ fn row(
         cache: cache_text(variable.source()).map(str::to_owned),
         purpose: variable.purpose().to_owned(),
         effect: variable.effect().map(str::to_owned),
+        check: variable.check().map(str::to_owned),
         enumeration: enumeration_name(variable.value_type()),
         values: Values::of(variable.value_type()),
         name: name.as_str().to_owned(),

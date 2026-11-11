@@ -165,6 +165,10 @@ pub trait FieldType: Sized {
     const SHAPE: Shape;
     /// Whether the type holds a withheld value.
     const SHOW: Show;
+    /// The reason that a field's own check of this type returns when it
+    /// refuses a value: `String` for a shown type, and `&'static str` for a
+    /// withheld one, so that the reason cannot hold the secret's text.
+    type Reason: Into<String>;
 
     /// Reads the checked value of `name`, which is set, from
     /// `environment`.
@@ -182,6 +186,7 @@ macro_rules! shown {
         impl FieldType for $type {
             const SHAPE: Shape = $shape;
             const SHOW: Show = Show::Shown;
+            type Reason = String;
 
             fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
                 let read = |$value: &Value| -> Option<Self> { $read };
@@ -259,6 +264,7 @@ const fn clamp(bound: i128) -> i64 {
 impl FieldType for String {
     const SHAPE: Shape = Shape::String;
     const SHOW: Show = Show::Shown;
+    type Reason = String;
 
     fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
         match environment.value(name) {
@@ -292,6 +298,7 @@ pub fn read_choice<E: Enumeration>(
 impl FieldType for Secret {
     const SHAPE: Shape = Shape::String;
     const SHOW: Show = Show::Withheld;
+    type Reason = &'static str;
 
     fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
         environment
@@ -304,12 +311,60 @@ impl FieldType for Secret {
 impl FieldType for SecretBytes {
     const SHAPE: Shape = Shape::Bytes;
     const SHOW: Show = Show::Withheld;
+    type Reason = &'static str;
 
     fn read(environment: &Environment, name: &Name) -> Result<Self, FieldProblem> {
         environment
             .secret_bytes(name)
             .map(SecretBytes::duplicate)
             .ok_or(FieldProblem::Disagreement)
+    }
+}
+
+/// The application's own check of one field, which the derive writes for
+/// a field attribute such as `#[starmap("SHELF_PORT", check = unprivileged)]`.
+/// [`Env::from_vars`](crate::Env::from_vars) runs it inside the check of the
+/// bindings, on each variable that holds a checked value.
+#[derive(Debug, Clone, Copy)]
+pub struct Rule {
+    /// The name of the variable the field reads.
+    pub(crate) name: &'static str,
+    /// Reads the variable's checked value into the field's type and runs
+    /// the application's check of it.
+    pub(crate) run: fn(&Environment, &Name) -> Result<(), String>,
+}
+
+impl Rule {
+    /// Returns the rule of the field that reads `name`, which `run` checks.
+    #[must_use]
+    pub const fn new(
+        name: &'static str,
+        run: fn(&Environment, &Name) -> Result<(), String>,
+    ) -> Self {
+        Self { name, run }
+    }
+}
+
+/// Reads the checked value of `name` from `environment` as a `T` and
+/// passes it to `check`, the application's check of the field. A variable
+/// that stays unset is not checked. A value that `T` cannot hold is not
+/// checked either, because [`Env::from_environment`](crate::Env::from_environment)
+/// reports it.
+///
+/// # Errors
+///
+/// Returns the reason that `check` gives when it refuses the value.
+pub fn run_check<T: FieldType>(
+    environment: &Environment,
+    name: &Name,
+    check: fn(&T) -> Result<(), T::Reason>,
+) -> Result<(), String> {
+    if !environment.is_set(name) {
+        return Ok(());
+    }
+    match T::read(environment, name) {
+        Ok(value) => check(&value).map_err(Into::into),
+        Err(_) => Ok(()),
     }
 }
 

@@ -6,7 +6,9 @@
 //! looks for one shape: the word `var`, `var_os` or `starmap` followed by
 //! parentheses that hold only a string literal, such as
 //! `std::env::var("SHELF_PORT")` or the derive's field attribute
-//! `#[starmap("SHELF_PORT")]`. It looks inside every bracket, so a read
+//! `#[starmap("SHELF_PORT")]`. After `starmap`, the literal may be followed
+//! by `, check = <path>`, as in `#[starmap("SHELF_PORT", check = unprivileged)]`,
+//! and the scan records that the field names a check. It looks inside every bracket, so a read
 //! inside a macro call counts, and comments are not tokens, so a name in a
 //! comment does not. A word after a `.` is a method of some other type, so
 //! `ctx.var("X")` does not count. A full parse with syn would add nothing
@@ -70,6 +72,29 @@ const READERS: &[&str] = &["var", "var_os", "starmap"];
 /// as `src/serve.rs:22`, in the order of the files and their lines.
 pub(crate) type Reads = BTreeMap<Name, Vec<String>>;
 
+/// What a scan finds: the reads, and each variable whose field attribute
+/// names a check, with the first place that names it.
+#[derive(Debug, Default)]
+pub(crate) struct Scanned {
+    /// Each variable that the source reads.
+    pub(crate) reads: Reads,
+    /// Each variable that a `#[starmap("NAME", check = <path>)]` field
+    /// attribute reads, with its first place.
+    pub(crate) checks: BTreeMap<Name, String>,
+}
+
+/// One read in a file: the variable, the line of the word that reads it,
+/// and whether it is a field attribute that names a check.
+#[derive(Debug)]
+struct Read {
+    /// The variable.
+    name: Name,
+    /// The line of the word that reads it.
+    line: usize,
+    /// Whether a `check = <path>` follows the name.
+    checked: bool,
+}
+
 /// Reads every `.rs` file under each directory of `dirs`, as [`scan`]
 /// does, and returns the reads of all of them. A variable that several
 /// directories read lists the places of each directory in turn.
@@ -77,14 +102,18 @@ pub(crate) type Reads = BTreeMap<Name, Vec<String>>;
 /// # Errors
 ///
 /// Returns [`SourceFailure`] as [`scan`] does for any of the directories.
-pub(crate) fn scan_all(dirs: &[PathBuf]) -> Result<Reads, SourceFailure> {
-    let mut reads = Reads::new();
+pub(crate) fn scan_all(dirs: &[PathBuf]) -> Result<Scanned, SourceFailure> {
+    let mut all = Scanned::default();
     for dir in dirs {
-        for (name, places) in scan(dir)? {
-            reads.entry(name).or_default().extend(places);
+        let scanned = scan(dir)?;
+        for (name, places) in scanned.reads {
+            all.reads.entry(name).or_default().extend(places);
+        }
+        for (name, at) in scanned.checks {
+            all.checks.entry(name).or_insert(at);
         }
     }
-    Ok(reads)
+    Ok(all)
 }
 
 /// The source directories of a scan, which print as `src`, as `src and
@@ -125,13 +154,13 @@ impl fmt::Display for Dirs<'_> {
 ///
 /// Returns [`SourceFailure`] for a directory or file that cannot be read,
 /// a file over 1 MiB, and a file that is not UTF-8 text or not Rust tokens.
-pub(crate) fn scan(src: &Path) -> Result<Reads, SourceFailure> {
+pub(crate) fn scan(src: &Path) -> Result<Scanned, SourceFailure> {
     let paths = match files::rust_files(src) {
         Ok(paths) => paths,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Reads::new()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Scanned::default()),
         Err(error) => return Err(SourceFailure::new(src, format!("cannot be read: {error}"))),
     };
-    let mut reads = Reads::new();
+    let mut scanned = Scanned::default();
     for path in paths.into_iter().filter(|path| !is_test_file(path)) {
         let bytes = files::read_capped(&path, MAX_SOURCE_BYTES + 1)
             .map_err(|error| SourceFailure::new(&path, format!("cannot be read: {error}")))?;
@@ -144,22 +173,32 @@ pub(crate) fn scan(src: &Path) -> Result<Reads, SourceFailure> {
             let line = error.span().start().line;
             SourceFailure::new(&path, format!("is not valid Rust at line {line}"))
         })?;
-        for (name, line) in lines {
+        for Read {
+            name,
+            line,
+            checked,
+        } in lines
+        {
             let place = format!("{}:{line}", path.display());
-            reads.entry(name).or_default().push(place);
+            if checked {
+                scanned
+                    .checks
+                    .entry(name.clone())
+                    .or_insert_with(|| place.clone());
+            }
+            scanned.reads.entry(name).or_default().push(place);
         }
     }
-    Ok(reads)
+    Ok(scanned)
 }
 
-/// Returns each read in the Rust source `text` as its name and the line of
-/// the word that reads it, in the order of the text.
+/// Returns each read in the Rust source `text`, in the order of the text.
 ///
 /// # Errors
 ///
 /// Returns proc-macro2's error for text that is not Rust tokens, such as an
 /// unclosed bracket or string.
-fn lines_of_reads(text: &str) -> Result<Vec<(Name, usize)>, proc_macro2::LexError> {
+fn lines_of_reads(text: &str) -> Result<Vec<Read>, proc_macro2::LexError> {
     let mut reads = Vec::new();
     collect(TokenStream::from_str(text)?, &mut reads);
     Ok(reads)
@@ -176,7 +215,7 @@ fn is_test_file(path: &Path) -> bool {
 /// Adds each read in `tokens`, and in every bracket inside them, to
 /// `reads`. It skips the item that follows `#[cfg(test)]`, and the rest of
 /// the stream after an inner `#![cfg(test)]`.
-fn collect(tokens: TokenStream, reads: &mut Vec<(Name, usize)>) {
+fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
     let mut before_previous: Option<TokenTree> = None;
     let mut previous: Option<TokenTree> = None;
     let mut reader = None;
@@ -201,11 +240,15 @@ fn collect(tokens: TokenStream, reads: &mut Vec<(Name, usize)>) {
             }
         }
         if let TokenTree::Group(group) = &token {
-            if let Some(line) = reader
+            if let Some((line, attribute)) = reader
                 && group.delimiter() == Delimiter::Parenthesis
-                && let Some(name) = literal_name(group.stream())
+                && let Some((name, checked)) = literal_name(group.stream(), attribute)
             {
-                reads.push((name, line));
+                reads.push(Read {
+                    name,
+                    line,
+                    checked,
+                });
             }
             collect(group.stream(), reads);
         }
@@ -214,7 +257,7 @@ fn collect(tokens: TokenStream, reads: &mut Vec<(Name, usize)>) {
                 if READERS.iter().any(|reader| word == reader)
                     && !is_punct(previous.as_ref(), '.') =>
             {
-                Some(word.span().start().line)
+                Some((word.span().start().line, word == "starmap"))
             }
             _ => None,
         };
@@ -246,16 +289,24 @@ fn ends_item(token: &TokenTree) -> bool {
 
 /// Returns the variable name that `tokens` hold when they are one string
 /// literal, with or without a trailing comma, whose text is a valid name.
-fn literal_name(tokens: TokenStream) -> Option<Name> {
+/// When `attribute` is set, the tokens are a field attribute's, and the
+/// literal may be followed by `, check = <path>`; the returned flag says
+/// whether it is.
+fn literal_name(tokens: TokenStream, attribute: bool) -> Option<(Name, bool)> {
     let mut tokens = tokens.into_iter();
     let Some(TokenTree::Literal(literal)) = tokens.next() else {
         return None;
     };
-    match tokens.next() {
-        None => {}
-        Some(TokenTree::Punct(comma)) if comma.as_char() == ',' && tokens.next().is_none() => {}
-        Some(_) => return None,
-    }
+    let checked = match (tokens.next(), tokens.next()) {
+        (None, _) => false,
+        (Some(TokenTree::Punct(comma)), None) if comma.as_char() == ',' => false,
+        (Some(TokenTree::Punct(comma)), Some(TokenTree::Ident(key)))
+            if attribute && comma.as_char() == ',' && key == "check" =>
+        {
+            true
+        }
+        _ => return None,
+    };
     // A name holds no quote and no backslash, so its literal is the name
     // between quotes, or between a raw string's `r`, hashes and quotes.
     let written = literal.to_string();
@@ -264,7 +315,7 @@ fn literal_name(tokens: TokenStream) -> Option<Name> {
         .unwrap_or(&written)
         .trim_matches('#');
     let name = text.strip_prefix('"')?.strip_suffix('"')?;
-    Name::from_str(name).ok()
+    Name::from_str(name).ok().map(|name| (name, checked))
 }
 
 /// A source file or directory that the scan cannot read.

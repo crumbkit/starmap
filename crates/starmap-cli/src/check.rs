@@ -37,6 +37,10 @@ pub(crate) struct Checked {
     read: u64,
     /// The variables that src reads and the spec does not declare, each of which is also a failure.
     undeclared: Vec<String>,
+    /// The declared variables whose field in src names a check and that have no check sentence, each of which is also a note.
+    checks_without_sentence: Vec<String>,
+    /// The declared variables that have a check sentence and whose field in src names no check, each of which is also a note; empty when no source directory is scanned.
+    sentences_without_check: Vec<String>,
     /// The source directories that check scanned, as a sentence names
     /// them.
     #[serde(skip)]
@@ -134,7 +138,9 @@ impl std::error::Error for Undeclared {}
 
 /// Reads and parses the spec that `--spec` names, through its pointer when
 /// it holds one, scans the source directories that go with it, and decides the mode from `vars`, the process environment.
-/// The note names the reason for the mode, and each variable that src
+/// The note names the reason for the mode, then each field in src that
+/// names a check for a variable without a check sentence, then each check
+/// sentence whose variable no field in src checks. Each variable that src
 /// reads and the spec does not declare is a failure.
 ///
 /// # Errors
@@ -147,9 +153,35 @@ pub(crate) fn check(
 ) -> Result<Prose<Checked, Undeclared>, crumbkit::Error> {
     let spec::Opened { spec, located } = spec::open(&args.file.spec)?;
     let file = located.file.display().to_string();
-    let reads = scan::scan_all(&located.src)?;
+    let scan::Scanned { reads, checks } = scan::scan_all(&located.src)?;
     let bindings = starmap::capture(&spec, vars);
     let (mode, note) = mode::decide(&spec, &bindings);
+    let src = Dirs(&located.src);
+    let mut notes = vec![note];
+    let mut checks_without_sentence = Vec::new();
+    for (name, at) in &checks {
+        if spec
+            .variable(name)
+            .is_some_and(|variable| variable.check().is_none())
+        {
+            notes.push(format!(
+                "{at} checks {name} in code, and {file} states no check sentence for it."
+            ));
+            checks_without_sentence.push(name.to_string());
+        }
+    }
+    let mut sentences_without_check = Vec::new();
+    if !src.is_empty() {
+        for (name, _) in spec
+            .variables()
+            .filter(|(name, variable)| variable.check().is_some() && !checks.contains_key(*name))
+        {
+            notes.push(format!(
+                "{file} states a check sentence for {name}, and no field in {src} names a check for it."
+            ));
+            sentences_without_check.push(name.to_string());
+        }
+    }
     let mut read = 0;
     let mut undeclared = Vec::new();
     for (name, places) in reads {
@@ -169,11 +201,13 @@ pub(crate) fn check(
         variables: u64::try_from(spec.variables().count()).unwrap_or(u64::MAX),
         read,
         undeclared: undeclared.iter().map(|u| u.name.to_string()).collect(),
+        checks_without_sentence,
+        sentences_without_check,
         src: Dirs(&located.src).to_string(),
         src_verb: Dirs(&located.src).verb("reads", "read"),
         scanned_nothing: Dirs(&located.src).is_empty(),
         spec: file,
         mode: mode.into(),
     };
-    Ok(Prose::with_failures(checked, undeclared).note(note))
+    Ok(Prose::with_failures(checked, undeclared).note(notes.join("\n")))
 }
