@@ -1066,7 +1066,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "starmap"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "proptest",
@@ -1084,7 +1084,7 @@ dependencies = [
 
 [[package]]
 name = "starmap-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "crumbkit",
@@ -1108,7 +1108,7 @@ dependencies = [
 
 [[package]]
 name = "starmap-derive"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1118,7 +1118,7 @@ dependencies = [
 
 [[package]]
 name = "starmap-resolve"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "core-foundation",
  "getrandom",
@@ -1133,7 +1133,7 @@ dependencies = [
 
 [[package]]
 name = "starmap-test"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "snapbox",
  "starmap",
@@ -1513,7 +1513,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
 ]
