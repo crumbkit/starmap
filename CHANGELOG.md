@@ -8,6 +8,17 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `starmap check` reads a name that `format!` builds inside `var(...)` or
+  `var_os(...)`, with or without `&` and a path such as `std::format!`. A
+  literal that is a name, an underscore and one trailing placeholder, such
+  as `format!("SHELF_DB_URL_{region}")`, reads a member of the family with
+  that prefix, and the new `starmap::family::undeclared` fails check when
+  the file declares no such family. A literal without a placeholder reads
+  the name it holds. check passes on any other `format!` name, such as one
+  that starts with a placeholder or has two, adds a sentence that names
+  each such place, and lists them in the new `unresolved` field of its
+  JSON. A name built with `concat!`, `+` or `push_str`, or held in a
+  constant, is still not counted.
 - A file can declare a family of variables whose names are chosen at run
   time, as `[families.SHELF_DB_URL]` with the fields of a variable. A
   member is any variable named by the prefix, an underscore and a key, such

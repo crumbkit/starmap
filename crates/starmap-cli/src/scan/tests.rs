@@ -1,13 +1,31 @@
 use starmap::Name;
 
-use super::{lines_of_reads, scan};
+use super::{Target, lines_of_reads, pattern, scan};
 
-/// Returns each read in `text` as its name and line.
+/// Returns each read of a literal name in `text` as its name and line.
 fn reads(text: &str) -> Vec<(String, usize)> {
     lines_of_reads(text)
         .unwrap()
         .into_iter()
-        .map(|read| (read.name.as_str().to_owned(), read.line))
+        .filter_map(|read| match read.target {
+            Target::Variable(name) => Some((name.as_str().to_owned(), read.line)),
+            Target::Family(_) | Target::Unresolved => None,
+        })
+        .collect()
+}
+
+/// Returns each read in `text` whose name is built with `format!`, as the
+/// family prefix it reads, or `?` when the scan cannot resolve it, and its
+/// line.
+fn built(text: &str) -> Vec<(String, usize)> {
+    lines_of_reads(text)
+        .unwrap()
+        .into_iter()
+        .filter_map(|read| match read.target {
+            Target::Variable(_) => None,
+            Target::Family(prefix) => Some((prefix.as_str().to_owned(), read.line)),
+            Target::Unresolved => Some(("?".to_owned(), read.line)),
+        })
         .collect()
 }
 
@@ -17,7 +35,10 @@ fn checked(text: &str) -> Vec<String> {
         .unwrap()
         .into_iter()
         .filter(|read| read.checked)
-        .map(|read| read.name.as_str().to_owned())
+        .filter_map(|read| match read.target {
+            Target::Variable(name) => Some(name.as_str().to_owned()),
+            Target::Family(_) | Target::Unresolved => None,
+        })
         .collect()
 }
 
@@ -169,6 +190,87 @@ fn a_test_only_field_is_skipped_and_the_next_field_is_read() {
 fn a_test_only_match_arm_is_skipped_and_the_next_arm_is_read() {
     let text = "fn f() {\n    match x {\n        #[cfg(test)]\n        A => env::var(\"A\"),\n        B => env::var(\"B\"),\n    }\n}\n";
     assert_eq!(reads(text), [read("B", 5)]);
+}
+
+#[test]
+fn a_format_read_with_a_trailing_placeholder_reads_the_family_of_its_prefix() {
+    let text = "fn f(region: &str) {\n    env::var(format!(\"SHELF_DB_URL_{}\", region));\n    env::var_os(format!(\"SHELF_TOKEN_{region}\"));\n}\n";
+    assert_eq!(
+        built(text),
+        [read("SHELF_DB_URL", 2), read("SHELF_TOKEN", 3)]
+    );
+    assert_eq!(reads(text), []);
+}
+
+#[test]
+fn a_format_read_behind_a_reference_or_a_path_reads_the_family() {
+    let text = "fn f(r: &str) {\n    env::var(&format!(\"SHELF_DB_URL_{r}\"));\n    env::var(std::format!(\"SHELF_DB_URL_{r}\"),);\n    env::var(&::std::format!(\"SHELF_DB_URL_{r}\"));\n}\n";
+    assert_eq!(
+        built(text),
+        [
+            read("SHELF_DB_URL", 2),
+            read("SHELF_DB_URL", 3),
+            read("SHELF_DB_URL", 4)
+        ]
+    );
+}
+
+#[test]
+fn a_format_read_with_a_leading_a_middle_or_a_second_placeholder_is_unresolved() {
+    let text = "fn f(a: &str, b: &str) {\n    env::var(format!(\"{a}_TOKEN\"));\n    env::var(format!(\"SHELF_{a}_TOKEN\"));\n    env::var(format!(\"SHELF_{a}_{b}\"));\n    env::var(format!(\"SHELF_{a}{b}\"));\n}\n";
+    assert_eq!(
+        built(text),
+        [read("?", 2), read("?", 3), read("?", 4), read("?", 5)]
+    );
+}
+
+#[test]
+fn a_format_read_without_a_placeholder_reads_the_name_it_holds() {
+    let text = "fn f() { env::var(format!(\"SHELF_PORT\")); env::var(format!(\"shelf\")); }";
+    assert_eq!(reads(text), [read("SHELF_PORT", 1)]);
+    assert_eq!(built(text), [read("?", 1)]);
+}
+
+#[test]
+fn doubled_braces_in_a_format_literal_are_text_and_not_placeholders() {
+    assert_eq!(
+        pattern("SHELF_{{A}}_{}"),
+        Some(("SHELF_{A}_".to_owned(), vec![10]))
+    );
+    assert_eq!(pattern("SHELF_{{}}"), Some(("SHELF_{}".to_owned(), vec![])));
+    assert_eq!(pattern("SHELF_}"), None);
+    assert_eq!(pattern("SHELF_{"), None);
+    let text = "fn f(r: &str) { env::var(format!(\"SHELF_{{}}_{r}\")); }";
+    assert_eq!(built(text), [read("?", 1)]);
+}
+
+#[test]
+fn a_format_read_in_test_code_is_skipped_as_other_reads_are() {
+    let text = "#[cfg(test)]\nfn t(r: &str) { env::var(format!(\"SHELF_DB_URL_{r}\")); }\nfn f(r: &str) { env::var(format!(\"{r}_TOKEN\")); }\n";
+    assert_eq!(built(text), [read("?", 3)]);
+}
+
+#[test]
+fn a_format_call_that_is_not_a_read_is_not_counted() {
+    let text = "fn f(r: &str) {\n    println!(\"{}\", format!(\"SHELF_{r}\"));\n    env::var(format!(\"A_{}\", r).as_str());\n    env::var(format!(NAME));\n    #[starmap(format!(\"A_{r}\"))]\n    x: u8,\n}\n";
+    assert_eq!(built(text), []);
+}
+
+#[test]
+fn a_scan_lists_family_reads_by_prefix_and_unresolved_reads_by_place() {
+    let dir = tempfile::tempdir().unwrap();
+    let text = "fn f(r: &str) {\n    env::var(format!(\"SHELF_DB_URL_{r}\"));\n    env::var(format!(\"{r}_TOKEN\"));\n}\n";
+    std::fs::write(dir.path().join("regions.rs"), text).unwrap();
+    let scanned = scan(dir.path()).unwrap();
+    let file = dir.path().join("regions.rs").display().to_string();
+    let families: Vec<(&str, Vec<String>)> = scanned
+        .families
+        .iter()
+        .map(|(prefix, places)| (prefix.as_str(), places.clone()))
+        .collect();
+    assert_eq!(families, [("SHELF_DB_URL", vec![format!("{file}:2")])]);
+    assert_eq!(scanned.unresolved, [format!("{file}:3")]);
+    assert!(scanned.reads.is_empty());
 }
 
 #[test]

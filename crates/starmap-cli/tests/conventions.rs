@@ -308,6 +308,10 @@ const STARTS: &[Failing<'static>] = &[
         &codes::SPEC_BAD_FAMILY,
         &["check", "--spec", "bad_family.toml"],
     ),
+    source(
+        &codes::FAMILY_UNDECLARED,
+        &["check", "--spec", "undeclared-family/starmap.toml"],
+    ),
 ];
 
 /// A revision that starts with `-`, which diff refuses before git runs, so
@@ -394,6 +398,7 @@ const PAIRS: &[Twin<'static>] = &[
     Twin::new(STARTS[33], VALID),
     Twin::new(STARTS[34], VALID),
     Twin::new(STARTS[35], VALID),
+    Twin::new(STARTS[36], VALID_SOURCE),
 ];
 
 /// The settings of the twin check.

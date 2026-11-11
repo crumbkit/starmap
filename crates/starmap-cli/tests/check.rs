@@ -56,6 +56,47 @@ fn a_read_of_a_member_is_declared_and_a_read_of_an_unlisted_key_is_undeclared() 
 }
 
 #[test]
+fn a_name_built_from_an_undeclared_prefix_fails_and_an_unresolved_name_is_a_second_sentence() {
+    starmap(&["check", "--spec", "undeclared-family/starmap.toml"])
+        .code(1)
+        .stdout_eq(
+            "undeclared-family/starmap.toml declares 1 variable, and undeclared-family/src reads it. \
+             check cannot resolve the name read at undeclared-family/src/regions.rs:10.\n",
+        )
+        .stderr_eq(file!["golden/check-undeclared-family.stderr"]);
+}
+
+#[test]
+fn the_json_lists_each_unresolved_place_and_fails_on_the_undeclared_family() {
+    let run = starmap(&[
+        "check",
+        "--spec",
+        "undeclared-family/starmap.toml",
+        "--json",
+    ])
+    .code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(
+        document["data"]["unresolved"],
+        json!(["undeclared-family/src/regions.rs:10"])
+    );
+    assert_eq!(document["data"]["undeclared"], json!([]));
+    assert_eq!(
+        document["failures"][0]["code"],
+        "starmap::family::undeclared"
+    );
+    assert_eq!(
+        document["failures"][0]["fields"]["prefix"],
+        "SHELF_CACHE_URL"
+    );
+    assert_eq!(
+        document["failures"][0]["fields"]["at"],
+        "undeclared-family/src/regions.rs:9"
+    );
+    assert_eq!(document["failures"].as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn a_source_file_that_is_not_rust_fails_and_names_the_file() {
     starmap(&["check", "--spec", "unreadable/starmap.toml"])
         .code(1)
