@@ -21,6 +21,7 @@ use crate::{
     SecretBind, SecretRef, Type, Value,
 };
 
+mod groups;
 mod lists;
 mod pointer;
 mod tool;
@@ -28,7 +29,7 @@ mod tool;
 pub(super) use pointer::parse_pointer;
 
 /// The keys of the file's top-level table.
-const ROOT_FIELDS: &[&str] = &["mode", "variables", "tool"];
+const ROOT_FIELDS: &[&str] = &["mode", "groups", "variables", "tool"];
 /// The keys of the `[mode]` table.
 const MODE_FIELDS: &[&str] = &["variable", "production"];
 /// The keys of a variable's table.
@@ -142,6 +143,7 @@ impl Parser {
     fn document(&mut self, text: &str) -> Spec {
         let mut spec = Spec {
             mode: None,
+            groups: Vec::new(),
             variables: Vec::new(),
             tools: Vec::new(),
         };
@@ -176,6 +178,9 @@ impl Parser {
         }
         if let Some(field) = root_field(root, "mode") {
             spec.mode = self.mode(&field, &declared, &spec.variables);
+        }
+        if let Some(field) = root_field(root, "groups") {
+            spec.groups = self.groups(&field, &declared, &spec.variables);
         }
         if let Some(field) = root_field(root, "tool") {
             spec.tools = self.tools(&field).unwrap_or_default();

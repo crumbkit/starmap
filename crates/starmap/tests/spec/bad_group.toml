@@ -1,0 +1,17 @@
+# A group lists a variable that has a default, which always counts as set.
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_REGION"]
+
+[variables.SHELF_MIRROR_ACCOUNT]
+purpose = "The account shelf uses at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_REGION]
+purpose = "The region of the catalogue mirror."
+type = "string"
+unset = { default = "eu" }
+show = "shown"
+source = "setting"

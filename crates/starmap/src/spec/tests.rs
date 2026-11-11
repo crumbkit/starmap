@@ -26,7 +26,7 @@ const CANONICAL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/example/cano
 
 /// Every problem kind. A kind added to `SpecProblemKind` belongs here too,
 /// with a fixture or a test of its own that writes its golden.
-const KINDS: [SpecProblemKind; 21] = [
+const KINDS: [SpecProblemKind; 23] = [
     SpecProblemKind::TooLarge,
     SpecProblemKind::Syntax,
     SpecProblemKind::UnknownField,
@@ -48,6 +48,8 @@ const KINDS: [SpecProblemKind; 21] = [
     SpecProblemKind::ModeSource,
     SpecProblemKind::PointerDeclares,
     SpecProblemKind::PointerChain,
+    SpecProblemKind::GroupUndeclared,
+    SpecProblemKind::BadGroup,
 ];
 
 /// Returns the path of each `.toml` fixture under `tests/spec`, in name
@@ -1092,7 +1094,7 @@ fn a_key_outside_tool_is_still_refused_and_the_message_lists_tool() {
     assert_eq!(error.problems()[0].kind(), SpecProblemKind::UnknownField);
     assert_eq!(
         error.to_string(),
-        "the file has the field `colour`, and it takes mode, variables and tool"
+        "the file has the field `colour`, and it takes mode, groups, variables and tool"
     );
 }
 

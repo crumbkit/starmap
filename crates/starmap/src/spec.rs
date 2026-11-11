@@ -2,6 +2,7 @@
 //! form and digest, and the problems that stop a file from parsing.
 
 mod canonical;
+mod group;
 mod parse;
 
 use std::error::Error;
@@ -12,6 +13,8 @@ use std::path::{Path, PathBuf};
 use crate::{
     ByteCount, Encoding, Mode, ModeRule, Name, PathTemplate, ProvidedRef, SecretBind, Type, Value,
 };
+
+pub use group::{Group, GroupName, GroupNameError};
 
 #[cfg(test)]
 mod tests;
@@ -40,6 +43,8 @@ mod tests;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spec {
     mode: Option<ModeRule>,
+    /// The file's groups of variables, in name order.
+    groups: Vec<Group>,
     variables: Vec<(Name, Variable)>,
     /// The file's top-level tool tables, in name order.
     tools: Vec<ToolTable>,
@@ -68,6 +73,27 @@ impl Spec {
     #[must_use]
     pub fn mode(&self) -> Option<&ModeRule> {
         self.mode.as_ref()
+    }
+
+    /// Returns each group of variables the spec declares, in name order.
+    pub fn groups(&self) -> impl Iterator<Item = &Group> {
+        self.groups.iter()
+    }
+
+    /// Returns the group called `name`, if the spec declares it in a
+    /// `[groups.<name>]` table.
+    #[must_use]
+    pub fn group(&self, name: &GroupName) -> Option<&Group> {
+        self.groups.iter().find(|group| group.name() == name)
+    }
+
+    /// Returns the group that lists the variable `variable`, if one does. A
+    /// variable belongs to at most one group.
+    #[must_use]
+    pub fn group_of(&self, variable: &Name) -> Option<&Group> {
+        self.groups
+            .iter()
+            .find(|group| group.variables().contains(variable))
     }
 
     /// Returns the variable called `name`, if the spec declares it.
@@ -109,8 +135,9 @@ impl Spec {
         Digest::of(self.to_toml().as_bytes())
     }
 
-    /// Returns the spec's canonical form: TOML that lists the mode table and
-    /// then each variable in order, with each field in a fixed order, each
+    /// Returns the spec's canonical form: TOML that lists the mode table,
+    /// then each group in name order with its variables in the file's order,
+    /// and then each variable in order, with each field in a fixed order, each
     /// value in one spelling, and no comments. It leaves out every tool
     /// table, so parsing it returns a spec equal to this one without its
     /// tool tables.
@@ -576,11 +603,17 @@ pub enum SpecProblemKind {
     /// The mode variable is not a setting or inherited variable.
     ModeSource,
     /// A file has `spec`, which makes it a [`Pointer`], and declares
-    /// variables or a mode too.
+    /// variables, groups or a mode too.
     PointerDeclares,
     /// A [`Pointer`] is read where a file that declares variables belongs,
     /// such as the file that another pointer names.
     PointerChain,
+    /// A group lists a variable that the file does not declare.
+    GroupUndeclared,
+    /// A group lists fewer than two variables or repeats one, or lists a
+    /// variable that another group lists, that has a default or that is
+    /// generated.
+    BadGroup,
 }
 
 impl SpecProblemKind {
@@ -609,6 +642,8 @@ impl SpecProblemKind {
             Self::ModeSource => "starmap::spec::mode_source",
             Self::PointerDeclares => "starmap::spec::pointer_declares",
             Self::PointerChain => "starmap::spec::pointer_chain",
+            Self::GroupUndeclared => "starmap::spec::group_undeclared",
+            Self::BadGroup => "starmap::spec::bad_group",
         }
     }
 }

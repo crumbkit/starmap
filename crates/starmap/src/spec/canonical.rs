@@ -9,10 +9,10 @@ use super::{
     ENCODING_WORDS, SHOW_WORDS, SOURCE_WORDS, Source, SourceKind, Spec, TYPE_WORDS, UNSET_WORDS,
     Unset, UnsetRule, Variable, word_of,
 };
-use crate::{ByteLength, Cache, Mode, SecretBind, SecretRef, Type, Value};
+use crate::{ByteLength, Cache, Mode, Name, SecretBind, SecretRef, Type, Value};
 
-/// Writes `spec` as TOML: the `[mode]` table, then one table per variable
-/// in the spec's order, each with its fields in the order of the field
+/// Writes `spec` as TOML: the `[mode]` table, then one table per group in
+/// name order, then one table per variable in the spec's order, each with its fields in the order of the field
 /// rules.
 pub(super) fn to_toml(spec: &Spec) -> String {
     let mut document = DocumentMut::new();
@@ -22,6 +22,17 @@ pub(super) fn to_toml(spec: &Spec) -> String {
         let production: Array = mode.production().iter().map(|c| c.as_str()).collect();
         table.insert("production", value(production));
         document.insert("mode", Item::Table(table));
+    }
+    let mut groups = Table::new();
+    groups.set_implicit(true);
+    for group in spec.groups() {
+        let mut table = Table::new();
+        let members: Array = group.variables().iter().map(Name::as_str).collect();
+        table.insert("variables", value(members));
+        groups.insert(group.name().as_str(), Item::Table(table));
+    }
+    if !groups.is_empty() {
+        document.insert("groups", Item::Table(groups));
     }
     let mut variables = Table::new();
     variables.set_implicit(true);
