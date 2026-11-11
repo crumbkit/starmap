@@ -5,6 +5,45 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- A variable can have a bytes type, such as
+  `type = { bytes = { encoding = "base64", length = 32 } }`, which declares
+  the encoding of its text (`hex`, `base64` or `base64url`) and its length
+  after decoding, exact with `length` or smallest with `min-length`, from 1
+  to 1024 bytes. `hex` takes either case, `base64` needs its padding,
+  `base64url` takes all of its padding or none, and no encoding takes
+  whitespace. `starmap run` refuses a value that does not decode or has the
+  wrong size, naming the variable, the encoding and the length and never the
+  value or its size, and this covers a withheld value too. `starmap explain`
+  marks such a value invalid and never prints a withheld one; `starmap check`
+  reads only the spec and the source, so it does not see values. A withheld
+  variable may have a bytes type, and a shown one's default must decode and
+  fit. A length outside 1 to 1024 fails with `starmap::spec::bad_bytes`, and
+  so does a generated variable with a bytes type. `starmap explain` prints
+  the type as `32 bytes as base64` or `at least 16 bytes as hex`, and
+  `starmap diff` names it `bytes` and reports a changed encoding or length as
+  a change of `type`. The digest of an existing file does not change.
+- `#[derive(Env)]` reads a shown bytes variable into `Vec<u8>` and a
+  withheld one into `starmap::SecretBytes`, which holds the decoded bytes,
+  prints only dots in `Debug` and zeroes them on drop.
+  `Environment::secret_bytes` returns them. starmap-test matches the new
+  `Shape::Bytes` against a bytes type.
+- `Type::Bytes`, `starmap::ByteRule`, `starmap::ByteLength`,
+  `starmap::Encoding`, `Value::Bytes`, `TypeError::NotEncoded` and
+  `TypeError::WrongLength`. `Type::check_secret` checks a withheld bytes
+  value too.
+
+### Changed
+
+- **Breaking:** `starmap::SecretBytes`, the number of random bytes in a
+  generated value, is renamed `starmap::ByteCount`, and the name
+  `SecretBytes` now holds the decoded bytes of a withheld bytes value.
+  `ByteCount::new` accepts 1 to 1024 bytes, and `ByteCount::generated`
+  accepts the 16 to 1024 bytes of a generated value, as `SecretBytes::new`
+  did.
+
 ## [0.2.0](https://github.com/crumbkit/starmap/compare/v0.1.0...v0.2.0) - 2026-11-11
 ### Added
 

@@ -16,7 +16,8 @@
 //! mode. Its [`Verdict`] is an [`Environment`] of checked values, which
 //! [`Environment::apply`] sets on a child process, or [`Refusals`] that
 //! name each missing or invalid variable. A withheld value is held as a
-//! [`Secret`], whose `Debug` prints only dots.
+//! [`Secret`], and the bytes a withheld bytes value decodes to as
+//! [`SecretBytes`], whose `Debug` impls print only dots.
 //!
 //! An application reads its environment into a struct that derives
 //! [`Env`], whose fields each read one variable, and an enum that derives
@@ -51,24 +52,25 @@ mod spec;
 mod value_type;
 
 pub use bind::{
-    Bindings, Bound, BytesError, Cache, NoPlace, OnePasswordRef, OnePasswordRefError, PathTemplate,
-    PathTemplateError, Placeholder, ProvidedRef, ProviderKind, ProviderKindError, QualifierError,
-    SecretBind, SecretBytes, SecretRef,
+    Bindings, Bound, ByteCount, BytesError, Cache, NoPlace, OnePasswordRef, OnePasswordRefError,
+    PathTemplate, PathTemplateError, Placeholder, ProvidedRef, ProviderKind, ProviderKindError,
+    QualifierError, SecretBind, SecretRef,
 };
 pub use check::{Finding, Problem, Refusals, Verdict, capture, check, mode};
 pub use env::Environment;
 pub use field::{Field, FieldError, FieldProblem, Presence, Shape};
 pub use mode::{Mode, ModeRule};
 pub use name::{Name, NameError};
-pub use secret::Secret;
+pub use secret::{Secret, SecretBytes};
 pub use spec::{
     Digest, Pointer, Show, Source, Spec, SpecError, SpecProblem, SpecProblemKind, ToolTable, Unset,
     UnsetRule, Variable,
 };
 pub use url;
 pub use value_type::{
-    Choice, ChoiceError, Choices, ChoicesError, IntegerRange, Pattern, PatternError, Port,
-    PortError, RangeError, Scheme, SchemeError, Schemes, SchemesError, Type, TypeError, Value,
+    ByteLength, ByteRule, Choice, ChoiceError, Choices, ChoicesError, Encoding, IntegerRange,
+    Pattern, PatternError, Port, PortError, RangeError, Scheme, SchemeError, Schemes, SchemesError,
+    Type, TypeError, Value,
 };
 
 /// Derives [`Enumeration`] for an enum of unit variants. A variant reads as
@@ -85,8 +87,10 @@ pub use starmap_derive::Enumeration;
 /// declares variables, or names another pointer, fails to compile. Each field names its variable with
 /// `#[starmap("NAME")]`, and its type is one of `PathBuf`,
 /// [`Port`], `url::Url`, `std::net::SocketAddr`, `bool`, an integer type
-/// of at most 64 bits, `String`, `OsString`, [`Secret`] or a type
-/// that derives [`Enumeration`], each inside an `Option` or not. Any
+/// of at most 64 bits, `String`, `OsString`, `Vec<u8>`, [`Secret`],
+/// [`SecretBytes`] or a type that derives [`Enumeration`], each inside an
+/// `Option` or not. A shown bytes variable reads into `Vec<u8>` and a
+/// withheld one into [`SecretBytes`], each holding the decoded bytes. Any
 /// other type fails to compile.
 #[cfg(feature = "derive")]
 pub use starmap_derive::Env;

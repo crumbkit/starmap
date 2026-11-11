@@ -55,6 +55,11 @@ secrecy = "0.10.3"
 # and `String`.
 zeroize = "1.9.1"
 
+# base64 reads and writes the base64 and base64url encodings of a bytes
+# variable's value in starmap, and writes a generated value in
+# starmap-resolve. Its `alloc` feature encodes into a `String`.
+base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
+
 # proptest checks the checking constructors and the types against generated
 # inputs, and the lanes decision sets its case counts. Only tests use it.
 proptest = { version = "1.12.0", default-features = false }

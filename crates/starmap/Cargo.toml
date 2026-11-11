@@ -15,6 +15,9 @@ include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 # The `derive` feature re-exports `#[derive(Env)]` and
 # `#[derive(Enumeration)]`.
 starmap-derive = { workspace = true, optional = true }
+# base64 decodes the value of a bytes variable whose encoding is base64 or
+# base64url, and writes a shown value back in its encoding.
+base64.workspace = true
 regex.workspace = true
 secrecy.workspace = true
 sha2.workspace = true
