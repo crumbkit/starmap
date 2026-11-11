@@ -19,9 +19,12 @@ mod tests;
 /// one in the macOS login keychain.
 ///
 /// The first lookup of a generated variable creates its value from the
-/// variable's `bytes` random bytes, written as base64url without padding,
-/// and every later lookup returns the same value. The value is a generic
-/// password whose service is `starmap.<workspace>` and whose account is
+/// lookup's `bytes` random bytes, written in the lookup's encoding with
+/// [`starmap::Encoding::encode`], and every later lookup returns the same
+/// value unchanged. A stored value whose encoding or length no longer fits
+/// the variable's type fails the check after resolution, and deleting it
+/// lets the next lookup create a new one. The value is a generic password
+/// whose service is `starmap.<workspace>` and whose account is
 /// `<app>/<NAME>`.
 ///
 /// A [`Lookup::Saved`] returns the value that [`Resolver::save`] kept for
@@ -71,9 +74,17 @@ fn service(workspace: &WorkspaceName) -> String {
 impl Resolver for Keychain {
     fn resolve(&self, lookup: Lookup<'_>, deadline: Instant) -> Result<Secret, SecretError> {
         match lookup {
-            Lookup::Generated { slot, bytes } => {
-                platform::generated(&service(slot.workspace), &account(slot), bytes, deadline)
-            }
+            Lookup::Generated {
+                slot,
+                bytes,
+                encoding,
+            } => platform::generated(
+                &service(slot.workspace),
+                &account(slot),
+                bytes,
+                encoding,
+                deadline,
+            ),
             Lookup::Saved { slot } => {
                 platform::saved(&service(slot.workspace), &account(slot), deadline)
             }
@@ -119,7 +130,7 @@ fn account(slot: Slot<'_>) -> String {
 mod platform {
     use std::time::Instant;
 
-    use starmap::{ByteCount, Secret};
+    use starmap::{ByteCount, Encoding, Secret};
     use zeroize::Zeroizing;
 
     use crate::SecretError;
@@ -128,6 +139,7 @@ mod platform {
         _service: &str,
         _account: &str,
         _bytes: ByteCount,
+        _encoding: Encoding,
         _deadline: Instant,
     ) -> Result<Secret, SecretError> {
         Err(SecretError::Unsupported)

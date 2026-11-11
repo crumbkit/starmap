@@ -443,7 +443,9 @@ pub(crate) fn bind_text(source: &Source) -> Option<String> {
             // A reference that a later release of starmap adds.
             _ => None,
         },
-        Source::Generated { bytes } => Some(format!("{} random bytes", bytes.get())),
+        Source::Generated { bytes, encoding } => {
+            Some(format!("{} random bytes as {encoding}", bytes.get()))
+        }
         Source::Provided(reference) => {
             let mut text = reference.kind().to_string();
             for (key, value) in reference.qualifiers() {

@@ -492,8 +492,7 @@ impl Error for OnePasswordRefError {}
 
 /// A number of bytes from 1 to 1024. It is the length of a bytes type
 /// after decoding, and the number of random bytes in a generated value,
-/// which runs from 16 to 1024 and is written as base64url whatever its
-/// size.
+/// which runs from 16 to 1024.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ByteCount(u16);
 

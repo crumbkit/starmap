@@ -231,6 +231,7 @@ fn a_generated_lookup_is_left_to_another_resolver() {
     let lookup = Lookup::Generated {
         slot: Slot::new(&workspace, &app, &key),
         bytes: starmap::ByteCount::generated(32).unwrap(),
+        encoding: starmap::Encoding::Base64Url,
     };
     let error = OnePassword::new(program.clone())
         .resolve(lookup, Instant::now() + PATIENT)

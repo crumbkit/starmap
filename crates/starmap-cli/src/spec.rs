@@ -509,7 +509,7 @@ fn hint(kind: SpecProblemKind) -> &'static str {
         }
         SpecProblemKind::BindMismatch => "change the source or the bind, as the failure lists",
         SpecProblemKind::BadBytes => {
-            "set bytes from 16 to 1024 on a generated variable, give a bytes type a length from 1 to 1024, and give a generated variable the type string"
+            "set bytes from 16 to 1024 on a generated string variable, give a bytes type a length from 1 to 1024, and give a generated variable's bytes type a length from 16 to 1024 and leave out bytes"
         }
         SpecProblemKind::UnknownPlaceholder => "use {workspace}, {checkout} or {home}",
         SpecProblemKind::ModeUndeclared => "declare the mode variable",

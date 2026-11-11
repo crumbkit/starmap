@@ -243,6 +243,46 @@ fn secret_bind(bind: &str) -> (serde_json::Value, serde_json::Value) {
     (json["bind"].clone(), json["cache"].clone())
 }
 
+/// Returns the `bind` field that `starmap explain --json` prints for one
+/// generated variable whose type is `ty` and whose other fields include
+/// `extra`.
+fn generated_bind(ty: &str, extra: &str) -> serde_json::Value {
+    let spec = Spec::parse(&format!(
+        "[variables.SHELF_KEY]\npurpose = \"The key.\"\ntype = {ty}\n\
+         unset = \"required\"\nshow = \"withheld\"\nsource = \"generated\"\n{extra}"
+    ))
+    .unwrap();
+    let bindings = starmap::capture(&spec, Vec::<(OsString, OsString)>::new());
+    let row = row(
+        &spec,
+        "starmap.toml",
+        &bindings,
+        "SHELF_KEY".parse().unwrap(),
+    )
+    .unwrap();
+    serde_json::to_value(row).unwrap()["bind"].clone()
+}
+
+#[test]
+fn a_generated_variable_shows_its_random_bytes_and_their_encoding_as_its_bind() {
+    assert_eq!(
+        generated_bind("{ bytes = { encoding = \"hex\", length = 32 } }", ""),
+        serde_json::json!("32 random bytes as hex")
+    );
+    assert_eq!(
+        generated_bind("{ bytes = { encoding = \"base64\", min-length = 24 } }", ""),
+        serde_json::json!("24 random bytes as base64")
+    );
+    assert_eq!(
+        generated_bind("\"string\"", ""),
+        serde_json::json!("32 random bytes as base64url")
+    );
+    assert_eq!(
+        generated_bind("\"string\"", "bytes = 48\n"),
+        serde_json::json!("48 random bytes as base64url")
+    );
+}
+
 #[test]
 fn a_bind_that_no_cache_may_keep_reports_cache_never_beside_its_plain_reference() {
     assert_eq!(
