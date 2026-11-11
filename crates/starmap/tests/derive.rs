@@ -327,7 +327,7 @@ fn a_string_value_that_is_not_unicode_and_a_missing_variable_are_refused_togethe
     assert!(matches!(error, ReadError::Refused(_)));
     assert_eq!(
         error.to_string(),
-        "SHELF_TITLE: the value is not unicode text; \
+        "SHELF_TITLE: the value is not unicode text (the value is \"S\u{fffd}\"); \
          SHELF_PORT is required and has no value"
     );
 }

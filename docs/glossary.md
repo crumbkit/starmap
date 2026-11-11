@@ -95,8 +95,10 @@ Each place a value comes from follows the rule:
 - A mode variable whose value is not Unicode leaves its local default to
   decide the mode, and the check then refuses the value.
 
-Output that prints a path that is not Unicode, such as `starmap explain`,
-replaces each invalid sequence with U+FFFD. No test builds a value that is
+Output that prints a value that is not Unicode replaces each invalid
+sequence with U+FFFD. `starmap explain` prints a shown value that way, and
+the refusal of a shown variable quotes it that way. A withheld value is
+never printed or quoted. No test builds a value that is
 not Unicode on Windows; the rule there follows from Rust's `OsStr::to_str`.
 
 ## enumeration
