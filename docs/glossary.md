@@ -466,15 +466,14 @@ variable fails. Code that falls back to a default for an unset variable
 still passes, so `starmap check` is the command that finds the undeclared
 variables that `src` reads. An application that needs another variable of
 the shell, such as `SSH_AUTH_SOCK`, declares it with
-`source = "inherited"`. A file may
-declare a built-in name to give it a type, and the program then receives
-the checked value, or no value when the check leaves the variable unset.
-`starmap run` adds `TRACEPARENT` and `TRACESTATE` when its usage log
-records the run, as it does without the flag. The flag is off by default,
-and `starmap run` without it lets the program inherit every variable of the
-shell. `starmap explain` without a name lists the built-in variables of its
-platform in its note. In the Rust API,
-`Environment::apply_only_declared` builds the same environment on a
+`source = "inherited"`. A file may declare a built-in name to give it a
+type, and the program then receives the checked value, or no value when the
+check leaves the variable unset. `starmap run` adds `TRACEPARENT` and
+`TRACESTATE` when its usage log records the run, as it does without the
+flag. The flag is off by default, and `starmap run` without it lets the
+program inherit every variable of the shell. `starmap explain` without a
+name lists the built-in variables of its platform in its note. In the Rust
+API, `Environment::apply_only_declared` builds the same environment on a
 `Command` from the variables and the list that the caller passes.
 
 ## pointer
