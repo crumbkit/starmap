@@ -533,6 +533,21 @@ fn a_boolean_with_spellings_shows_its_default_and_marks_another_word_invalid() {
     assert_eq!(other["value"]["state"], "invalid");
 }
 
+#[test]
+fn a_variable_that_reads_its_presence_says_so_in_its_type_and_is_set_by_an_empty_value() {
+    let fields = "type = \"boolean\"\npresence = true\nunset = \"optional\"";
+    let empty = debug_row(fields, Some(""));
+    let word = debug_row(fields, Some("false"));
+    let absent = debug_row(fields, None);
+
+    assert_eq!(empty["type"], "boolean (true when set to any value)");
+    assert_eq!(empty["value"]["state"], "set");
+    assert_eq!(empty["value"]["text"], "");
+    assert_eq!(word["value"]["state"], "set");
+    assert_eq!(word["value"]["text"], "false");
+    assert_eq!(absent["value"]["state"], "unset");
+}
+
 /// A spec with a named enumeration `log-level`, which `SHELF_LOG_LEVEL`
 /// uses, and an inline one, which `SHELF_STAGE` uses.
 const LOG_LEVEL: &str = r#"

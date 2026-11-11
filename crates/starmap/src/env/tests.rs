@@ -118,6 +118,7 @@ fn apply_writes_a_value_as_text_its_type_reads_back() {
 }
 
 mod boolean;
+mod presence;
 
 #[test]
 fn a_withheld_value_is_reachable_only_through_secret() {

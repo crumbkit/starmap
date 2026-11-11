@@ -16,6 +16,7 @@ use crate::{
 };
 
 mod boolean;
+mod presence;
 
 /// The example spec in `crates/starmap/tests/example/starmap.toml`.
 const EXAMPLE: &str = include_str!("../../tests/example/starmap.toml");

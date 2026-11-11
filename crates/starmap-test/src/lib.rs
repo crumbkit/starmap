@@ -193,9 +193,11 @@ fn disagreements(file: &str, field: &Field, variable: &Variable, has_mode: bool)
     } else {
         &[Mode::Local]
     };
+    // A variable that reads its presence always has a value, true or false.
     let unset_in: Vec<String> = modes
         .iter()
         .filter(|mode| matches!(variable.unset().in_mode(**mode), Unset::Optional))
+        .filter(|_| !variable.presence())
         .map(|mode| format!("{mode} mode"))
         .collect();
     match (field.presence, unset_in.is_empty()) {

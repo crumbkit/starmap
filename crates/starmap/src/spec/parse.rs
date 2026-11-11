@@ -42,7 +42,8 @@ const ROOT_FIELDS: &[&str] = &[
 ];
 /// The keys of a variable's table.
 const VARIABLE_FIELDS: &[&str] = &[
-    "purpose", "effect", "check", "type", "unset", "show", "source", "bind", "bytes", "tool",
+    "purpose", "effect", "check", "type", "presence", "unset", "show", "source", "bind", "bytes",
+    "tool",
 ];
 /// What an effect sentence says, as a refusal of one names it.
 const EFFECT_SAYS: &str = "what the application does when the variable is unset";
@@ -416,6 +417,13 @@ impl Parser {
         let unset = self
             .required(field, table, "unset")
             .and_then(|unset| self.unset(&unset, ty.as_ref().map(|(ty, _)| ty), withheld));
+        // A family's keys leave `presence` out, so `known` has reported it.
+        let presence = match field.child(table, "presence") {
+            Some(presence) if known.contains(&"presence") => {
+                self.presence(&presence, ty.as_ref().map(|(ty, _)| ty), unset.as_ref())
+            }
+            _ => Some(false),
+        };
         let kind = self
             .required(field, table, "source")
             .and_then(|source| Some((self.word(&source, SOURCE_WORDS)?, source)));
@@ -452,12 +460,15 @@ impl Parser {
         let source = kind
             .as_ref()
             .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes, rule));
-        let variable = match (purpose, effect, check, ty, unset, show, source, tools) {
+        let variable = match (
+            purpose, effect, check, ty, presence, unset, show, source, tools,
+        ) {
             (
                 Some(purpose),
                 Some(effect),
                 Some(check),
                 Some((ty, _)),
+                Some(presence),
                 Some(unset),
                 Some((show, _)),
                 Some(source),
@@ -467,6 +478,7 @@ impl Parser {
                 effect,
                 check,
                 value_type: ty,
+                presence,
                 unset,
                 show,
                 source,
@@ -475,6 +487,42 @@ impl Parser {
             _ => None,
         };
         (kind.map(|(kind, _)| kind), variable)
+    }
+
+    /// Parses a variable's `presence` field, and reports a true one beside
+    /// a type or an unset rule that it does not go with.
+    fn presence(
+        &mut self,
+        field: &Field<'_>,
+        ty: Option<&Type>,
+        unset: Option<&UnsetRule>,
+    ) -> Option<bool> {
+        let Some(presence) = field.item.as_bool() else {
+            self.wrong_type(field, "true or false");
+            return None;
+        };
+        let defaults = |unset: &UnsetRule| {
+            matches!(unset.local, Unset::Default(_))
+                || matches!(unset.production, Unset::Default(_))
+        };
+        let rule = match (ty, unset) {
+            _ if !presence => return Some(false),
+            (Some(Type::Boolean { spellings: Some(_) }), _) => {
+                "a variable that reads its presence takes any value, so its type declares no \
+                 spellings"
+            }
+            (Some(ty), _) if !matches!(ty, Type::Boolean { .. }) => {
+                "only a variable with the type \"boolean\" reads its presence"
+            }
+            (_, Some(unset)) if defaults(unset) => {
+                "a variable that reads its presence is false when it is unset, so it takes no \
+                 default"
+            }
+            _ => return Some(true),
+        };
+        let message = format!("`{}` is true, and {rule}", field.path);
+        self.report(field.span(), Kind::BadValue, message);
+        None
     }
 
     /// Parses the purpose sentence.

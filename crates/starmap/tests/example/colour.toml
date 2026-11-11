@@ -1,0 +1,9 @@
+# A spec with a variable that reads its presence, for the struct test of
+# a field that is true when the variable is set to any value.
+[variables.NO_COLOR]
+purpose = "Turns colour off when it is set."
+type = "boolean"
+presence = true
+unset = "optional"
+show = "shown"
+source = "inherited"

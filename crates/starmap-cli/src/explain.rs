@@ -299,7 +299,7 @@ fn row(
         });
     };
     Ok(Explained {
-        kind: type_text(variable.value_type()),
+        kind: kind_text(variable),
         unset: unset_text(variable),
         source: source_text(variable.source()),
         value: cell(variable, bindings.get(&name)),
@@ -320,9 +320,13 @@ fn row(
 /// shell sets it. A value that counts as unset, such as a relative path
 /// where the type takes an absolute one, falls back to the default.
 /// A shell value that is not Unicode is shown with each invalid sequence
-/// replaced by U+FFFD.
+/// replaced by U+FFFD. Any value sets a variable that reads its presence,
+/// an empty one included.
 fn cell(variable: &Variable, bound: Option<&Bound>) -> Cell {
     match bound {
+        Some(Bound::Plain(raw)) if variable.presence() => {
+            return Cell::new(State::Set, Some(raw.to_string_lossy().into_owned()));
+        }
         Some(Bound::Plain(raw)) => match variable.value_type().parse(raw) {
             Ok(Some(_)) => return Cell::new(State::Set, Some(raw.to_string_lossy().into_owned())),
             Ok(None) => {}
@@ -365,8 +369,18 @@ pub(crate) fn value_text(value: &Value) -> String {
     }
 }
 
+/// Returns the text of a variable's type, which says so when the variable
+/// reads its presence.
+pub(crate) fn kind_text(variable: &Variable) -> String {
+    if variable.presence() {
+        "boolean (true when set to any value)".to_owned()
+    } else {
+        type_text(variable.value_type())
+    }
+}
+
 /// Returns the text of a type, such as `integer 1..=100`.
-pub(crate) fn type_text(ty: &Type) -> String {
+fn type_text(ty: &Type) -> String {
     match ty {
         Type::Path { absolute: false } => "path".to_owned(),
         Type::Path { absolute: true } => "absolute path".to_owned(),

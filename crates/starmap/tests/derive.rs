@@ -332,6 +332,25 @@ fn a_string_value_that_is_not_unicode_and_a_missing_variable_are_refused_togethe
     );
 }
 
+/// A struct with a field that reads a variable's presence.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/colour.toml")]
+struct Colour {
+    #[starmap("NO_COLOR")]
+    no_colour: bool,
+}
+
+#[test]
+fn a_bool_field_of_a_presence_variable_is_true_for_any_value_and_false_when_it_is_absent() {
+    for set in ["", "1", "false"] {
+        let env = Colour::from_vars(vars(&[("NO_COLOR", set)])).expect("any value sets it");
+        assert!(env.no_colour, "{set:?}");
+    }
+
+    let env = Colour::from_vars(vars(&[])).expect("the variable may be absent");
+    assert!(!env.no_colour);
+}
+
 #[test]
 fn an_enumeration_variant_reads_as_its_kebab_case_name_with_a_run_of_capitals_as_one_word_or_its_rename()
  {

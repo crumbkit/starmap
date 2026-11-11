@@ -257,6 +257,25 @@ fn a_changed_scheme_list_is_a_change_of_the_type() {
     );
 }
 
+#[test]
+fn reading_a_boolean_by_its_presence_is_a_change_of_the_type() {
+    let plain = LISTEN
+        .replace("\"port\"", "\"boolean\"")
+        .replace("\"required\"", "\"optional\"");
+    let presence = plain.replace("\"boolean\"", "\"boolean\"\npresence = true");
+
+    assert_eq!(
+        changes(Some(&spec(&plain)), &spec(&presence)),
+        vec![Change {
+            change: Kind::Changed,
+            name: "SHELF_LISTEN".to_owned(),
+            field: Some("type".to_owned()),
+            was: Some("boolean".to_owned()),
+            now: Some("boolean (true when set to any value)".to_owned()),
+        }]
+    );
+}
+
 /// A log level setting whose type is the named enumeration `log-level`.
 const LOG_LEVEL: &str = r#"
 [enumerations.log-level]

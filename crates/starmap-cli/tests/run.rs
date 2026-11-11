@@ -405,3 +405,32 @@ fn only_declared_leaves_a_declared_built_in_variable_unset_when_the_check_does()
     .code(0)
     .stdout_eq("unset /home/shelf");
 }
+
+#[test]
+fn a_variable_that_reads_its_presence_reaches_the_program_as_it_was_set_even_when_empty() {
+    let root = tempfile::tempdir().unwrap();
+    let spec = format!(
+        "{SPEC}\n[variables.NO_COLOR]\npurpose = \"Turns colour off when it is set.\"\ntype = \"boolean\"\npresence = true\nunset = \"optional\"\nshow = \"shown\"\nsource = \"inherited\"\n"
+    );
+    std::fs::write(root.path().join("starmap.toml"), spec).unwrap();
+    let run = |env: &[(&str, &str)]| {
+        let script = r#"printf '%s' "${NO_COLOR-unset}""#;
+        let words = [
+            "run",
+            "--no-input",
+            "--only-declared",
+            "--",
+            "sh",
+            "-c",
+            script,
+        ];
+        starmap(root.path(), &words, env).code(0)
+    };
+
+    run(&[("NO_COLOR", "")]).stdout_eq("");
+    run(&[("NO_COLOR", "anything")]).stdout_eq("anything");
+    run(&[]).stdout_eq("unset");
+
+    std::fs::write(root.path().join(".env"), "NO_COLOR=\n").unwrap();
+    run(&[]).stdout_eq("");
+}

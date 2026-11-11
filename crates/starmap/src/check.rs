@@ -26,7 +26,9 @@ mod tests;
 /// An empty value, such as the value of `FOO=`, counts as unset, so
 /// `capture` binds nothing for it. When `vars` names a variable more than
 /// once, the last non-empty value is bound, and an empty later value leaves
-/// an earlier value in place.
+/// an earlier value in place. A variable that reads its
+/// [presence](Variable::presence) is the exception: an empty value sets
+/// it, so `capture` binds its last value, empty or not.
 ///
 /// The caller passes the environment in, such as `std::env::vars_os()`,
 /// because the crate reads no environment variable itself.
@@ -40,7 +42,7 @@ pub fn capture(spec: &Spec, vars: impl IntoIterator<Item = (OsString, OsString)>
         let Some(declaration) = spec.declared(&name) else {
             continue;
         };
-        if raw.is_empty() {
+        if raw.is_empty() && !declaration.variable().presence() {
             continue;
         }
         let bound = declaration.variable().capture(raw);
@@ -102,6 +104,9 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
     };
     let value = match bindings.get(name).map(|bound| read(variable, bound)) {
         Some(Ok(Some(Held::Shown(value)))) => Some(value),
+        // A mode variable that reads its presence decides by the value it
+        // was set to, as the child process reads it.
+        Some(Ok(Some(Held::Presence(raw)))) => return rule.decide(raw.as_deref()),
         None | Some(Ok(None) | Err(Problem::Invalid(TypeError::NotUnicode))) => {
             match variable.unset().in_mode(Mode::Local) {
                 Unset::Default(value) => Some(value.clone()),
@@ -119,7 +124,10 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 ///
 /// An empty bound value, shown or withheld, counts as unset before any type
 /// reads it, so it is treated as unbound. This covers values that do not
-/// pass through [`capture`], such as a provider's value. A bound value is
+/// pass through [`capture`], such as a provider's value. A variable that
+/// reads its [presence](Variable::presence) is the exception: any bound
+/// value, an empty one included, sets it and reads as true, and it reads
+/// as false when it is unbound and optional. A bound value is
 /// read in its variable's type, and a value that the type counts as unset,
 /// such as a relative path where `absolute = true`, is treated as unbound. An unbound variable takes its default in `mode`,
 /// stays unset when it is optional, and is missing when it is required.
@@ -129,7 +137,8 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 /// is the only mode its child can decide. When a group is partly set, each
 /// of its members that is unset and has no finding of its own gets
 /// [`Problem::GroupIncomplete`]. A member counts as set when the check
-/// holds a value for it. An invalid mode value checked in
+/// holds a value for it, and a variable that reads its presence counts as
+/// set only when it is bound. An invalid mode value checked in
 /// production gives the mode variable two findings: `Invalid`, and
 /// `ModeMismatch { decided: Local }`.
 ///
@@ -167,7 +176,7 @@ pub(crate) fn check_with(spec: &Spec, bindings: &Bindings, mode: Mode, rules: &[
     let incomplete: Vec<Option<Problem>> = held
         .iter()
         .map(|(name, _, result)| match result {
-            Ok(None) => incomplete(spec, &held, name),
+            Ok(held_value) if !is_set(held_value.as_ref()) => incomplete(spec, &held, name),
             _ => None,
         })
         .collect();
@@ -315,8 +324,9 @@ fn incomplete(spec: &Spec, held: &[Holding<'_>], name: &Name) -> Option<Problem>
         .variables()
         .iter()
         .filter(|member| {
-            held.iter()
-                .any(|(held, _, result)| held == member && matches!(result, Ok(Some(_))))
+            held.iter().any(|(held, _, result)| {
+                held == member && matches!(result, Ok(value) if is_set(value.as_ref()))
+            })
         })
         .cloned()
         .collect();
@@ -326,8 +336,14 @@ fn incomplete(spec: &Spec, held: &[Holding<'_>], name: &Name) -> Option<Problem>
     })
 }
 
+/// Whether a held value counts as set in its variable's group.
+fn is_set(held: Option<&Held>) -> bool {
+    held.is_some_and(Held::is_set)
+}
+
 /// Holds the checked value of `variable` in `mode`, or `None` when it stays
-/// unset.
+/// unset. An optional variable that reads its presence and is unbound holds
+/// its absence, which reads as false.
 fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option<Held>, Problem> {
     if let Some(held) = bound
         .map(|bound| read(variable, bound))
@@ -338,6 +354,7 @@ fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option
     }
     match variable.unset().in_mode(mode) {
         Unset::Required => Err(Problem::Missing { mode }),
+        Unset::Optional if variable.presence() => Ok(Some(Held::Presence(None))),
         Unset::Optional => Ok(None),
         Unset::Default(value) => Ok(Some(Held::Shown(value.clone()))),
     }
@@ -366,9 +383,13 @@ fn quote(variable: &Variable, bound: Option<&Bound>, problem: &Problem) -> Optio
 }
 
 /// Reads `bound` as a value of `variable`. `Ok(None)` means the value
-/// counts as unset, which an empty value always does.
+/// counts as unset, which an empty value does unless the variable reads its
+/// presence, which any plain value sets.
 fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
     match (variable.show(), bound) {
+        (Show::Shown, Bound::Plain(raw)) if variable.presence() => {
+            Ok(Some(Held::Presence(Some(raw.clone()))))
+        }
         (Show::Shown, Bound::Plain(raw)) if raw.is_empty() => Ok(None),
         (Show::Withheld, Bound::Secret(secret)) if secret.is_empty() => Ok(None),
         (Show::Shown, Bound::Plain(raw)) => variable

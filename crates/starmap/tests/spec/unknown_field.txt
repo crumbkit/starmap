@@ -1,4 +1,4 @@
-starmap::spec::unknown_field: `variables.SHELF_PORT` has the field `colour`, and it takes purpose, effect, check, type, unset, show, source, bind, bytes and tool
+starmap::spec::unknown_field: `variables.SHELF_PORT` has the field `colour`, and it takes purpose, effect, check, type, presence, unset, show, source, bind, bytes and tool
   at: 8:1 to 8:7, bytes 200..206
    8 | colour = "blue"
      | ^^^^^^

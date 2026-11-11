@@ -12,6 +12,8 @@
 //! An empty value, such as `NAME=` or `NAME=""`, counts as unset, because
 //! `starmap::capture` binds nothing for it. It therefore does not hide a
 //! value that the process environment or `--set` gives the same variable.
+//! An empty value does set a variable that the spec declares with
+//! `presence = true`.
 
 use std::ffi::OsString;
 use std::fmt;

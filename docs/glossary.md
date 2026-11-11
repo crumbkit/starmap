@@ -281,7 +281,42 @@ required variable missing. An empty value in a later layer does not hide a
 value from an earlier one, so `FOO=` in the shell leaves the value that
 `.env` gives `FOO` in place. `starmap::capture` binds nothing for an empty
 value, and `check` treats an empty bound value as unset before any type
-reads it.
+reads it. A variable that reads its presence is the one exception, which
+the next entry describes.
+
+## presence
+
+Some programs read only whether a variable is set. `NO_COLOR` turns colour
+off when it is set to any value, an empty one included. Such a variable is
+declared with `presence = true` beside `type = "boolean"`:
+
+```toml
+[variables.NO_COLOR]
+purpose = "Turns colour off when it is set."
+type = "boolean"
+presence = true
+unset = "optional"
+show = "shown"
+source = "inherited"
+```
+
+Any value sets the variable and reads as true, so `NO_COLOR=`,
+`NO_COLOR=1` and `NO_COLOR=false` are all true. The variable reads as
+false when it is absent. The empty value counts as set for this variable
+only, in every layer, so `NO_COLOR=` in the shell replaces a value that
+`.env` gives it. The child process receives the value exactly as it was
+set, and the variable stays unset in the child when it is absent.
+
+A struct field that reads the variable is a `bool`, because the variable
+always reads as true or false, and `starmap-test` reports an `Option<bool>`
+field. A required variable that reads its presence is missing when it is
+absent. In a group, the variable counts as set only when it has a value.
+
+The parser refuses `presence = true` with `starmap::spec::bad_value`
+beside a type other than the word `boolean`, beside a boolean table that
+declares spellings, and beside a default. A family does not take the key.
+`Variable::presence` returns the field, and `starmap explain` shows the
+type as `boolean (true when set to any value)`.
 
 ## effect
 
@@ -462,7 +497,8 @@ the groups in name order, `Spec::group` returns one by name, and
 `Spec::group_of` returns the group a variable belongs to.
 
 `check` applies the rule after it has read each variable. A member counts
-as set when the check holds a value for it, so `FOO=` counts as unset. When
+as set when the check holds a value for it, so `FOO=` counts as unset,
+unless the variable reads its presence. When
 at least one member is set and another is unset, each unset member that
 has no finding of its own gets `Problem::GroupIncomplete`, which names the
 group and the members that are set. A member that is missing because it is

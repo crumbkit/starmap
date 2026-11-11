@@ -371,6 +371,9 @@ pub struct Variable {
     /// which the file's optional `check` field states.
     check: Option<String>,
     value_type: Type,
+    /// Whether any value, an empty one included, sets the variable, which
+    /// the file's optional `presence` field states.
+    presence: bool,
     unset: UnsetRule,
     show: Show,
     source: Source,
@@ -425,6 +428,16 @@ impl Variable {
     #[must_use]
     pub fn value_type(&self) -> &Type {
         &self.value_type
+    }
+
+    /// Returns whether the variable reads its presence, which the file's
+    /// `presence = true` states beside `type = "boolean"`. Any value, an
+    /// empty one included, then sets the variable and reads as true, and
+    /// the variable reads as false when it is absent. `NO_COLOR` is such a
+    /// variable.
+    #[must_use]
+    pub fn presence(&self) -> bool {
+        self.presence
     }
 
     /// Returns what happens when the variable has no value, in each mode.

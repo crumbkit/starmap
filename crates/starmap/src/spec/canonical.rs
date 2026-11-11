@@ -87,6 +87,9 @@ fn variable(variable: &Variable) -> Table {
         table.insert("check", value(check));
     }
     table.insert("type", value(value_type(variable.value_type())));
+    if variable.presence() {
+        table.insert("presence", value(true));
+    }
     table.insert("unset", value(unset(variable.unset())));
     table.insert("show", value(word_of(SHOW_WORDS, &variable.show())));
     let (kind, bind) = source(variable.source());

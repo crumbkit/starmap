@@ -24,6 +24,18 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   gains `Spellings`, `SpellingsError`, `Value::Spelled`, which a `bool`
   field reads, and `TypeError::NotSpelling`. `starmap explain` shows the
   spellings in the type, as `boolean (1, yes for true and 0, no for false)`.
+- A variable may read its presence, as `presence = true` beside
+  `type = "boolean"`. Any value, an empty one included, sets the variable
+  and reads as true, and the variable reads as false when it is absent, as
+  `NO_COLOR` does. The empty value counts as set for that variable only.
+  The child process receives the value as it was set. The parser refuses
+  `presence = true` beside another type, beside declared spellings and
+  beside a default with `starmap::spec::bad_value`, and a family does not
+  take the key. A `bool` field reads the variable, and `starmap-test`
+  reports an `Option<bool>` field. The Rust API gains `Variable::presence`.
+  `starmap explain` and `starmap diff` show the type as
+  `boolean (true when set to any value)`. The glossary's new presence
+  entry states the rule.
 - The README and the glossary's new flag override entry show how a
   command-line flag replaces a variable's value without clap's `env`
   argument: the flag is an `Option`, and the application writes
