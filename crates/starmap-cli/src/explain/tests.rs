@@ -548,6 +548,18 @@ fn a_variable_that_reads_its_presence_says_so_in_its_type_and_is_set_by_an_empty
     assert_eq!(absent["value"]["state"], "unset");
 }
 
+#[test]
+fn a_variable_whose_empty_value_is_a_value_says_so_in_its_type_and_shows_an_empty_value() {
+    let fields = "type = \"boolean\"\nempty = \"value\"\nunset = { default = \"false\" }";
+    let empty = debug_row(fields, Some(""));
+    let absent = debug_row(fields, None);
+
+    assert_eq!(empty["type"], "boolean; an empty value is a value");
+    assert_eq!(empty["value"]["state"], "invalid");
+    assert_eq!(empty["value"]["text"], "");
+    assert_eq!(absent["value"]["state"], "default");
+}
+
 /// A spec with a named enumeration `log-level`, which `SHELF_LOG_LEVEL`
 /// uses, and an inline one, which `SHELF_STAGE` uses.
 const LOG_LEVEL: &str = r#"

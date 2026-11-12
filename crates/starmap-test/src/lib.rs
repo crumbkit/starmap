@@ -239,11 +239,14 @@ fn compare_together(
     };
     // The struct an Allow message names as reading `name`.
     let reader_of = |name: &str| {
-        structs
-            .iter()
-            .filter(|_| several)
-            .find(|(_, fields)| fields.iter().any(|field| field.name == name))
-            .map_or("the struct", |(type_name, _)| *type_name)
+        if several {
+            structs
+                .iter()
+                .find(|(_, fields)| fields.iter().any(|field| field.name == name))
+                .map_or("the struct", |(type_name, _)| *type_name)
+        } else {
+            "the struct"
+        }
     };
     let (read, read_families) = (read_by(false), read_by(true));
     let allowed: BTreeSet<&str> = allow.iter().map(|entry| entry.name).collect();

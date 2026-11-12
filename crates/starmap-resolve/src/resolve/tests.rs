@@ -804,6 +804,35 @@ fn an_empty_value_from_a_provider_counts_as_unset_in_check() {
 }
 
 #[test]
+fn an_empty_value_from_a_provider_is_a_value_in_check_when_the_variable_declares_empty_a_value() {
+    const GREETING: &str = r#"
+[variables.SHELF_GREETING]
+purpose = "The text the host gives the web view to show above the catalogue."
+type = "string"
+empty = "value"
+unset = "required"
+show = "shown"
+source = "provided"
+bind = { provided = "multiverse/greeting" }
+"#;
+    let spec = Spec::parse(GREETING).unwrap();
+    let caller = Bindings::new();
+    let greetings = FakeProvider::answering("multiverse/greeting", "");
+    let context = Context::new(places(), &caller, later()).provider(&greetings);
+    let resolution = resolve(&spec, Mode::Local, &context);
+
+    let Verdict::Ready(environment) = starmap::check(&spec, &resolution.bindings, Mode::Local)
+    else {
+        panic!("an empty greeting is a value");
+    };
+    let name: starmap::Name = "SHELF_GREETING".parse().unwrap();
+    assert_eq!(
+        environment.value(&name),
+        Some(&starmap::Value::String(String::new()))
+    );
+}
+
+#[test]
 fn a_resolution_without_failures_passes_check() {
     let caller = caller(&[("SHELF_ENV", "prod"), ("XDG_STATE_HOME", "/state")]);
     let ports = FakeProvider::answering("multiverse/port", "9090");

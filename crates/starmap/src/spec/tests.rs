@@ -16,6 +16,7 @@ use crate::{
 };
 
 mod boolean;
+mod empty;
 mod presence;
 
 /// The example spec in `crates/starmap/tests/example/starmap.toml`.

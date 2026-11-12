@@ -15,7 +15,9 @@ use starmap::{Name, Source, Spec, Type, Variable};
 
 use crate::cli::DiffArgs;
 use crate::codes;
-use crate::explain::{Values, bind_text, cache_text, kind_text, source_text, unset_text};
+use crate::explain::{
+    Values, bind_text, cache_text, empty_text, kind_text, source_text, unset_text,
+};
 use crate::git::{self, Entry, GitError};
 use crate::spec::{self, SpecFailure};
 
@@ -245,8 +247,11 @@ fn changes(was: Option<&Spec>, now: &Spec) -> Vec<Change> {
 type FieldChange = (&'static str, Option<String>, Option<String>);
 
 /// Returns each field that differs between `old` and `new`, in the order
-/// type, values, unset, show, source, bind, cache, purpose, effect and check, with
-/// the text that explain prints for it. A changed type lists `type` when
+/// type, values, empty, unset, show, source, bind, cache, purpose, effect and check, with
+/// the text that explain prints for it. A changed `empty` field reads
+/// `an empty value is a value` on the side that declares
+/// `empty = "value"` and `an empty value counts as unset` on the other;
+/// a change of `presence` is a change of the type alone. A changed type lists `type` when
 /// its text differs, and `values` when the descriptions of a named
 /// enumeration's values differ. The fields are compared by value and shown as
 /// text, and a withheld variable has no default, so diff shows no secret
@@ -267,6 +272,14 @@ fn changed_fields(old: &Variable, new: &Variable) -> Vec<FieldChange> {
         if values_differ {
             changed.push(("values", was_values, now_values));
         }
+    }
+    if old.presence() == new.presence() && old.empty() != new.empty() {
+        let text = |variable: &Variable| {
+            empty_text(variable)
+                .unwrap_or("an empty value counts as unset")
+                .to_owned()
+        };
+        changed.push(("empty", Some(text(old)), Some(text(new))));
     }
     if old.unset() != new.unset() {
         changed.push(("unset", Some(unset_text(old)), Some(unset_text(new))));

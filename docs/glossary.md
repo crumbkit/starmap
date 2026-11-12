@@ -276,15 +276,16 @@ returns a variable's `UnsetRule`. When the file states no `production`, the
 production rule equals the local one. A stated `production` is `required`
 or `optional`, because a production rule takes no default of its own.
 
-An empty value counts as unset, wherever it comes from: the process
-environment, `.env`, `--set`, a provider or a resolver. So `FOO=` gives a
-variable its default, leaves an optional variable unset, and leaves a
-required variable missing. An empty value in a later layer does not hide a
-value from an earlier one, so `FOO=` in the shell leaves the value that
+An empty value counts as unset by default, wherever it comes from: the
+process environment, `.env`, `--set`, a provider or a resolver. So `FOO=`
+gives a variable its default, leaves an optional variable unset, and leaves
+a required variable missing. An empty value in a later layer does not hide
+a value from an earlier one, so `FOO=` in the shell leaves the value that
 `.env` gives `FOO` in place. `starmap::capture` binds nothing for an empty
 value, and `check` treats an empty bound value as unset before any type
-reads it. A variable that reads its presence is the one exception, which
-the next entry describes.
+reads it. A variable that reads its presence, and a variable declared with
+`empty = "value"`, are the two exceptions, which the next two entries
+describe.
 
 ## presence
 
@@ -318,7 +319,66 @@ The parser refuses `presence = true` with `starmap::spec::bad_value`
 beside a type other than the word `boolean`, beside a boolean table that
 declares spellings, and beside a default. A family does not take the key.
 `Variable::presence` returns the field, and `starmap explain` shows the
-type as `boolean (true when set to any value)`.
+type as `boolean (true when set to any value)`. A variable that reads its
+presence counts an empty value as a value, so `Variable::empty` returns
+`Empty::Value` for it, and the parser refuses an `empty` field beside
+`presence = true`.
+
+## empty
+
+The optional `empty` field of a variable or a family in `starmap.toml` says
+what an empty value, such as the value of `FOO=`, counts as. It takes one
+of the words `unset` and `value`. Without the field, an empty value counts
+as unset, as `empty = "unset"` states and the `Unset` entry describes. With
+`empty = "value"`, an empty value is a value, which the variable's type
+reads:
+
+```toml
+[variables.SHELF_WORKERS]
+purpose = "How many catalogue workers run."
+type = { integer = { min = 1, max = 64 } }
+unset = { default = "5" }
+empty = "value"
+show = "shown"
+source = "setting"
+```
+
+Each type reads the empty text as it reads any other text. A string reads
+it as `""`, and a string with a pattern matches the pattern against it.
+Bytes read it as no bytes, which a length rule may refuse. A path reads it
+as an empty path, and an absolute path type counts it as unset, as it
+counts any relative path. An integer, a port, a URL, a socket address, a
+boolean and an enumeration refuse it as `Problem::Invalid`, so
+`SHELF_WORKERS=` above refuses the read with `SHELF_WORKERS: the value is
+not a whole number (the value is "")`. A value the type accepts is passed
+to the field's check, as any other value is. A default applies only when
+the variable is absent, and a required variable is satisfied by an empty
+value that its type accepts.
+
+The empty value is a value in every layer. `starmap::capture` binds it, so
+an empty value in a later layer replaces an earlier one, and `FOO=` in the
+shell replaces the value that `.env` gives `FOO`. `check` reads an empty
+bound value from a provider or a resolver in the variable's type, and the
+mode variable decides the mode by its type's reading of an empty value.
+
+The parser refuses a word other than `unset` and `value`, and an `empty`
+field beside `presence = true`, with `starmap::spec::bad_value`. The
+canonical form writes `empty = "value"` right after the type, and leaves
+out `empty = "unset"`, so a file without the field and a file that states
+`empty = "unset"` have the same digest as before the field existed.
+`starmap::Empty` is the Rust enum, with the variants `Unset` and `Value`,
+and `Variable::empty` returns it. It returns `Empty::Value` for a variable
+that reads its presence too, so it is the one rule that `capture`, `check`,
+`mode`, `starmap run`'s `.env` layering and `starmap-resolve` consult.
+`starmap explain` adds `; an empty value is a value` to the type text, and
+`starmap diff` reports a change of the field `empty`.
+
+Another implementation keeps an empty value of a variable declared with
+`empty = "value"` in every layer, and passes it to the variable's type,
+which accepts or refuses it as it would any other text. For every other
+variable that does not read its presence, it treats an empty value as
+absent. An implementation that does not know the field refuses the file,
+because `starmap.toml` refuses an unknown key.
 
 ## effect
 
@@ -389,9 +449,7 @@ each command of an application can read its own struct from one
 The read still checks every variable, and then reports only the findings
 about the variables it enforces. A group's rule therefore looks at the
 values of all of its members, and a `Problem::GroupIncomplete` finding
-refuses the read only when it names a member the struct reads. A variable
-outside the set that has a finding holds no value in the read's
-`Environment`.
+refuses the read only when it names a member the struct reads.
 
 `starmap::check` and `starmap run` check the whole file. `starmap run`
 prepares the environment of a child process and does not know which

@@ -20,6 +20,25 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A variable or a family may declare `empty = "value"`, so an empty value
+  such as the value of `FOO=` is a value that its type reads. A string
+  reads it as `""`, an absolute path type counts it as unset, and an
+  integer, port, URL, socket address, boolean or enumeration refuses it as
+  `Problem::Invalid`, so `FOO=` reaches the application's check or refuses
+  the read in place of taking the default. A default applies only when
+  the variable is absent. `capture` binds the empty value, so an empty
+  value in a later layer replaces an earlier one, and `check`, `mode`,
+  `starmap run` and `starmap-resolve` read it in the variable's type. The
+  default, `empty = "unset"`, keeps the rule that an empty value counts as
+  unset, and the canonical form leaves it out, so every existing file
+  keeps its digest. The parser refuses another word, and `empty` beside
+  `presence = true`, with `starmap::spec::bad_value`. A file that uses the
+  field does not parse in 0.3, which refuses an unknown key. The Rust API
+  gains `starmap::Empty` and `Variable::empty`, which returns
+  `Empty::Value` for a variable that reads its presence too. `starmap
+  explain` adds `; an empty value is a value` to the type text, and
+  `starmap diff` reports a change of the field `empty`. The glossary's new
+  empty entry states the rule for any implementation.
 - `starmap_test::check_together` checks several structs that embed one
   `starmap.toml`, given as `starmap_test::Reader::of::<Serve>()`. A
   declared variable counts as read when any of the structs reads it, and

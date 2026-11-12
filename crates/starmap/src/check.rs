@@ -7,8 +7,8 @@ use std::fmt::{self, Write as _};
 use crate::env::{Held, Member};
 use crate::field::Rule;
 use crate::{
-    Bindings, Bound, Environment, FamilyDeclaration, Field, GroupName, Mode, Name, Secret, Show,
-    Spec, Type, TypeError, Unset, Variable,
+    Bindings, Bound, Empty, Environment, FamilyDeclaration, Field, GroupName, Mode, Name, Secret,
+    Show, Spec, Type, TypeError, Unset, Variable,
 };
 
 #[cfg(test)]
@@ -26,9 +26,10 @@ mod tests;
 /// An empty value, such as the value of `FOO=`, counts as unset, so
 /// `capture` binds nothing for it. When `vars` names a variable more than
 /// once, the last non-empty value is bound, and an empty later value leaves
-/// an earlier value in place. A variable that reads its
-/// [presence](Variable::presence) is the exception: an empty value sets
-/// it, so `capture` binds its last value, empty or not.
+/// an earlier value in place. A variable whose [`Variable::empty`] is
+/// [`Empty::Value`] is the exception, which is a variable declared with
+/// `empty = "value"` or one that reads its presence: an empty value is a
+/// value for it, so `capture` binds its last value, empty or not.
 ///
 /// The caller passes the environment in, such as `std::env::vars_os()`,
 /// because the crate reads no environment variable itself.
@@ -42,7 +43,7 @@ pub fn capture(spec: &Spec, vars: impl IntoIterator<Item = (OsString, OsString)>
         let Some(declaration) = spec.declared(&name) else {
             continue;
         };
-        if raw.is_empty() && !declaration.variable().presence() {
+        if raw.is_empty() && declaration.variable().empty() == Empty::Unset {
             continue;
         }
         let bound = declaration.variable().capture(raw);
@@ -90,8 +91,10 @@ fn discard(raw: OsString) {
 
 /// Decides the mode from the mode variable, read as [`check`] reads it. A
 /// spec without a `[mode]` table always runs in local mode. When nothing
-/// binds the mode variable, or its value is empty, counts as unset or is not
-/// Unicode, its local default decides. Any other value that does not fit
+/// binds the mode variable, or its value counts as unset or is not
+/// Unicode, its local default decides. An empty value counts as unset
+/// unless the mode variable declares `empty = "value"`, and its type then
+/// reads it. Any other value that does not fit
 /// its type decides local mode, and `check` refuses it.
 #[must_use]
 pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
@@ -124,8 +127,11 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 ///
 /// An empty bound value, shown or withheld, counts as unset before any type
 /// reads it, so it is treated as unbound. This covers values that do not
-/// pass through [`capture`], such as a provider's value. A variable that
-/// reads its [presence](Variable::presence) is the exception: any bound
+/// pass through [`capture`], such as a provider's value. A variable
+/// declared with `empty = "value"` is the exception: its type reads an
+/// empty value, so a string reads it as empty text and an integer refuses
+/// it, and its default applies only when it is unbound. A variable that
+/// reads its [presence](Variable::presence) is an exception too: any bound
 /// value, an empty one included, sets it and reads as true, and it reads
 /// as false when it is unbound and optional. A bound value is
 /// read in its variable's type, and a value that the type counts as unset,
@@ -437,15 +443,17 @@ fn quote(variable: &Variable, bound: Option<&Bound>, problem: &Problem) -> Optio
 }
 
 /// Reads `bound` as a value of `variable`. `Ok(None)` means the value
-/// counts as unset, which an empty value does unless the variable reads its
-/// presence, which any plain value sets.
+/// counts as unset, which an empty value does unless the variable's
+/// [`Variable::empty`] is [`Empty::Value`]. A variable that reads its
+/// presence holds any plain value it is set to.
 fn read(variable: &Variable, bound: &Bound) -> Result<Option<Held>, Problem> {
+    let empty_unset = variable.empty() == Empty::Unset;
     match (variable.show(), bound) {
         (Show::Shown, Bound::Plain(raw)) if variable.presence() => {
             Ok(Some(Held::Presence(Some(raw.clone()))))
         }
-        (Show::Shown, Bound::Plain(raw)) if raw.is_empty() => Ok(None),
-        (Show::Withheld, Bound::Secret(secret)) if secret.is_empty() => Ok(None),
+        (Show::Shown, Bound::Plain(raw)) if empty_unset && raw.is_empty() => Ok(None),
+        (Show::Withheld, Bound::Secret(secret)) if empty_unset && secret.is_empty() => Ok(None),
         (Show::Shown, Bound::Plain(raw)) => variable
             .value_type()
             .parse(raw)

@@ -276,6 +276,24 @@ fn reading_a_boolean_by_its_presence_is_a_change_of_the_type() {
     );
 }
 
+#[test]
+fn declaring_an_empty_value_a_value_is_a_change_of_the_empty_field_alone() {
+    let value = LISTEN.replace("\"port\"", "\"port\"\nempty = \"value\"");
+    let unset = LISTEN.replace("\"port\"", "\"port\"\nempty = \"unset\"");
+
+    assert_eq!(
+        changes(Some(&spec(LISTEN)), &spec(&value)),
+        vec![Change {
+            change: Kind::Changed,
+            name: "SHELF_LISTEN".to_owned(),
+            field: Some("empty".to_owned()),
+            was: Some("an empty value counts as unset".to_owned()),
+            now: Some("an empty value is a value".to_owned()),
+        }]
+    );
+    assert_eq!(changes(Some(&spec(LISTEN)), &spec(&unset)), Vec::new());
+}
+
 /// A log level setting whose type is the named enumeration `log-level`.
 const LOG_LEVEL: &str = r#"
 [enumerations.log-level]

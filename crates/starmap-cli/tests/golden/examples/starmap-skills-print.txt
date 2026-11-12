@@ -13,7 +13,7 @@ it is unset, and where its value comes from.
 
 Use starmap when a repository has a starmap.toml, when code in `src` reads an
 undeclared environment variable, or when a program needs its variables set
-from a spec. A task that touches no environment variable does not need it.
+from a spec.
 
 The commands read `starmap.toml` in the current directory, or the file that
 `--spec FILE` names. A starmap.toml that holds only `spec = "path"` points to
@@ -59,6 +59,9 @@ beside the spec, then a setting's path bind, then the default. A secret comes
 from its 1Password bind, or from the shell or the macOS Keychain when it has
 none. `.env` and `--set` never give a secret.
 
+`FOO=` counts as unset, unless `FOO` declares `empty = "value"`: then its
+type reads the empty text, which an integer refuses.
+
 `starmap run` asks for a missing required secret only at a terminal. An agent
 has no terminal, so pass `--no-input` and expect `starmap::secret::unbound`
 when a secret has no value, then ask the person for it. Never print a
@@ -102,8 +105,7 @@ again.
 shell loads it. Add `--shell bash|zsh|fish` when `SHELL` does not name the
 shell.
 
-starmap embeds this skill, so the installed copy matches the starmap that wrote
-it. `starmap skills install` writes it into each existing agent skills
+`starmap skills install` writes this skill into each existing agent skills
 directory, `starmap skills check` exits with 1 when a copy is missing or differs
 from this starmap's, and `starmap skills print` prints it.
 
