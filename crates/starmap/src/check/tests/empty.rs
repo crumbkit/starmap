@@ -68,9 +68,8 @@ fn verdict(pairs: &[(&str, &str)]) -> Verdict {
 /// number and is quoted as empty text.
 fn not_an_integer(text: &str) -> Finding {
     Finding {
-        name: name(text),
-        problem: Problem::Invalid(TypeError::NotInteger),
         value: Some(Quote::new(OsStr::new(""))),
+        ..Finding::unquoted(name(text), Problem::Invalid(TypeError::NotInteger))
     }
 }
 

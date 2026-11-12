@@ -85,6 +85,41 @@ fn the_structs_together_read_every_declared_variable() {
 command the child runs. The glossary's
 [scoped read](docs/glossary.md#scoped-read) entry states the rule.
 
+## Checking a value where the application uses it
+
+A field of type `starmap::Deferred<T>`, or `starmap::Deferred<Option<T>>`
+for an optional variable, defers its variable's rules to the point of use.
+The read never refuses because of that variable, and the field holds the
+value or the finding the read would have reported. The application takes
+the value when it needs it, in its own order, and builds its own error from
+the finding:
+
+```rust
+#[derive(starmap::Env)]
+struct Serve {
+    #[starmap("SHELF_CATALOGUE_URL")]
+    catalogue: starmap::Deferred<url::Url>,
+    #[starmap("SHELF_TOKEN")]
+    token: starmap::Deferred<starmap::Secret>,
+    #[starmap("SHELF_PORT")]
+    port: starmap::Port,
+}
+
+fn start() -> Result<(), ShelfError> {
+    let env = Serve::load().map_err(ShelfError::Environment)?; // refuses only SHELF_PORT
+    let catalogue = env.catalogue.get()
+        .map_err(|finding| ShelfError::new("shelf::catalogue::url_invalid", finding))?;
+    let token = env.token.get()
+        .map_err(|finding| ShelfError::new("shelf::auth::token_missing", finding))?;
+    run(catalogue, token, env.port)
+}
+```
+
+The finding names the variable and holds the problem, and its text is the
+text a refused read writes, such as `SHELF_TOKEN is required and has no
+value`. An invalid value of the mode variable still refuses the read. The
+glossary's [deferred](docs/glossary.md#deferred) entry states the rule.
+
 ## Contributing
 
 [AGENTS.md](AGENTS.md) lists the checks that a change must pass, and

@@ -202,6 +202,22 @@ impl Scope<'_> {
                 .is_some_and(|family| family.key_of(name).is_some())
         })
     }
+
+    /// Whether a finding about `name` goes to a deferred field, which holds
+    /// it in place of the check refusing: `name` is the variable of a
+    /// deferred field, and is not the mode variable, because the mode
+    /// decides the other fields.
+    fn defers(self, spec: &Spec, name: &Name) -> bool {
+        let Self::Fields(fields) = self else {
+            return false;
+        };
+        if spec.mode().is_some_and(|rule| rule.variable() == name) {
+            return false;
+        }
+        fields
+            .iter()
+            .any(|field| field.deferred && !field.family && field.name == name.as_str())
+    }
 }
 
 /// Checks `bindings` as [`check`] does, and runs each of `rules`, the
@@ -215,7 +231,9 @@ impl Scope<'_> {
 /// looks at the values of all of its members. The verdict then keeps only
 /// the findings that `scope` covers, so a variable outside the scope never
 /// refuses the check. Such a variable that has a finding holds no value in
-/// the environment.
+/// the environment. A finding about the variable of a deferred field in
+/// `scope`, other than the mode variable, goes into the environment, where
+/// the field reads it, and never refuses the check.
 pub(crate) fn check_with(
     spec: &Spec,
     bindings: &Bindings,
@@ -247,14 +265,9 @@ pub(crate) fn check_with(
     {
         match (result, incomplete) {
             (Ok(held), None) => entries.push((name.clone(), held)),
-            (Ok(_), Some(problem)) => findings.push((
-                place,
-                Finding {
-                    name: name.clone(),
-                    value: None,
-                    problem,
-                },
-            )),
+            (Ok(_), Some(problem)) => {
+                findings.push((place, Finding::unquoted(name.clone(), problem)))
+            }
             (Err(problem), _) => {
                 findings.push((place, finding(name, variable, bindings.get(name), problem)));
             }
@@ -299,24 +312,24 @@ pub(crate) fn check_with(
     }
     findings.retain(|(_, finding)| scope.covers(spec, &finding.name));
     findings.sort_by_key(|(place, _)| *place);
-    let mut findings: Vec<Finding> = findings.into_iter().map(|(_, finding)| finding).collect();
+    let modes = spec.mode().is_some();
+    let (deferred, mut findings): (Vec<Finding>, Vec<Finding>) = findings
+        .into_iter()
+        .map(|(_, finding)| Finding { modes, ..finding })
+        .partition(|finding| scope.defers(spec, &finding.name));
     let decided = self::mode(spec, bindings);
     if let Some(rule) = spec.mode()
         && decided != mode
     {
         findings.push(Finding {
-            name: rule.variable().clone(),
-            problem: Problem::ModeMismatch { decided },
-            value: None,
+            modes,
+            ..Finding::unquoted(rule.variable().clone(), Problem::ModeMismatch { decided })
         });
     }
     if findings.is_empty() {
-        Verdict::Ready(environment)
+        Verdict::Ready(environment.with_deferred(deferred))
     } else {
-        Verdict::Refused(Refusals {
-            findings,
-            modes: spec.mode().is_some(),
-        })
+        Verdict::Refused(Refusals { findings })
     }
 }
 
@@ -339,14 +352,13 @@ fn check_family(
             continue;
         };
         if !family.lists(key) {
-            findings.push(Finding {
-                name: name.clone(),
-                problem: Problem::UnlistedKey {
+            findings.push(Finding::unquoted(
+                name.clone(),
+                Problem::UnlistedKey {
                     family: family.prefix().clone(),
                     keys: family.keys().unwrap_or_default().to_vec(),
                 },
-                value: None,
-            });
+            ));
             continue;
         }
         match read(variable, bound) {
@@ -360,11 +372,7 @@ fn check_family(
             let reported = checked.iter().any(|(held, ..)| *held == name)
                 || findings.iter().any(|finding| finding.name == name);
             if !reported {
-                findings.push(Finding {
-                    name,
-                    problem: Problem::Missing { mode },
-                    value: None,
-                });
+                findings.push(Finding::unquoted(name, Problem::Missing { mode }));
             }
         }
     }
@@ -424,9 +432,8 @@ fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option
 /// `bound`.
 fn finding(name: &Name, variable: &Variable, bound: Option<&Bound>, problem: Problem) -> Finding {
     Finding {
-        name: name.clone(),
         value: quote(variable, bound, &problem),
-        problem,
+        ..Finding::unquoted(name.clone(), problem)
     }
 }
 
@@ -491,9 +498,6 @@ pub enum Verdict {
 #[derive(Debug)]
 pub struct Refusals {
     findings: Vec<Finding>,
-    /// Whether the spec has a `[mode]` table, so that a missing variable's
-    /// text names the mode only when the spec has modes.
-    modes: bool,
 }
 
 impl Refusals {
@@ -505,63 +509,24 @@ impl Refusals {
 }
 
 impl fmt::Display for Refusals {
-    /// Writes each finding with its variable's name, separated by `; `,
+    /// Writes each finding as [`Finding`] writes it, separated by `; `,
     /// such as `SHELF_PORT is required and has no value; SHELF_DEBUG: the
     /// value is not one of the words 1, 0, true, false, yes, no, on and
-    /// off`. A missing variable names its mode only when the spec has a
-    /// `[mode]` table. A value that a field's own check refuses is written
-    /// with the check's reason, as in `SHELF_PORT: the port must be above
-    /// 1024`. An invalid or refused value of a shown variable is quoted after
-    /// the reason, as in `SHELF_PORT: the value is not a port from 1 to
-    /// 65535 (the value is "80a")`, as [`Quote`] writes it. The text never
-    /// repeats a withheld variable's value or a value held as a secret.
+    /// off`.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (index, finding) in self.findings.iter().enumerate() {
             if index > 0 {
                 formatter.write_str("; ")?;
             }
-            let name = &finding.name;
-            match &finding.problem {
-                Problem::Missing { mode } if self.modes => {
-                    write!(
-                        formatter,
-                        "{name} is required in {mode} mode and has no value"
-                    )
-                }
-                Problem::Missing { .. } => write!(formatter, "{name} is required and has no value"),
-                Problem::Invalid(error) => {
-                    write!(formatter, "{name}: {error}")?;
-                    finding.write_quote(formatter)
-                }
-                Problem::Rejected { reason } => {
-                    write!(formatter, "{name}: {reason}")?;
-                    finding.write_quote(formatter)
-                }
-                Problem::ShowMismatch { show } => write!(
-                    formatter,
-                    "{name} has a value of the wrong kind for a {show} variable"
-                ),
-                Problem::ModeMismatch { decided } => {
-                    write!(formatter, "{name} decides {decided} mode")
-                }
-                Problem::GroupIncomplete { group, set } => {
-                    let verb = if set.len() == 1 { "is" } else { "are" };
-                    write!(
-                        formatter,
-                        "{name} is unset, and the group {group} needs it because {} {verb} set",
-                        Names(set)
-                    )
-                }
-                Problem::UnlistedKey { family, keys } => {
-                    write!(formatter, "{}", UnlistedKey { name, family, keys })
-                }
-            }?;
+            finding.fmt(formatter)?;
         }
         Ok(())
     }
 }
 
-/// A variable that stops a check from passing, and why.
+/// A variable that stops a check from passing, and why. A field of type
+/// [`Deferred`](crate::Deferred) holds the finding of its variable in place
+/// of the read refusing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Finding {
@@ -574,9 +539,73 @@ pub struct Finding {
     /// [`Bound::Plain`] has one; a withheld variable, a value held as a
     /// secret, a default, a missing variable and a mode mismatch never do.
     pub value: Option<Quote>,
+    /// Whether the spec has a `[mode]` table, so that a missing variable's
+    /// text names the mode only when the spec has modes.
+    modes: bool,
+}
+
+impl fmt::Display for Finding {
+    /// Writes the finding with its variable's name, as [`Refusals`] writes
+    /// it, such as `SHELF_PORT is required and has no value`. A missing
+    /// variable names its mode only when the spec has a `[mode]` table. A
+    /// value that a field's own check refuses is written with the check's
+    /// reason, as in `SHELF_PORT: the port must be above 1024`. An invalid
+    /// or refused value of a shown variable is quoted after the reason, as
+    /// in `SHELF_PORT: the value is not a port from 1 to 65535 (the value
+    /// is "80a")`, as [`Quote`] writes it. The text never repeats a
+    /// withheld variable's value or a value held as a secret.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = &self.name;
+        match &self.problem {
+            Problem::Missing { mode } if self.modes => {
+                write!(
+                    formatter,
+                    "{name} is required in {mode} mode and has no value"
+                )
+            }
+            Problem::Missing { .. } => write!(formatter, "{name} is required and has no value"),
+            Problem::Invalid(error) => {
+                write!(formatter, "{name}: {error}")?;
+                self.write_quote(formatter)
+            }
+            Problem::Rejected { reason } => {
+                write!(formatter, "{name}: {reason}")?;
+                self.write_quote(formatter)
+            }
+            Problem::ShowMismatch { show } => write!(
+                formatter,
+                "{name} has a value of the wrong kind for a {show} variable"
+            ),
+            Problem::ModeMismatch { decided } => {
+                write!(formatter, "{name} decides {decided} mode")
+            }
+            Problem::GroupIncomplete { group, set } => {
+                let verb = if set.len() == 1 { "is" } else { "are" };
+                write!(
+                    formatter,
+                    "{name} is unset, and the group {group} needs it because {} {verb} set",
+                    Names(set)
+                )
+            }
+            Problem::UnlistedKey { family, keys } => {
+                write!(formatter, "{}", UnlistedKey { name, family, keys })
+            }
+        }
+    }
 }
 
 impl Finding {
+    /// Returns the finding of `name` for `problem`, without a quote. The
+    /// check sets whether the spec has modes before it reports the finding.
+    pub(crate) fn unquoted(name: Name, problem: Problem) -> Self {
+        Self {
+            name,
+            problem,
+            value: None,
+            modes: false,
+        }
+    }
+
     /// Writes ` (the value is "…")` after the reason when the finding
     /// quotes its value.
     fn write_quote(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

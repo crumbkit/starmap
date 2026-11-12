@@ -507,3 +507,67 @@ fn check_together_refuses_structs_that_embed_different_files() {
 fn check_together_refuses_an_empty_list_of_structs() {
     check_together(&[], &[]);
 }
+
+/// A copy of the example struct whose fields other than the stage are
+/// deferred, which agrees with its spec.
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/starmap.toml")]
+struct DeferredShelf {
+    #[starmap("SHELF_ENV")]
+    _stage: Stage,
+    #[starmap("SHELF_PORT")]
+    _port: starmap::Deferred<starmap::Port>,
+    #[starmap("SHELF_CATALOGUE_URL")]
+    _catalogue: starmap::Deferred<Option<url::Url>>,
+    #[starmap("SHELF_DATABASE")]
+    _database: starmap::Deferred<PathBuf>,
+    #[starmap("SHELF_DEBUG")]
+    _debug: starmap::Deferred<bool>,
+    #[starmap("SHELF_PAGE_SIZE")]
+    _page_size: starmap::Deferred<u8>,
+    #[starmap("SHELF_MIRROR_TOKEN")]
+    _mirror_token: starmap::Deferred<Option<starmap::Secret>>,
+    #[starmap("SHELF_SESSION_KEY")]
+    _session_key: starmap::Deferred<starmap::Secret>,
+    #[starmap("XDG_STATE_HOME")]
+    _state_home: starmap::Deferred<Option<PathBuf>>,
+}
+
+#[test]
+fn deferred_fields_are_compared_by_the_type_inside_them() {
+    check::<DeferredShelf>();
+}
+
+/// A struct that defers the mode variable, an optional variable without an
+/// `Option`, and a variable that always has a value with one.
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/starmap.toml")]
+struct DeferredMistakes {
+    #[starmap("SHELF_ENV")]
+    _stage: starmap::Deferred<Stage>,
+    #[starmap("SHELF_CATALOGUE_URL")]
+    _catalogue: starmap::Deferred<url::Url>,
+    #[starmap("SHELF_PAGE_SIZE")]
+    _page_size: starmap::Deferred<Option<u8>>,
+}
+
+#[test]
+fn a_deferred_mode_variable_and_a_deferred_field_of_the_wrong_presence_are_reported() {
+    let allow = [
+        Allow::new("SHELF_PORT", "another struct reads it"),
+        Allow::new("SHELF_DATABASE", "another struct reads it"),
+        Allow::new("SHELF_DEBUG", "another struct reads it"),
+        Allow::new("SHELF_MIRROR_TOKEN", "another struct reads it"),
+        Allow::new("SHELF_SESSION_KEY", "another struct reads it"),
+        Allow::new("XDG_STATE_HOME", "another struct reads it"),
+    ];
+    let actual = report::<DeferredMistakes>(EXAMPLE, &allow);
+
+    assert_eq!(
+        actual,
+        "starmap.toml and starmap_test::tests::DeferredMistakes disagree in 3 places:\n  \
+         SHELF_CATALOGUE_URL  starmap.toml lets it stay unset in local mode and production mode, and the field type starmap::Deferred<url::Url> is not starmap::Deferred<Option<url::Url>>\n  \
+         SHELF_ENV            starmap.toml makes it the mode variable, which decides every other variable, and the field type starmap::Deferred<Stage> defers it\n  \
+         SHELF_PAGE_SIZE      starmap.toml always gives it a value, and the field type starmap::Deferred<Option<u8>> holds an unset value"
+    );
+}

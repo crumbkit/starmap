@@ -1,0 +1,47 @@
+error[E0277]: starmap cannot read a variable into `Deferred<starmap::url::Url>`
+  --> tests/compile_fail/deferred_family.rs:10:32
+   |
+10 |     databases: starmap::Family<starmap::Deferred<starmap::url::Url>>,
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this field type is not one that starmap reads
+   |
+   = help: the trait `starmap::__private::FieldType` is not implemented for `Deferred<starmap::url::Url>`
+   = note: a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, Vec<u8>, starmap::Secret, starmap::SecretBytes or a type that derives starmap::Enumeration, and each may be inside an Option
+   = help: the following other types implement trait `starmap::__private::FieldType`:
+             PathBuf
+             SecretBytes
+             Vec<u8>
+             bool
+             i16
+             i32
+             i64
+             i8
+           and $N others
+note: required by a bound in `starmap::Field::of_family`
+  --> src/field.rs
+   |
+   |     pub const fn of_family<T: FieldType>(prefix: &'static str, rust_type: &'static str) -> Self {
+   |                               ^^^^^^^^^ required by this bound in `Field::of_family`
+
+error[E0277]: starmap cannot read a variable into `Deferred<starmap::url::Url>`
+  --> tests/compile_fail/deferred_family.rs:10:32
+   |
+10 |     databases: starmap::Family<starmap::Deferred<starmap::url::Url>>,
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this field type is not one that starmap reads
+   |
+   = help: the trait `starmap::__private::FieldType` is not implemented for `Deferred<starmap::url::Url>`
+   = note: a field of a struct that derives starmap::Env is PathBuf, starmap::Port, url::Url, std::net::SocketAddr, bool, an integer type of at most 64 bits, String, OsString, Vec<u8>, starmap::Secret, starmap::SecretBytes or a type that derives starmap::Enumeration, and each may be inside an Option
+   = help: the following other types implement trait `starmap::__private::FieldType`:
+             PathBuf
+             SecretBytes
+             Vec<u8>
+             bool
+             i16
+             i32
+             i64
+             i8
+           and $N others
+note: required by a bound in `starmap::__private::read_family`
+  --> src/family.rs
+   |
+   | pub fn read_family<T: FieldType>(
+   |                       ^^^^^^^^^ required by this bound in `read_family`

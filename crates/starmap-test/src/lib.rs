@@ -84,6 +84,11 @@ pub fn check<E: Env>() {
 /// prefix must name a family, and its value type must fit the family's
 /// type and show. A declared family that no field reads is a disagreement,
 /// as a declared variable is, and an [`Allow`] entry may name its prefix.
+/// A `starmap::Deferred<T>` field is compared by the `T` inside it, and
+/// its variable must always have a value, as a `T` field's must; a
+/// `Deferred<Option<T>>` field is compared as an `Option<T>` field is. A
+/// deferred field that reads the mode variable is a disagreement, because
+/// the read refuses an invalid mode value even when its field is deferred.
 /// An [`Allow`] entry that excuses nothing,
 /// because the struct reads the variable or the spec does not declare it,
 /// is a disagreement too.
@@ -214,7 +219,19 @@ fn compare_together(
             }
         } else {
             match name.as_ref().and_then(|name| spec.variable(name)) {
-                Some(variable) => disagreements(file, field, variable, spec.mode().is_some()),
+                Some(variable) => {
+                    let mut found = disagreements(file, field, variable, spec.mode().is_some());
+                    let mode_variable = spec
+                        .mode()
+                        .is_some_and(|rule| Some(rule.variable()) == name.as_ref());
+                    if field.deferred && mode_variable {
+                        found.push(format!(
+                            "{file} makes it the mode variable, which decides every other variable, and the field type {} defers it",
+                            written(field, field.presence)
+                        ));
+                    }
+                    found
+                }
                 None => {
                     vec!["the struct reads it, and starmap.toml does not declare it".to_owned()]
                 }
@@ -310,7 +327,6 @@ fn compare_together(
 /// declares. `has_mode` says whether the spec has a `[mode]` table, without
 /// which the variable is only ever read in local mode.
 fn disagreements(file: &str, field: &Field, variable: &Variable, has_mode: bool) -> Vec<String> {
-    let rust_type = field.rust_type;
     let mut found = kinds(file, field, variable);
     let modes: &[Mode] = if has_mode {
         &[Mode::Local, Mode::Production]
@@ -325,16 +341,38 @@ fn disagreements(file: &str, field: &Field, variable: &Variable, has_mode: bool)
         .map(|mode| format!("{mode} mode"))
         .collect();
     match (field.presence, unset_in.is_empty()) {
-        (Presence::Always, false) => found.push(format!(
-            "{file} lets it stay unset in {}, and the field type {rust_type} is not inside an Option",
-            unset_in.join(" and ")
-        )),
+        (Presence::Always, false) => {
+            let fix = if field.deferred {
+                format!("is not {}", written(field, Presence::Maybe))
+            } else {
+                "is not inside an Option".to_owned()
+            };
+            found.push(format!(
+                "{file} lets it stay unset in {}, and the field type {} {fix}",
+                unset_in.join(" and "),
+                written(field, Presence::Always)
+            ));
+        }
         (Presence::Maybe, true) => found.push(format!(
-            "{file} always gives it a value, and the field type Option<{rust_type}> holds an unset value"
+            "{file} always gives it a value, and the field type {} holds an unset value",
+            written(field, Presence::Maybe)
         )),
         _ => {}
     }
     found
+}
+
+/// Returns the type of `field` as the struct writes it with `presence`,
+/// such as `Option<url::Url>`, or `starmap::Deferred<Option<url::Url>>`
+/// for a deferred field.
+fn written(field: &Field, presence: Presence) -> String {
+    let rust_type = field.rust_type;
+    match (field.deferred, presence) {
+        (false, Presence::Always) => rust_type.to_owned(),
+        (false, Presence::Maybe) => format!("Option<{rust_type}>"),
+        (true, Presence::Always) => format!("starmap::Deferred<{rust_type}>"),
+        (true, Presence::Maybe) => format!("starmap::Deferred<Option<{rust_type}>>"),
+    }
 }
 
 /// Returns each way the show and the shape of `field` disagree with

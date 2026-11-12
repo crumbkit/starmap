@@ -64,13 +64,26 @@ pub(crate) fn expand(input: &DeriveInput) -> syn::Result<TokenStream> {
             }
             FieldAttribute::Variable { name, check } => (name, check),
         };
-        let (inner, presence, method) = match option_inner(&field.ty) {
-            Some(inner) => (inner, quote!(Maybe), quote!(read)),
-            None => (&field.ty, quote!(Always), quote!(require)),
+        // A Deferred<T> or Deferred<Option<T>> field describes and checks
+        // the T inside it, and reads into the Deferred.
+        let (ty, deferred) = match deferred_inner(&field.ty) {
+            Some(inner) => (inner, true),
+            None => (&field.ty, false),
+        };
+        let (inner, presence, method) = match (option_inner(ty), deferred) {
+            (Some(inner), false) => (inner, quote!(Maybe), quote!(read)),
+            (None, false) => (ty, quote!(Always), quote!(require)),
+            (Some(inner), true) => (inner, quote!(Maybe), quote!(defer_optional)),
+            (None, true) => (ty, quote!(Always), quote!(defer)),
         };
         let rust_type = type_text(inner);
+        let describe = if deferred {
+            quote!(of_deferred)
+        } else {
+            quote!(new)
+        };
         let description = quote_spanned! {inner.span()=>
-            ::starmap::Field::new::<#inner>(#name, #rust_type, ::starmap::Presence::#presence)
+            ::starmap::Field::#describe::<#inner>(#name, #rust_type, ::starmap::Presence::#presence)
         };
         reads.push(quote! {
             #member: #description.#method::<#inner>(environment)?
@@ -235,6 +248,11 @@ fn field_attribute(field: &syn::Field) -> syn::Result<FieldAttribute> {
         (Some(attribute), None) => attribute.parse_args::<FieldAttribute>(),
         _ => Err(syn::Error::new(field.span(), FIELD_ATTRIBUTE)),
     }
+}
+
+/// Returns `T` when `ty` is `Deferred<T>`, under any path.
+fn deferred_inner(ty: &Type) -> Option<&Type> {
+    generic_inner(ty, "Deferred")
 }
 
 /// Returns `T` when `ty` is `Option<T>`.

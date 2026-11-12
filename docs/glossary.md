@@ -416,7 +416,10 @@ its type refuses, is not passed to its check. A refused value is the
 finding `Problem::Rejected` with the check's reason, among the other
 findings in the spec's order, and is written as `SHELF_PORT: the port must
 be above 1024`. A shown variable's value is quoted after the reason, as an
-invalid value is, and a withheld variable's value never is.
+invalid value is, and a withheld variable's value never is. The check of a
+[deferred](#deferred) field runs in the same pass, and its
+`Problem::Rejected` finding goes into the field in place of refusing the
+read.
 
 The optional `check` field of a variable in `starmap.toml` is one sentence
 that states the check for a reader, such as
@@ -449,7 +452,9 @@ each command of an application can read its own struct from one
 The read still checks every variable, and then reports only the findings
 about the variables it enforces. A group's rule therefore looks at the
 values of all of its members, and a `Problem::GroupIncomplete` finding
-refuses the read only when it names a member the struct reads.
+refuses the read only when it names a member the struct reads. A finding
+about the variable of a [deferred](#deferred) field goes into the field
+and never refuses the read.
 
 `starmap::check` and `starmap run` check the whole file. `starmap run`
 prepares the environment of a child process and does not know which
@@ -469,6 +474,41 @@ Another implementation that reads some of a file's variables enforces the
 rules of those variables and of the mode variable, and reports a group's
 finding only on a member it reads. A tool that prepares a whole
 environment for a child process enforces every variable.
+
+## deferred
+
+A deferred field is a field whose variable's rules the application checks
+where it uses the value. A field of type `starmap::Deferred<T>`, or
+`starmap::Deferred<Option<T>>` for an optional variable, where `T` is any
+type a field of one variable holds, defers every rule of its variable: the
+unset rule, the type, the group rule and the field's own check. A scoped
+read never refuses because of a deferred variable. The field holds the
+checked value, or the `Finding` that the read would have reported, and
+`Deferred::get` returns `Result<&T, &Finding>`.
+
+The finding names the variable, holds the `Problem`, such as
+`Problem::Missing` or `Problem::Invalid(TypeError::NotUrl(..))`, and quotes
+a shown value as a refused read does. Its `Display` writes the same text
+that a refused read writes for that variable, such as `SHELF_TOKEN is
+required and has no value`. The application matches on the problem, or
+uses the text, and builds its own error with its own code. Because the
+unset rule is deferred too, the application chooses the order in which it
+reports a bad address and a missing secret.
+
+Two cases still refuse the read, because each is a mistake in the program.
+A deferred field that reads the mode variable defers nothing, and an
+invalid mode value refuses the read, because the mode decides the other
+fields. A `Deferred<T>` field whose variable stays unset, because the
+variable is optional, gives `ReadError::Field`, as a `T` field does; the
+fix is `Deferred<Option<T>>`. `starmap_test::check` reports both. A family
+field cannot be deferred, and `Family<Deferred<T>>` fails to compile.
+
+Another implementation may hand a variable's finding to the application at
+the point of use in place of refusing the read. The finding it hands over
+is the finding that a read which did not defer the variable reports, with
+the same problem, quote and text, and the mode variable is never deferred.
+A tool that prepares a whole environment for a child process defers
+nothing.
 
 ## flag override
 
