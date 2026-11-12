@@ -1,11 +1,12 @@
-//! The parser of the arrays a type lists: an enumeration's choices and a
-//! url type's schemes. Each array has at least one value and repeats none.
+//! The parser of the arrays a type lists: an enumeration's choices, a url
+//! type's schemes and a boolean type's spellings. Each array has at least
+//! one value and repeats none.
 
 use std::fmt::Display;
 use std::str::FromStr;
 
 use super::{Field, Kind, Parser, span};
-use crate::{Choice, Choices, ChoicesError, Scheme, Schemes, SchemesError, Type};
+use crate::{Choice, Choices, ChoicesError, Scheme, Schemes, SchemesError, Spellings, Type};
 
 impl Parser {
     /// Parses `{ url = { schemes = [..] } }`, whose schemes are optional.
@@ -24,6 +25,29 @@ impl Parser {
         };
         Some(Type::Url {
             schemes: Some(schemes),
+        })
+    }
+
+    /// Parses `{ boolean = { true = [..], false = [..] } }`, which needs
+    /// both lists.
+    pub(super) fn boolean_type(&mut self, field: &Field<'_>) -> Option<Type> {
+        let table = self.table(field)?;
+        self.known(table, &field.path, &["true", "false"]);
+        let mut spellings = |name: &str| {
+            let list = self.required(field, table, name)?;
+            self.texts::<String>(&list)
+        };
+        let (for_true, for_false) = (spellings("true"), spellings("false"));
+        let spellings = Spellings::new(for_true?, for_false?);
+        let spellings = self.checked(
+            field.span(),
+            &field.path,
+            "",
+            Kind::EmptyEnumeration,
+            spellings,
+        )?;
+        Some(Type::Boolean {
+            spellings: Some(spellings),
         })
     }
 

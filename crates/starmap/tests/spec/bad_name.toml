@@ -1,5 +1,5 @@
-# A variable name holds a lower case letter.
-[variables.shelf_port]
+# A variable name holds a hyphen.
+[variables.SHELF-PORT]
 purpose = "The port the api process listens on."
 type = "port"
 unset = "required"

@@ -61,7 +61,7 @@
 //! `std::env::vars_os` returns. It misses a clap `env` whose value is not
 //! a string literal, such as `#[arg(env = NAME)]` with a constant, and one
 //! inside `cfg_attr`. It misses a clap `env` whose literal is not a valid
-//! starmap name, such as `env = "lower_case"`, although clap reads that
+//! starmap name, such as `env = "kebab-case"`, although clap reads that
 //! variable. It reads a bare clap `env` under the wrong name when
 //! clap does not name the variable after the field in upper case: when the
 //! attribute sets `id`, when the struct sets `rename_all_env`, and when

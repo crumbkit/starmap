@@ -193,9 +193,11 @@ fn disagreements(file: &str, field: &Field, variable: &Variable, has_mode: bool)
     } else {
         &[Mode::Local]
     };
+    // A variable that reads its presence always has a value, true or false.
     let unset_in: Vec<String> = modes
         .iter()
         .filter(|mode| matches!(variable.unset().in_mode(**mode), Unset::Optional))
+        .filter(|_| !variable.presence())
         .map(|mode| format!("{mode} mode"))
         .collect();
     match (field.presence, unset_in.is_empty()) {
@@ -240,7 +242,7 @@ fn shape(file: &str, field: &Field, ty: &Type) -> Vec<String> {
         | (Shape::Port, Type::Port)
         | (Shape::Url, Type::Url { .. })
         | (Shape::SocketAddress, Type::SocketAddress)
-        | (Shape::Boolean, Type::Boolean)
+        | (Shape::Boolean, Type::Boolean { .. })
         | (Shape::String | Shape::OsString, Type::String { .. })
         | (Shape::Bytes, Type::Bytes(_))
         | (Shape::OsString, Type::Path { .. }) => Vec::new(),

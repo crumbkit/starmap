@@ -44,6 +44,17 @@ pub(crate) enum Held {
     Withheld(Secret),
     /// The text of a withheld bytes variable, and the bytes it decodes to.
     WithheldBytes(Secret, SecretBytes),
+    /// A variable that reads its presence: its raw value when it is set,
+    /// which may be empty, and `None` when it is absent.
+    Presence(Option<OsString>),
+}
+
+impl Held {
+    /// Whether the value counts as set in the variable's group, which
+    /// every value does except an absent variable that reads its presence.
+    pub(crate) fn is_set(&self) -> bool {
+        !matches!(self, Self::Presence(None))
+    }
 }
 
 impl Environment {
@@ -106,11 +117,15 @@ impl Environment {
 
     /// Returns the value of the shown variable `name`. It returns `None`
     /// when the variable stays unset, is not declared, or is withheld,
-    /// whose value only [`Environment::secret`] returns.
+    /// whose value only [`Environment::secret`] returns. A variable that
+    /// reads its presence always has a value: `true` when it is set to any
+    /// value, an empty one included, and `false` when it is absent.
     #[must_use]
     pub fn value(&self, name: &Name) -> Option<&Value> {
         match self.held(name)? {
             Held::Shown(value) => Some(value),
+            Held::Presence(Some(_)) => Some(&Value::Boolean(true)),
+            Held::Presence(None) => Some(&Value::Boolean(false)),
             Held::Withheld(_) | Held::WithheldBytes(..) => None,
         }
     }
@@ -122,7 +137,7 @@ impl Environment {
     pub fn secret(&self, name: &Name) -> Option<&Secret> {
         match self.held(name)? {
             Held::Withheld(secret) | Held::WithheldBytes(secret, _) => Some(secret),
-            Held::Shown(_) => None,
+            Held::Shown(_) | Held::Presence(_) => None,
         }
     }
 
@@ -133,15 +148,22 @@ impl Environment {
     pub fn secret_bytes(&self, name: &Name) -> Option<&SecretBytes> {
         match self.held(name)? {
             Held::WithheldBytes(_, bytes) => Some(bytes),
-            Held::Withheld(_) | Held::Shown(_) => None,
+            Held::Withheld(_) | Held::Shown(_) | Held::Presence(_) => None,
         }
     }
 
     /// Sets each declared variable that has a value, and each member of a
     /// family that has one, in `command`'s environment, and removes each
-    /// declared variable that stays unset.
+    /// declared variable that stays unset. A variable that reads its
+    /// presence keeps the value it was set to, and is removed when it is
+    /// absent.
     /// It leaves every other variable of `command` as it was, so the caller
     /// decides whether the child inherits the rest of the environment.
+    ///
+    /// On Windows, where an environment name ignores ASCII case, it does not
+    /// remove an unset variable whose name matches, ignoring ASCII case, the
+    /// name of a variable it sets, because the removal would remove that
+    /// variable too.
     ///
     /// The command keeps its own copy of each withheld value, and that copy
     /// is not zeroed when the command is dropped, because `Command` holds
@@ -157,7 +179,17 @@ impl Environment {
                 Some(Held::Withheld(secret) | Held::WithheldBytes(secret, _)) => {
                     command.env(name.as_str(), secret.expose())
                 }
-                None => command.env_remove(name.as_str()),
+                Some(Held::Presence(Some(raw))) => command.env(name.as_str(), raw),
+                Some(Held::Presence(None)) | None => {
+                    let set = self.entries.iter().filter_map(|(other, held)| match held {
+                        Some(Held::Presence(None)) | None => None,
+                        Some(_) => Some(other),
+                    });
+                    if !removes(name, set, cfg!(windows)) {
+                        continue;
+                    }
+                    command.env_remove(name.as_str())
+                }
             };
         }
     }
@@ -229,4 +261,13 @@ impl Environment {
             .find(|(declared, _)| declared == name)
             .and_then(|(_, held)| held.as_ref())
     }
+}
+
+/// Whether [`Environment::apply`] removes the unset variable `name`, given
+/// `set`, the names of the variables the same apply sets. It always removes
+/// `name` when `ignore_case` is false. When `ignore_case` is true, as on
+/// Windows, it keeps `name` when one of `set` matches it ignoring ASCII case,
+/// because removing `name` there would remove that variable too.
+fn removes<'a>(name: &Name, mut set: impl Iterator<Item = &'a Name>, ignore_case: bool) -> bool {
+    !ignore_case || !set.any(|other| other.as_str().eq_ignore_ascii_case(name.as_str()))
 }

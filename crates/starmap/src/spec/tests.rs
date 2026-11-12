@@ -15,6 +15,9 @@ use crate::{
     Name, Placeholder, Scheme, SecretRef, Type, Value,
 };
 
+mod boolean;
+mod presence;
+
 /// The example spec in `crates/starmap/tests/example/starmap.toml`.
 const EXAMPLE: &str = include_str!("../../tests/example/starmap.toml");
 
@@ -192,7 +195,7 @@ fn the_example_spec_reads_each_type() {
     assert_eq!(ty("SHELF_CATALOGUE_URL"), Type::Url { schemes: None });
     assert_eq!(ty("SHELF_DATABASE"), Type::Path { absolute: false });
     assert_eq!(ty("XDG_STATE_HOME"), Type::Path { absolute: true });
-    assert_eq!(ty("SHELF_DEBUG"), Type::Boolean);
+    assert_eq!(ty("SHELF_DEBUG"), Type::Boolean { spellings: None });
     assert_eq!(ty("SHELF_MIRROR_TOKEN"), Type::String { pattern: None });
     assert_eq!(
         ty("SHELF_PAGE_SIZE"),
@@ -901,13 +904,24 @@ fn an_empty_production_list_is_refused() {
 fn the_parser_reports_every_problem_at_once() {
     let text = "[variables.A]\npurpose = \"?\"\ntype = \"port\"\nunset = \"required\"\n\
          show = \"shown\"\nsource = \"setting\"\n\n\
-         [variables.b]\npurpose = \"B.\"\ntype = \"port\"\nunset = \"required\"\n\
+         [variables.B-C]\npurpose = \"B.\"\ntype = \"port\"\nunset = \"required\"\n\
          show = \"shown\"\nsource = \"setting\"\n";
 
     assert_eq!(
         kinds(text),
         [SpecProblemKind::Guess, SpecProblemKind::BadName]
     );
+}
+
+#[test]
+fn a_variable_name_in_lower_case_parses_and_keeps_its_case() {
+    let text = "[variables.https_proxy]\npurpose = \"The proxy for https requests.\"\n\
+         type = \"url\"\nunset = \"optional\"\nshow = \"shown\"\nsource = \"inherited\"\n";
+    let spec = spec(text);
+
+    assert!(spec.variable(&name("https_proxy")).is_some());
+    assert!(spec.variable(&name("HTTPS_PROXY")).is_none());
+    assert!(spec.to_toml().starts_with("[variables.https_proxy]\n"));
 }
 
 #[test]

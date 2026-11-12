@@ -371,6 +371,9 @@ pub struct Variable {
     /// which the file's optional `check` field states.
     check: Option<String>,
     value_type: Type,
+    /// Whether any value, an empty one included, sets the variable, which
+    /// the file's optional `presence` field states.
+    presence: bool,
     unset: UnsetRule,
     show: Show,
     source: Source,
@@ -425,6 +428,16 @@ impl Variable {
     #[must_use]
     pub fn value_type(&self) -> &Type {
         &self.value_type
+    }
+
+    /// Returns whether the variable reads its presence, which the file's
+    /// `presence = true` states beside `type = "boolean"`. Any value, an
+    /// empty one included, then sets the variable and reads as true, and
+    /// the variable reads as false when it is absent. `NO_COLOR` is such a
+    /// variable.
+    #[must_use]
+    pub fn presence(&self) -> bool {
+        self.presence
     }
 
     /// Returns what happens when the variable has no value, in each mode.
@@ -658,7 +671,7 @@ pub enum SpecProblemKind {
     /// A value has the wrong TOML type, or is not one of the values its key
     /// takes.
     BadValue,
-    /// A variable name is not upper case letters, digits and underscores.
+    /// A variable name is not ASCII letters, digits and underscores.
     BadName,
     /// A value still ends in the `?` that `starmap init` wrote, or a
     /// purpose is `?`.
@@ -671,7 +684,8 @@ pub enum SpecProblemKind {
     /// or does not compile.
     BadPattern,
     /// An enumeration, a url type's scheme list, or the mode's production
-    /// list has no values or repeats one.
+    /// list has no values or repeats one; or a boolean type's spellings
+    /// have an empty list, an empty spelling or a spelling listed twice.
     EmptyEnumeration,
     /// A secret or generated variable is shown.
     ShownSecret,
@@ -769,7 +783,7 @@ const TYPE_WORDS: &[(&str, Type)] = &[
     ("port", Type::Port),
     ("url", Type::Url { schemes: None }),
     ("socket-address", Type::SocketAddress),
-    ("boolean", Type::Boolean),
+    ("boolean", Type::Boolean { spellings: None }),
     ("string", Type::String { pattern: None }),
 ];
 /// The words a bytes type's `encoding` takes.

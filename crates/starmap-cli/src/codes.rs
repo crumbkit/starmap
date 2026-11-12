@@ -22,7 +22,7 @@ pub const SPEC_UNKNOWN_FIELD: Code = Code::new("starmap", "spec", "unknown_field
 pub const SPEC_MISSING_FIELD: Code = Code::new("starmap", "spec", "missing_field");
 /// A value has the wrong TOML type or is not one its key takes.
 pub const SPEC_BAD_VALUE: Code = Code::new("starmap", "spec", "bad_value");
-/// A variable name is not upper case letters, digits and underscores.
+/// A variable name is not ASCII letters, digits and underscores.
 pub const SPEC_BAD_NAME: Code = Code::new("starmap", "spec", "bad_name");
 /// A value still ends in the `?` that `starmap init` wrote.
 pub const SPEC_GUESS: Code = Code::new("starmap", "spec", "guess");

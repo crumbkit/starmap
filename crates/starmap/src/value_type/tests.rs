@@ -12,7 +12,7 @@ use crate::Secret;
 
 use super::{
     ByteLength, ByteRule, Choice, ChoiceError, Choices, ChoicesError, Encoding, EnumerationName,
-    EnumerationNameError, IntegerRange, Pattern, Port, Schemes, Type, TypeError, Value,
+    EnumerationNameError, IntegerRange, Pattern, Port, Schemes, Spellings, Type, TypeError, Value,
 };
 use crate::ByteCount;
 
@@ -27,6 +27,9 @@ const BOOLEAN_WORDS: [(&str, bool); 8] = [
     ("on", true),
     ("off", false),
 ];
+
+/// The boolean type that reads the eight words.
+const BOOLEAN: Type = Type::Boolean { spellings: None };
 
 /// The url type that allows any scheme.
 const URL: Type = Type::Url { schemes: None };
@@ -737,7 +740,7 @@ fn a_pattern_that_compiles_past_the_size_limit_is_refused() {
 fn the_boolean_type_reads_each_of_its_eight_words() {
     for (word, value) in BOOLEAN_WORDS {
         assert_eq!(
-            parse(&Type::Boolean, word),
+            parse(&BOOLEAN, word),
             Ok(Some(Value::Boolean(value))),
             "word {word:?}"
         );
@@ -746,9 +749,9 @@ fn the_boolean_type_reads_each_of_its_eight_words() {
 
 #[test]
 fn the_boolean_type_refuses_a_word_with_surrounding_space() {
-    assert_eq!(parse(&Type::Boolean, " true"), Err(TypeError::NotBoolean));
-    assert_eq!(parse(&Type::Boolean, "true "), Err(TypeError::NotBoolean));
-    assert_eq!(parse(&Type::Boolean, ""), Err(TypeError::NotBoolean));
+    assert_eq!(parse(&BOOLEAN, " true"), Err(TypeError::NotBoolean));
+    assert_eq!(parse(&BOOLEAN, "true "), Err(TypeError::NotBoolean));
+    assert_eq!(parse(&BOOLEAN, ""), Err(TypeError::NotBoolean));
 }
 
 proptest! {
@@ -760,7 +763,7 @@ proptest! {
         let (word, value) = BOOLEAN_WORDS[index];
 
         prop_assert_eq!(
-            parse(&Type::Boolean, &with_case(word, &upper)),
+            parse(&BOOLEAN, &with_case(word, &upper)),
             Ok(Some(Value::Boolean(value)))
         );
     }
@@ -773,14 +776,14 @@ proptest! {
         let text = format!("{prefix}{}{suffix}", BOOLEAN_WORDS[index].0);
         prop_assume!(!BOOLEAN_WORDS.iter().any(|(word, _)| word.eq_ignore_ascii_case(&text)));
 
-        prop_assert_eq!(parse(&Type::Boolean, &text), Err(TypeError::NotBoolean));
+        prop_assert_eq!(parse(&BOOLEAN, &text), Err(TypeError::NotBoolean));
     }
 
     #[test]
     fn the_boolean_type_refuses_every_other_string(text in "\\PC{0,6}") {
         prop_assume!(!BOOLEAN_WORDS.iter().any(|(word, _)| word.eq_ignore_ascii_case(&text)));
 
-        prop_assert_eq!(parse(&Type::Boolean, &text), Err(TypeError::NotBoolean));
+        prop_assert_eq!(parse(&BOOLEAN, &text), Err(TypeError::NotBoolean));
     }
 }
 
@@ -974,7 +977,7 @@ fn every_type_except_path_refuses_a_value_that_is_not_unicode() {
         Type::Port,
         Type::Url { schemes: None },
         Type::SocketAddress,
-        Type::Boolean,
+        BOOLEAN,
         Type::Integer(IntegerRange::new(1, 100).unwrap()),
         Type::Enumeration(choices(&["dev"])),
         Type::String { pattern: None },
@@ -1017,7 +1020,7 @@ fn each_type_describes_its_values_for_help_text() {
             "a url whose scheme is one of postgres, postgresql",
         ),
         (Type::SocketAddress, "an ip socket address"),
-        (Type::Boolean, "a boolean"),
+        (BOOLEAN, "a boolean"),
         (
             Type::Integer(IntegerRange::new(-5, 100).unwrap()),
             "a whole number from -5 to 100",
@@ -1033,6 +1036,33 @@ fn each_type_describes_its_values_for_help_text() {
     for (ty, text) in described {
         assert_eq!(ty.to_string(), text);
     }
+}
+
+#[test]
+fn a_spelled_boolean_describes_its_spellings_and_prints_the_spelling_it_read() {
+    let spellings = Spellings::new(
+        ["1".to_owned(), "yes".to_owned()],
+        ["0".to_owned(), "no".to_owned()],
+    )
+    .unwrap();
+    let ty = Type::Boolean {
+        spellings: Some(spellings.clone()),
+    };
+
+    assert_eq!(
+        ty.to_string(),
+        "a boolean spelled 1, yes for true and 0, no for false"
+    );
+    let value = parse(&ty, "yes").unwrap().unwrap();
+    assert_eq!(
+        value,
+        Value::Spelled {
+            value: true,
+            spelling: "yes".to_owned()
+        }
+    );
+    assert_eq!(value.to_string(), "yes");
+    assert_eq!(parse(&ty, "true"), Err(TypeError::NotSpelling(spellings)));
 }
 
 #[test]

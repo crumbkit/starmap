@@ -77,7 +77,7 @@ pub use url;
 pub use value_type::{
     ByteLength, ByteRule, Choice, ChoiceError, Choices, ChoicesError, Encoding, EnumerationName,
     EnumerationNameError, IntegerRange, Pattern, PatternError, Port, PortError, RangeError, Scheme,
-    SchemeError, Schemes, SchemesError, Type, TypeError, Value,
+    SchemeError, Schemes, SchemesError, Spellings, SpellingsError, Type, TypeError, Value,
 };
 
 /// Derives [`Enumeration`] for an enum of unit variants. A variant reads as
@@ -158,7 +158,9 @@ pub trait Env: Sized {
     /// declare, and that is no member of a family, is ignored. An empty value, such as the value of `FOO=`,
     /// counts as unset, so an `Option` field reads it as `None`, a field
     /// with a default reads the default, and a required field refuses the
-    /// read.
+    /// read. A variable that the spec declares with `presence = true` is
+    /// the exception: a `bool` field reads it as `true` when it has any
+    /// value, an empty one included, and as `false` when it is absent.
     ///
     /// # Errors
     ///

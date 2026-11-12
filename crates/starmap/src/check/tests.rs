@@ -188,6 +188,38 @@ fn an_empty_later_value_leaves_an_earlier_value_in_place() {
     ));
 }
 
+#[test]
+fn two_variables_whose_names_differ_only_in_case_hold_their_own_values() {
+    let spec = Spec::parse(
+        r#"
+[variables.HTTP_PROXY]
+purpose = "The proxy for http requests, as most tools name it."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "inherited"
+
+[variables.http_proxy]
+purpose = "The proxy for http requests, as curl names it."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "inherited"
+"#,
+    )
+    .unwrap();
+    let bindings = capture(&spec, vars(&[("http_proxy", "http://lower.example/")]));
+    let environment = ready(check(&spec, &bindings, Mode::Local));
+
+    assert_eq!(
+        environment
+            .value(&name("http_proxy"))
+            .map(ToString::to_string),
+        Some("http://lower.example/".to_owned())
+    );
+    assert_eq!(environment.value(&name("HTTP_PROXY")), None);
+}
+
 // mode
 
 #[test]

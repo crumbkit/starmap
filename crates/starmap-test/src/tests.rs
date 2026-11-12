@@ -327,6 +327,38 @@ source = "setting"
     assert_eq!(compare("Shelf", "starmap.toml", &fields, spec, &[]), Ok(()));
 }
 
+#[test]
+fn a_bool_field_agrees_with_an_optional_variable_that_reads_its_presence_and_an_option_does_not() {
+    let spec = include_str!("../../starmap/tests/example/colour.toml");
+    let field = |presence| [starmap::Field::new::<bool>("NO_COLOR", "bool", presence)];
+
+    assert_eq!(
+        compare(
+            "Shelf",
+            "starmap.toml",
+            &field(starmap::Presence::Always),
+            spec,
+            &[]
+        ),
+        Ok(())
+    );
+    let report = compare(
+        "Shelf",
+        "starmap.toml",
+        &field(starmap::Presence::Maybe),
+        spec,
+        &[],
+    )
+    .unwrap_err();
+    assert!(
+        report.contains(
+            "NO_COLOR  starmap.toml always gives it a value, and the field type Option<bool> \
+             holds an unset value"
+        ),
+        "{report}"
+    );
+}
+
 /// The spec of families in `crates/starmap/tests/example/regions.toml`.
 const REGIONS: &str = include_str!("../../starmap/tests/example/regions.toml");
 

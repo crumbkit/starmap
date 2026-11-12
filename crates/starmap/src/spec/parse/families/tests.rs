@@ -321,7 +321,7 @@ fn overlapping_prefixes_fail_with_bad_family() {
 
 #[test]
 fn a_prefix_that_is_not_a_variable_name_fails_with_bad_name() {
-    let text = FAMILIES.replace("[families.SHELF_DB_URL]", "[families.shelf_db_url]");
+    let text = FAMILIES.replace("[families.SHELF_DB_URL]", "[families.SHELF-DB-URL]");
 
     assert_eq!(kinds(&text), [SpecProblemKind::BadName]);
 }

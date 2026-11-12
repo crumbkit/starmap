@@ -3,6 +3,21 @@
 This page names each starmap concept once. Where a `starmap.toml` and the
 Rust API spell a concept differently, the entry gives both spellings.
 
+## name
+
+A variable's name is the key of its table in `starmap.toml`, as in
+`[variables.SHELF_PORT]`. A name starts with an ASCII letter or an
+underscore and holds only ASCII letters, digits and underscores, so it
+matches `[A-Za-z_][A-Za-z0-9_]*`. A name keeps the case it is written in,
+which lets a file declare a variable that tools read in lower case, such as
+`[variables.https_proxy]`. starmap matches a name exactly, so `HTTPS_PROXY` and `https_proxy` are
+two variables, and a file may declare both. On Windows, where environment
+names ignore case, such a pair is one variable, so a file for a Windows
+application should declare only one of them. The parser refuses any other name
+with `starmap::spec::bad_name`. The Rust API names it `starmap::Name`. A
+family key and a group name have their own rules, which the `family` and
+`group` entries give.
+
 ## type
 
 The `type` field of a variable in `starmap.toml` states what the variable's
@@ -26,11 +41,31 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
 - `{ string = { pattern = "[0-9a-f]{40}" } }` is Unicode text that the
   pattern matches as a whole. `{ string = {} }` is the same type as the word
   `string`, which takes any Unicode text.
+- `{ boolean = { true = ["1", "yes"], false = ["0", "no"] } }` is a boolean
+  that takes only the listed spellings, which the paragraph on booleans
+  below describes.
 
 - `{ bytes = { encoding = "base64", length = 32 } }` is bytes written as
   text in an encoding, whose length after decoding is exactly `length`, or
   at least `min-length` when the table sets that key instead. A bytes table
   takes exactly one of the two lengths.
+
+The word `boolean` reads the eight words `1`, `true`, `yes` and `on` as
+true and `0`, `false`, `no` and `off` as false, in any mix of ASCII case,
+and the value reaches the child process as `true` or `false`. A boolean
+table declares its own spellings for an application that reads other
+words. The table needs both a `true` list and a `false` list. A value
+matches a spelling exactly, so `yes` in a list does not accept `YES`, and
+the eight words are accepted only where a list holds them. The value
+reaches the child process in the spelling it was set in, and a default is
+one of the spellings. The parser refuses an empty list, an empty spelling
+and a spelling listed twice, in one list or in both, with
+`starmap::spec::empty_enumeration`. A value that is no listed spelling
+fails with a text such as
+`the value is not one of 1, yes for true and 0, no for false`. The Rust API
+names the lists `starmap::Spellings`, holds them in `Type::Boolean`, and
+holds a value read through them as `Value::Spelled`, which a `bool` field
+reads.
 
 A bytes type's `encoding` is `hex`, `base64` or `base64url`. `hex` takes two
 digits per byte in upper or lower case. `base64` is RFC 4648 section 4 with
@@ -248,7 +283,42 @@ required variable missing. An empty value in a later layer does not hide a
 value from an earlier one, so `FOO=` in the shell leaves the value that
 `.env` gives `FOO` in place. `starmap::capture` binds nothing for an empty
 value, and `check` treats an empty bound value as unset before any type
-reads it.
+reads it. A variable that reads its presence is the one exception, which
+the next entry describes.
+
+## presence
+
+Some programs read only whether a variable is set. `NO_COLOR` turns colour
+off when it is set to any value, an empty one included. Such a variable is
+declared with `presence = true` beside `type = "boolean"`:
+
+```toml
+[variables.NO_COLOR]
+purpose = "Turns colour off when it is set."
+type = "boolean"
+presence = true
+unset = "optional"
+show = "shown"
+source = "inherited"
+```
+
+Any value sets the variable and reads as true, so `NO_COLOR=`,
+`NO_COLOR=1` and `NO_COLOR=false` are all true. The variable reads as
+false when it is absent. The empty value counts as set for this variable
+only, in every layer, so `NO_COLOR=` in the shell replaces a value that
+`.env` gives it. The child process receives the value exactly as it was
+set, and the variable stays unset in the child when it is absent.
+
+A struct field that reads the variable is a `bool`, because the variable
+always reads as true or false, and `starmap-test` reports an `Option<bool>`
+field. A required variable that reads its presence is missing when it is
+absent. In a group, the variable counts as set only when it has a value.
+
+The parser refuses `presence = true` with `starmap::spec::bad_value`
+beside a type other than the word `boolean`, beside a boolean table that
+declares spellings, and beside a default. A family does not take the key.
+`Variable::presence` returns the field, and `starmap explain` shows the
+type as `boolean (true when set to any value)`.
 
 ## effect
 
@@ -429,7 +499,8 @@ the groups in name order, `Spec::group` returns one by name, and
 `Spec::group_of` returns the group a variable belongs to.
 
 `check` applies the rule after it has read each variable. A member counts
-as set when the check holds a value for it, so `FOO=` counts as unset. When
+as set when the check holds a value for it, so `FOO=` counts as unset,
+unless the variable reads its presence. When
 at least one member is set and another is unset, each unset member that
 has no finding of its own gets `Problem::GroupIncomplete`, which names the
 group and the members that are set. A member that is missing because it is

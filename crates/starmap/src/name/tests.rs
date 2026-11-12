@@ -35,12 +35,27 @@ fn a_name_that_starts_with_a_digit_is_refused_at_its_first_character() {
 }
 
 #[test]
-fn a_lower_case_letter_is_refused_at_its_byte_offset() {
+fn a_name_in_lower_case_is_accepted_and_keeps_its_case() {
+    let name: Name = "https_proxy".parse().unwrap();
+
+    assert_eq!(name.as_str(), "https_proxy");
+}
+
+#[test]
+fn two_names_that_differ_only_in_case_are_different_names() {
+    let upper: Name = "HTTP_PROXY".parse().unwrap();
+    let lower: Name = "http_proxy".parse().unwrap();
+
+    assert_ne!(upper, lower);
+}
+
+#[test]
+fn a_character_outside_the_pattern_is_refused_at_its_byte_offset() {
     assert_eq!(
-        "SHELF_port".parse::<Name>(),
+        "SHELF-PORT".parse::<Name>(),
         Err(NameError::Character {
-            character: 'p',
-            at: 6
+            character: '-',
+            at: 5
         })
     );
 }
@@ -73,11 +88,11 @@ fn the_errors_say_what_a_name_may_hold() {
     );
     assert_eq!(
         NameError::Character {
-            character: 'p',
-            at: 6
+            character: '-',
+            at: 5
         }
         .to_string(),
-        "a variable name holds 'p' at byte 6, and a name holds only upper case \
+        "a variable name holds '-' at byte 5, and a name holds only ASCII \
          letters, digits and underscores and does not start with a digit"
     );
 }
@@ -85,7 +100,7 @@ fn the_errors_say_what_a_name_may_hold() {
 proptest! {
     #[test]
     fn every_string_that_matches_the_pattern_and_fits_the_limit_is_accepted(
-        text in "[A-Z_][A-Z0-9_]{0,127}",
+        text in "[A-Za-z_][A-Za-z0-9_]{0,127}",
     ) {
         let name: Name = text.parse().unwrap();
 
@@ -111,7 +126,7 @@ proptest! {
 
     #[test]
     fn every_string_with_a_character_outside_the_pattern_is_refused(
-        text in "[A-Z0-9_]{0,20}[^A-Z0-9_][A-Z0-9_]{0,20}",
+        text in "[A-Za-z0-9_]{0,20}[^A-Za-z0-9_][A-Za-z0-9_]{0,20}",
     ) {
         prop_assert!(text.parse::<Name>().is_err());
     }

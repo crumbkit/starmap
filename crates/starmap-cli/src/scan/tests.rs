@@ -119,8 +119,21 @@ fn a_name_that_is_not_a_literal_argument_is_not_a_read() {
 
 #[test]
 fn a_literal_that_is_not_a_variable_name_is_not_a_read() {
-    let text = "fn f() { env::var(\"lower_case\"); env::var(\"A B\"); env::var(\"A\\u{42}\"); }";
+    let text = "fn f() { env::var(\"kebab-case\"); env::var(\"A B\"); env::var(\"A\\u{42}\"); }";
     assert_eq!(reads(text), []);
+}
+
+#[test]
+fn a_literal_name_in_lower_case_is_a_read_under_that_name() {
+    let text = "fn f() { env::var(\"https_proxy\"); }\nstruct Env {\n    #[starmap(\"no_proxy\")]\n    no_proxy: String,\n}\nstruct Cli {\n    #[arg(env = \"all_proxy\")]\n    proxy: String,\n}\n";
+    assert_eq!(
+        reads(text),
+        [
+            read("https_proxy", 1),
+            read("no_proxy", 3),
+            read("all_proxy", 7)
+        ]
+    );
 }
 
 #[test]
@@ -226,7 +239,7 @@ fn a_format_read_with_a_leading_a_middle_or_a_second_placeholder_is_unresolved()
 
 #[test]
 fn a_format_read_without_a_placeholder_reads_the_name_it_holds() {
-    let text = "fn f() { env::var(format!(\"SHELF_PORT\")); env::var(format!(\"shelf\")); }";
+    let text = "fn f() { env::var(format!(\"SHELF_PORT\")); env::var(format!(\"shelf-port\")); }";
     assert_eq!(reads(text), [read("SHELF_PORT", 1)]);
     assert_eq!(built(text), [read("?", 1)]);
 }
@@ -323,7 +336,7 @@ fn a_clap_env_on_a_test_only_field_is_skipped() {
 
 #[test]
 fn a_clap_env_literal_that_is_not_a_variable_name_is_not_a_read() {
-    let text = "struct Cli {\n    #[arg(env = \"lower_case\")]\n    a: u8,\n    #[arg(env = \"A B\")]\n    b: u8,\n}\n";
+    let text = "struct Cli {\n    #[arg(env = \"kebab-case\")]\n    a: u8,\n    #[arg(env = \"A B\")]\n    b: u8,\n}\n";
     assert_eq!(reads(text), []);
 }
 

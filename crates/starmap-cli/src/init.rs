@@ -225,14 +225,16 @@ fn locate(path: &Path) -> Result<Located, SpecFailure> {
 
 /// Returns the guesses for the variable `name`, which src reads at
 /// `places`. The name decides each guess, by the rules that
-/// `INHERITED`, `SECRET_WORDS` and `TYPE_ENDINGS` state.
+/// `INHERITED`, `SECRET_WORDS` and `TYPE_ENDINGS` state. The rules compare
+/// the name in upper case, so `shelf_port` gets the guesses of `SHELF_PORT`.
 fn guess(name: Name, places: Vec<String>) -> Guess {
     let text = name.as_str();
-    let inherited = INHERITED.contains(&text) || text.starts_with("XDG_");
-    let secret = !inherited && text.split('_').any(|word| SECRET_WORDS.contains(&word));
+    let upper = text.to_ascii_uppercase();
+    let inherited = INHERITED.contains(&upper.as_str()) || upper.starts_with("XDG_");
+    let secret = !inherited && upper.split('_').any(|word| SECRET_WORDS.contains(&word));
     let ty = TYPE_ENDINGS
         .iter()
-        .find(|(ending, _)| !secret && text.ends_with(ending))
+        .find(|(ending, _)| !secret && upper.ends_with(ending))
         .map_or("string", |(_, ty)| ty);
     let (unset, show, source) = if secret {
         ("optional", "withheld", "secret")
@@ -257,7 +259,7 @@ fn guess(name: Name, places: Vec<String>) -> Guess {
 fn spec_text(guesses: &[Guess]) -> String {
     let mut text = HEADER.to_owned();
     for guess in guesses {
-        // A name holds only upper case letters, digits and underscores, so
+        // A name holds only ASCII letters, digits and underscores, so
         // it needs no quotes. A file name may hold a line break, so the
         // comment escapes it.
         let places = guess.read_at.0.join(", ");
