@@ -8,6 +8,8 @@ use proptest::prelude::*;
 use super::{Finding, Problem, Quote, Verdict, capture, check, mode};
 use crate::{Bindings, Bound, Environment, Mode, Name, Secret, Show, Spec, TypeError, Value};
 
+mod empty;
+
 /// A spec with a mode variable, a required port, a defaulted boolean, an
 /// optional absolute path, and a withheld token that only production
 /// requires.

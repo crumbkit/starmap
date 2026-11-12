@@ -10,8 +10,9 @@ use std::ops::Range;
 use toml_edit::{Document, Item, Key, TableLike};
 
 use super::{
-    ENCODING_WORDS, SHOW_WORDS, SOURCE_WORDS, Show, Source, SourceKind, Spec, SpecError,
-    SpecProblem, SpecProblemKind as Kind, TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule, Variable,
+    EMPTY_WORDS, ENCODING_WORDS, Empty, SHOW_WORDS, SOURCE_WORDS, Show, Source, SourceKind, Spec,
+    SpecError, SpecProblem, SpecProblemKind as Kind, TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule,
+    Variable, word_of,
 };
 use crate::bind::BIND_KINDS;
 use crate::{
@@ -42,8 +43,8 @@ const ROOT_FIELDS: &[&str] = &[
 ];
 /// The keys of a variable's table.
 const VARIABLE_FIELDS: &[&str] = &[
-    "purpose", "effect", "check", "type", "presence", "unset", "show", "source", "bind", "bytes",
-    "tool",
+    "purpose", "effect", "check", "type", "presence", "empty", "unset", "show", "source", "bind",
+    "bytes", "tool",
 ];
 /// What an effect sentence says, as a refusal of one names it.
 const EFFECT_SAYS: &str = "what the application does when the variable is unset";
@@ -424,6 +425,10 @@ impl Parser {
             }
             _ => Some(false),
         };
+        let empty = match field.child(table, "empty") {
+            None => Some(Empty::Unset),
+            Some(empty) => self.empty(&empty, presence),
+        };
         let kind = self
             .required(field, table, "source")
             .and_then(|source| Some((self.word(&source, SOURCE_WORDS)?, source)));
@@ -461,7 +466,7 @@ impl Parser {
             .as_ref()
             .and_then(|(kind, source)| self.source(field, source, *kind, bind, bytes, rule));
         let variable = match (
-            purpose, effect, check, ty, presence, unset, show, source, tools,
+            purpose, effect, check, ty, presence, empty, unset, show, source, tools,
         ) {
             (
                 Some(purpose),
@@ -469,6 +474,7 @@ impl Parser {
                 Some(check),
                 Some((ty, _)),
                 Some(presence),
+                Some(empty),
                 Some(unset),
                 Some((show, _)),
                 Some(source),
@@ -479,6 +485,7 @@ impl Parser {
                 check,
                 value_type: ty,
                 presence,
+                empty,
                 unset,
                 show,
                 source,
@@ -523,6 +530,25 @@ impl Parser {
         let message = format!("`{}` is true, and {rule}", field.path);
         self.report(field.span(), Kind::BadValue, message);
         None
+    }
+
+    /// Parses a variable's `empty` field, and reports one beside a true
+    /// `presence`, because a variable that reads its presence counts an
+    /// empty value as set already. `presence` is the parsed `presence`
+    /// field, or `None` when it did not parse.
+    fn empty(&mut self, field: &Field<'_>, presence: Option<bool>) -> Option<Empty> {
+        let empty = self.word(field, EMPTY_WORDS)?;
+        if presence == Some(true) {
+            let word = word_of(EMPTY_WORDS, &empty);
+            let message = format!(
+                "`{}` is {word:?}, and a variable that reads its presence already counts an \
+                 empty value as set, so it takes no `empty`",
+                field.path
+            );
+            self.report(field.span(), Kind::BadValue, message);
+            return None;
+        }
+        Some(empty)
     }
 
     /// Parses the purpose sentence.

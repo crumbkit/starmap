@@ -351,6 +351,72 @@ fn a_bool_field_of_a_presence_variable_is_true_for_any_value_and_false_when_it_i
     assert!(!env.no_colour);
 }
 
+/// A struct over a spec whose variables count an empty value as a value,
+/// with an application check on the greeting.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/empty.toml")]
+struct Workers {
+    #[starmap("SHELF_WORKERS")]
+    workers: u8,
+    #[starmap("SHELF_GREETING", check = not_blank)]
+    greeting: String,
+}
+
+/// Refuses a greeting that is empty or only white space.
+#[expect(
+    clippy::ptr_arg,
+    reason = "a check takes a reference to the field's type, which is String"
+)]
+fn not_blank(greeting: &String) -> Result<(), String> {
+    if greeting.trim().is_empty() {
+        Err("the greeting is not blank".to_owned())
+    } else {
+        Ok(())
+    }
+}
+
+#[test]
+fn an_empty_value_reaches_the_apps_check_when_the_variable_declares_empty_a_value() {
+    let error = Workers::from_vars(vars(&[("SHELF_WORKERS", ""), ("SHELF_GREETING", "")]))
+        .expect_err("an empty count is not a whole number and an empty greeting is blank");
+
+    let ReadError::Refused(refusals) = &error else {
+        panic!("the empty values refuse the read, and gave {error:?}");
+    };
+    let problems: Vec<(&str, &starmap::Problem)> = refusals
+        .iter()
+        .map(|finding| (finding.name.as_str(), &finding.problem))
+        .collect();
+    assert_eq!(
+        problems,
+        [
+            (
+                "SHELF_WORKERS",
+                &starmap::Problem::Invalid(starmap::TypeError::NotInteger)
+            ),
+            (
+                "SHELF_GREETING",
+                &starmap::Problem::Rejected {
+                    reason: "the greeting is not blank".to_owned()
+                }
+            ),
+        ]
+    );
+    assert_eq!(
+        error.to_string(),
+        "SHELF_WORKERS: the value is not a whole number (the value is \"\"); \
+         SHELF_GREETING: the greeting is not blank (the value is \"\")"
+    );
+}
+
+#[test]
+fn an_absent_variable_that_declares_empty_a_value_takes_its_default() {
+    let env = Workers::from_vars(vars(&[])).expect("both variables have defaults");
+
+    assert_eq!(env.workers, 5);
+    assert_eq!(env.greeting, "Welcome");
+}
+
 #[test]
 fn an_enumeration_variant_reads_as_its_kebab_case_name_with_a_run_of_capitals_as_one_word_or_its_rename()
  {

@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Table, Value as Toml, value};
 
 use super::{
-    ENCODING_WORDS, SHOW_WORDS, SOURCE_WORDS, Source, SourceKind, Spec, TYPE_WORDS, UNSET_WORDS,
-    Unset, UnsetRule, Variable, word_of,
+    EMPTY_WORDS, ENCODING_WORDS, Empty, SHOW_WORDS, SOURCE_WORDS, Source, SourceKind, Spec,
+    TYPE_WORDS, UNSET_WORDS, Unset, UnsetRule, Variable, word_of,
 };
 use crate::{ByteLength, Cache, Mode, Name, SecretBind, SecretRef, Type, Value};
 
@@ -89,6 +89,11 @@ fn variable(variable: &Variable) -> Table {
     table.insert("type", value(value_type(variable.value_type())));
     if variable.presence() {
         table.insert("presence", value(true));
+    }
+    // An empty value counts as unset by default, so the form leaves out
+    // `empty = "unset"` and a file without the field keeps its digest.
+    if variable.empty == Empty::Value {
+        table.insert("empty", value(word_of(EMPTY_WORDS, &variable.empty)));
     }
     table.insert("unset", value(unset(variable.unset())));
     table.insert("show", value(word_of(SHOW_WORDS, &variable.show())));

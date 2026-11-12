@@ -1,8 +1,16 @@
 starmap::spec::bad_value: `variables.SHELF_PORT.show` is "visible", and it takes one of "shown" and "withheld"
-  at: 6:8 to 6:17, bytes 180..189
-   6 | show = "visible"
+  at: 7:8 to 7:17, bytes 265..274
+   7 | show = "visible"
      |        ^^^^^^^^^
 starmap::spec::bad_value: `variables.SHELF_PORT.tool.codegen` is a toml string, and it takes a table
-  at: 8:16 to 8:22, bytes 224..230
-   8 | tool.codegen = "port"
+  at: 9:16 to 9:22, bytes 309..315
+   9 | tool.codegen = "port"
      |                ^^^^^^
+starmap::spec::bad_value: `variables.SHELF_WORKERS.empty` is "blank", and it takes one of "unset" and "value"
+  at: 14:9 to 14:16, bytes 438..445
+  14 | empty = "blank"
+     |         ^^^^^^^
+starmap::spec::bad_value: `variables.NO_COLOR.empty` is "value", and a variable that reads its presence already counts an empty value as set, so it takes no `empty`
+  at: 23:9 to 23:16, bytes 614..621
+  23 | empty = "value"
+     |         ^^^^^^^

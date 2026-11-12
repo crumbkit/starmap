@@ -1,4 +1,5 @@
-# show takes "shown" or "withheld", and each tool table is a table.
+# show takes "shown" or "withheld", each tool table is a table, empty takes
+# "unset" or "value", and a variable that reads its presence takes no empty.
 [variables.SHELF_PORT]
 purpose = "The port the api process listens on."
 type = "port"
@@ -6,3 +7,20 @@ unset = "required"
 show = "visible"
 source = "setting"
 tool.codegen = "port"
+
+[variables.SHELF_WORKERS]
+purpose = "How many catalogue workers run."
+type = { integer = { min = 1, max = 64 } }
+empty = "blank"
+unset = { default = "5" }
+show = "shown"
+source = "setting"
+
+[variables.NO_COLOR]
+purpose = "Turns colour off when it is set."
+type = "boolean"
+presence = true
+empty = "value"
+unset = "optional"
+show = "shown"
+source = "inherited"

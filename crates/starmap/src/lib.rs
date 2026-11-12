@@ -70,7 +70,7 @@ pub use mode::{Mode, ModeRule};
 pub use name::{Name, NameError};
 pub use secret::{Secret, SecretBytes};
 pub use spec::{
-    Declaration, Digest, FamilyDeclaration, Group, GroupName, GroupNameError, Pointer, Show,
+    Declaration, Digest, Empty, FamilyDeclaration, Group, GroupName, GroupNameError, Pointer, Show,
     Source, Spec, SpecError, SpecProblem, SpecProblemKind, ToolTable, Unset, UnsetRule, Variable,
 };
 pub use url;
@@ -158,9 +158,13 @@ pub trait Env: Sized {
     /// declare, and that is no member of a family, is ignored. An empty value, such as the value of `FOO=`,
     /// counts as unset, so an `Option` field reads it as `None`, a field
     /// with a default reads the default, and a required field refuses the
-    /// read. A variable that the spec declares with `presence = true` is
-    /// the exception: a `bool` field reads it as `true` when it has any
-    /// value, an empty one included, and as `false` when it is absent.
+    /// read. A variable that the spec declares with `empty = "value"` is
+    /// an exception: its type reads the empty value, so a `String` field
+    /// reads it as `""`, an integer field refuses it, and the default
+    /// applies only when the variable is absent. A variable that the spec
+    /// declares with `presence = true` is an exception too: a `bool` field
+    /// reads it as `true` when it has any value, an empty one included,
+    /// and as `false` when it is absent.
     ///
     /// The read enforces the rules of the variables the struct reads: each
     /// variable a field reads, each member of each family a field reads,

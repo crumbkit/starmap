@@ -1,0 +1,18 @@
+# A spec whose variables count an empty value as a value, for the struct
+# test of an empty value that reaches the type and the application's check.
+[variables.SHELF_WORKERS]
+purpose = "How many catalogue workers run."
+type = { integer = { min = 1, max = 64 } }
+empty = "value"
+unset = { default = "5" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_GREETING]
+purpose = "The text the web view shows above the catalogue."
+check = "The greeting is not blank."
+type = "string"
+empty = "value"
+unset = { default = "Welcome" }
+show = "shown"
+source = "setting"

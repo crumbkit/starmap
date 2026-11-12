@@ -335,6 +335,38 @@ fn an_empty_value_in_the_shell_does_not_hide_a_value_from_dotenv() {
     assert_eq!(value(&ready, "SHELF_PAGE_SIZE").as_deref(), Some("30"));
 }
 
+/// A spec with one setting whose empty value is a value.
+const EMPTY_SPEC: &str = r#"
+[variables.SHELF_GREETING]
+purpose = "The text the web view shows above the catalogue."
+type = "string"
+empty = "value"
+unset = { default = "Welcome" }
+show = "shown"
+source = "setting"
+"#;
+
+#[test]
+fn an_empty_value_in_dotenv_is_a_value_when_the_variable_declares_empty_a_value() {
+    let checkout = Checkout::with_spec(EMPTY_SPEC, Some("SHELF_GREETING=\n"));
+    let resolver = FakeResolver::default();
+    let mut person = Person::absent();
+
+    let ready = prepared(&checkout.args(&[]), &[], &resolver, &mut person).unwrap();
+    assert_eq!(value(&ready, "SHELF_GREETING").as_deref(), Some(""));
+}
+
+#[test]
+fn an_empty_value_in_the_shell_replaces_a_value_from_dotenv_when_empty_is_a_value() {
+    let checkout = Checkout::with_spec(EMPTY_SPEC, Some("SHELF_GREETING=Hello\n"));
+    let resolver = FakeResolver::default();
+    let mut person = Person::absent();
+
+    let vars = [("SHELF_GREETING", "")];
+    let ready = prepared(&checkout.args(&[]), &vars, &resolver, &mut person).unwrap();
+    assert_eq!(value(&ready, "SHELF_GREETING").as_deref(), Some(""));
+}
+
 #[test]
 fn an_empty_secret_in_the_shell_is_refused_as_unbound_when_no_person_can_answer() {
     let checkout = Checkout::new(None);

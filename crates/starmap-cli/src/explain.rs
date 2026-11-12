@@ -10,8 +10,8 @@ use crumbkit::{Batch, Document, Failure, Recovery, Row, Shown};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::{
-    Bindings, Bound, BuiltIns, Cache, Choices, Mode, Name, SecretRef, Source, Spec, Type, Unset,
-    Value, Variable,
+    Bindings, Bound, BuiltIns, Cache, Choices, Empty, Mode, Name, SecretRef, Source, Spec, Type,
+    Unset, Value, Variable,
 };
 
 use crate::cli::{ExplainArgs, SpecFile};
@@ -299,7 +299,7 @@ fn row(
         });
     };
     Ok(Explained {
-        kind: kind_text(variable),
+        kind: explained_kind(variable),
         unset: unset_text(variable),
         source: source_text(variable.source()),
         value: cell(variable, bindings.get(&name)),
@@ -367,6 +367,26 @@ pub(crate) fn value_text(value: &Value) -> String {
         // A kind of value that a later release of starmap adds.
         _ => "a value".to_owned(),
     }
+}
+
+/// Returns the text of a variable's type as explain prints it: the
+/// [`kind_text`], followed by `; an empty value is a value` when the
+/// variable declares `empty = "value"`.
+fn explained_kind(variable: &Variable) -> String {
+    let kind = kind_text(variable);
+    match empty_text(variable) {
+        Some(empty) => format!("{kind}; {empty}"),
+        None => kind,
+    }
+}
+
+/// Returns `an empty value is a value` when `variable` declares
+/// `empty = "value"`, and `None` otherwise. A variable that reads its
+/// presence counts an empty value as a value too, and its type text says
+/// so already, so it has no empty text.
+pub(crate) fn empty_text(variable: &Variable) -> Option<&'static str> {
+    (variable.empty() == Empty::Value && !variable.presence())
+        .then_some("an empty value is a value")
 }
 
 /// Returns the text of a variable's type, which says so when the variable

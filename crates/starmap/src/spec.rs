@@ -374,6 +374,10 @@ pub struct Variable {
     /// Whether any value, an empty one included, sets the variable, which
     /// the file's optional `presence` field states.
     presence: bool,
+    /// What an empty value counts as, which the file's optional `empty`
+    /// field states. It is [`Empty::Unset`] for a variable that reads its
+    /// presence, because the parser refuses the field beside `presence`.
+    empty: Empty,
     unset: UnsetRule,
     show: Show,
     source: Source,
@@ -438,6 +442,39 @@ impl Variable {
     #[must_use]
     pub fn presence(&self) -> bool {
         self.presence
+    }
+
+    /// Returns what an empty value of the variable, such as the value of
+    /// `FOO=`, counts as. It is [`Empty::Value`] when the file states
+    /// `empty = "value"`, and for a variable that reads its
+    /// [presence](Self::presence), which any value sets. It is
+    /// [`Empty::Unset`] otherwise, so an empty value leaves the variable
+    /// unset and its unset rule applies.
+    ///
+    /// ```
+    /// let spec = starmap::Spec::parse(
+    ///     r#"
+    /// [variables.SHELF_WORKERS]
+    /// purpose = "How many catalogue workers run."
+    /// type = { integer = { min = 1, max = 64 } }
+    /// unset = { default = "5" }
+    /// empty = "value"
+    /// show = "shown"
+    /// source = "setting"
+    /// "#,
+    /// )?;
+    /// let name: starmap::Name = "SHELF_WORKERS".parse()?;
+    /// let variable = spec.variable(&name).ok_or("SHELF_WORKERS is declared")?;
+    /// assert_eq!(variable.empty(), starmap::Empty::Value);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[must_use]
+    pub fn empty(&self) -> Empty {
+        if self.presence {
+            Empty::Value
+        } else {
+            self.empty
+        }
     }
 
     /// Returns what happens when the variable has no value, in each mode.
@@ -506,6 +543,20 @@ pub enum Source {
     Inherited,
     /// A value a provider of the bind's kind supplies.
     Provided(ProvidedRef),
+}
+
+/// What an empty value of a variable, such as the value of `FOO=`, counts
+/// as, which the file's optional `empty` field states.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Empty {
+    /// An empty value counts as unset, so the variable's unset rule
+    /// applies. A file states it as `empty = "unset"`, or by leaving the
+    /// field out.
+    #[default]
+    Unset,
+    /// An empty value is a value, which the variable's type reads. A file
+    /// states it as `empty = "value"`.
+    Value,
 }
 
 /// Whether a variable's value may be shown, such as in `starmap explain`.
@@ -797,6 +848,8 @@ const UNSET_WORDS: &[(&str, Unset)] =
     &[("required", Unset::Required), ("optional", Unset::Optional)];
 /// The words `show` takes.
 const SHOW_WORDS: &[(&str, Show)] = &[("shown", Show::Shown), ("withheld", Show::Withheld)];
+/// The words `empty` takes.
+const EMPTY_WORDS: &[(&str, Empty)] = &[("unset", Empty::Unset), ("value", Empty::Value)];
 /// The words `source` takes.
 const SOURCE_WORDS: &[(&str, SourceKind)] = &[
     ("setting", SourceKind::Setting),

@@ -13,7 +13,9 @@
 //! `starmap::capture` binds nothing for it. It therefore does not hide a
 //! value that the process environment or `--set` gives the same variable.
 //! An empty value does set a variable that the spec declares with
-//! `presence = true`.
+//! `presence = true` or `empty = "value"`, so for such a variable an empty
+//! value in `.env` is a value, and an empty value in the process
+//! environment or `--set` replaces a value from `.env`.
 
 use std::ffi::OsString;
 use std::fmt;

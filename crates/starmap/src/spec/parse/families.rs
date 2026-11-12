@@ -18,8 +18,8 @@ mod tests;
 /// refuses `bind` and the sources that need one after its table parses, so
 /// the message names the family rule.
 const FAMILY_FIELDS: &[&str] = &[
-    "purpose", "effect", "check", "type", "unset", "show", "source", "bind", "bytes", "tool",
-    "keys",
+    "purpose", "effect", "check", "type", "empty", "unset", "show", "source", "bind", "bytes",
+    "tool", "keys",
 ];
 
 /// The rule that a key follows, as a refusal of a key states it.
