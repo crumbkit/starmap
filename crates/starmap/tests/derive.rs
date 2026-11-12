@@ -933,3 +933,393 @@ fn a_group_finding_refuses_the_read_only_on_a_member_the_struct_reads() {
         "SHELF_MIRROR_ACCOUNT is unset, and the group mirror needs it because SHELF_MIRROR_KEY is set"
     );
 }
+
+/// A struct over the spec of deferred fields: the application checks the
+/// catalogue address, the token, the worker count and the mirror where it
+/// uses them, and the read checks the port.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/deferred.toml")]
+struct Serve {
+    #[starmap("SHELF_CATALOGUE_URL")]
+    catalogue: starmap::Deferred<url::Url>,
+    #[starmap("SHELF_TOKEN", check = long_token)]
+    token: starmap::Deferred<starmap::Secret>,
+    #[starmap("SHELF_WORKERS")]
+    workers: starmap::Deferred<u8>,
+    #[starmap("SHELF_MIRROR_URL")]
+    mirror: starmap::Deferred<Option<url::Url>>,
+    #[starmap("SHELF_PORT")]
+    port: starmap::Port,
+}
+
+/// Refuses a token shorter than 16 characters.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the check reads the secret it is given"
+)]
+fn long_token(token: &starmap::Secret) -> Result<(), &'static str> {
+    if token.expose().len() >= 16 {
+        Ok(())
+    } else {
+        Err("the token has at least 16 characters")
+    }
+}
+
+/// A token that passes [`long_token`].
+const TOKEN: (&str, &str) = ("SHELF_TOKEN", "a-token-of-24-characters");
+
+/// The application's own error, with its own code, which it builds from a
+/// deferred field's finding.
+#[derive(Debug, PartialEq, Eq)]
+struct ShelfError {
+    code: &'static str,
+    variable: String,
+    text: String,
+}
+
+impl ShelfError {
+    fn new(code: &'static str, finding: &starmap::Finding) -> Self {
+        Self {
+            code,
+            variable: finding.name.to_string(),
+            text: finding.to_string(),
+        }
+    }
+}
+
+/// Starts the server as an application would: it takes the catalogue
+/// address before the token, and maps each finding to its own error.
+fn start(env: &Serve) -> Result<(), ShelfError> {
+    env.catalogue
+        .get()
+        .map_err(|finding| ShelfError::new("shelf::catalogue::url_invalid", finding))?;
+    env.token
+        .get()
+        .map_err(|finding| ShelfError::new("shelf::auth::token_missing", finding))?;
+    Ok(())
+}
+
+/// Returns the text that the whole check of the spec of deferred fields
+/// writes for `pairs`, or `None` when the check passes.
+fn whole_check_text(pairs: &[(&str, &str)]) -> Option<String> {
+    let spec = starmap::Spec::parse(Serve::SPEC).ok()?;
+    let bindings = starmap::capture(&spec, vars(pairs));
+    match starmap::check(&spec, &bindings, starmap::Mode::Local) {
+        starmap::Verdict::Refused(refusals) => Some(refusals.to_string()),
+        starmap::Verdict::Ready(_) => None,
+    }
+}
+
+#[test]
+fn a_deferred_field_gives_the_app_a_finding_that_names_the_variable() {
+    let bad_address = [("SHELF_CATALOGUE_URL", "not a url"), ("SHELF_PORT", "8080")];
+    let missing_token = [
+        ("SHELF_CATALOGUE_URL", "https://catalogue.example/"),
+        ("SHELF_PORT", "8080"),
+    ];
+    let first = Serve::from_vars(vars(&bad_address)).expect("only the port refuses the read");
+    let second = Serve::from_vars(vars(&missing_token)).expect("only the port refuses the read");
+
+    let first = start(&first).expect_err("the address is not a url");
+    let second = start(&second).expect_err("the token is missing");
+
+    assert_eq!(
+        first,
+        ShelfError {
+            code: "shelf::catalogue::url_invalid",
+            variable: "SHELF_CATALOGUE_URL".to_owned(),
+            text: whole_check_text(&[
+                ("SHELF_CATALOGUE_URL", "not a url"),
+                TOKEN,
+                ("SHELF_PORT", "8080")
+            ])
+            .expect("the whole check refuses the address"),
+        }
+    );
+    assert!(
+        first.text.ends_with("(the value is \"not a url\")"),
+        "{}",
+        first.text
+    );
+    assert_eq!(
+        second,
+        ShelfError {
+            code: "shelf::auth::token_missing",
+            variable: "SHELF_TOKEN".to_owned(),
+            text: "SHELF_TOKEN is required and has no value".to_owned(),
+        }
+    );
+}
+
+#[test]
+fn a_deferred_field_holds_the_problem_and_the_quote_of_its_finding() {
+    let env = Serve::from_vars(vars(&[
+        ("SHELF_CATALOGUE_URL", "not a url"),
+        ("SHELF_PORT", "8080"),
+    ]))
+    .expect("only the port refuses the read");
+
+    let address = env.catalogue.get().expect_err("the address is not a url");
+    let token = env.token.get().expect_err("the token is missing");
+
+    assert_eq!(env.catalogue.name().as_str(), "SHELF_CATALOGUE_URL");
+    assert_eq!(address.name.as_str(), "SHELF_CATALOGUE_URL");
+    assert!(
+        matches!(
+            address.problem,
+            starmap::Problem::Invalid(starmap::TypeError::NotUrl(_))
+        ),
+        "{address:?}"
+    );
+    assert_eq!(
+        address.value.as_ref().map(starmap::Quote::as_str),
+        Some("not a url")
+    );
+    assert!(matches!(token.problem, starmap::Problem::Missing { .. }));
+}
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test checks the secret that the struct reads"
+)]
+fn deferred_fields_whose_variables_fit_hold_their_values() {
+    let env = Serve::from_vars(vars(&[
+        ("SHELF_CATALOGUE_URL", "https://catalogue.example/"),
+        TOKEN,
+        ("SHELF_MIRROR_URL", "https://mirror.example/"),
+        ("SHELF_PORT", "8080"),
+    ]))
+    .expect("every variable fits");
+
+    assert_eq!(
+        env.catalogue.get().map(url::Url::as_str),
+        Ok("https://catalogue.example/")
+    );
+    assert_eq!(env.token.get().map(Secret::expose), Ok(TOKEN.1));
+    assert_eq!(env.workers.get(), Ok(&5));
+    assert_eq!(
+        env.mirror
+            .into_result()
+            .map(|mirror| mirror.map(String::from)),
+        Ok(Some("https://mirror.example/".to_owned()))
+    );
+    assert_eq!(env.port, Port::try_from(8080).expect("8080 is a port"));
+}
+
+#[test]
+fn a_deferred_optional_field_reads_none_when_its_variable_is_unset() {
+    let env =
+        Serve::from_vars(vars(&[("SHELF_PORT", "8080")])).expect("only the port refuses the read");
+
+    assert_eq!(env.mirror.get(), Ok(&None));
+}
+
+#[test]
+fn a_field_that_is_not_deferred_still_refuses_the_read() {
+    let error = Serve::from_vars(vars(&[("SHELF_PORT", "80a")])).expect_err("80a is not a port");
+
+    assert_eq!(
+        error.to_string(),
+        "SHELF_PORT: the value is not a port from 1 to 65535 (the value is \"80a\")"
+    );
+}
+
+#[test]
+fn a_deferred_empty_value_reaches_the_app_as_an_invalid_value_and_not_as_the_default() {
+    let env = Serve::from_vars(vars(&[("SHELF_WORKERS", ""), ("SHELF_PORT", "8080")]))
+        .expect("only the port refuses the read");
+
+    let workers = env
+        .workers
+        .get()
+        .expect_err("an empty count is not a number");
+
+    assert_eq!(
+        workers.problem,
+        starmap::Problem::Invalid(starmap::TypeError::NotInteger)
+    );
+}
+
+#[test]
+fn a_deferred_field_holds_the_refusal_of_its_check_without_the_secret() {
+    let env = Serve::from_vars(vars(&[
+        ("SHELF_TOKEN", "short-secret"),
+        ("SHELF_PORT", "8080"),
+    ]))
+    .expect("only the port refuses the read");
+
+    let token = env.token.get().expect_err("the token is short");
+
+    assert_eq!(
+        token.problem,
+        starmap::Problem::Rejected {
+            reason: "the token has at least 16 characters".to_owned()
+        }
+    );
+    assert_eq!(
+        token.to_string(),
+        "SHELF_TOKEN: the token has at least 16 characters"
+    );
+    assert!(!format!("{:?}", env.token).contains("short-secret"));
+}
+
+#[test]
+fn the_debug_text_of_a_withheld_deferred_field_names_the_variable_and_never_shows_the_value() {
+    let env = Serve::from_vars(vars(&[TOKEN, ("SHELF_PORT", "8080")]))
+        .expect("only the port refuses the read");
+
+    let debug = format!("{:?}", env.token);
+
+    assert!(debug.contains("SHELF_TOKEN"), "{debug}");
+    assert!(!debug.contains(TOKEN.1), "{debug}");
+}
+
+#[test]
+fn a_deferred_field_is_described_with_the_type_inside_it() {
+    let fields: Vec<(&str, &str, Presence, bool)> = Serve::FIELDS
+        .iter()
+        .map(|field| (field.name, field.rust_type, field.presence, field.deferred))
+        .collect();
+
+    assert_eq!(
+        fields,
+        [
+            ("SHELF_CATALOGUE_URL", "url::Url", Presence::Always, true),
+            ("SHELF_TOKEN", "starmap::Secret", Presence::Always, true),
+            ("SHELF_WORKERS", "u8", Presence::Always, true),
+            ("SHELF_MIRROR_URL", "url::Url", Presence::Maybe, true),
+            ("SHELF_PORT", "starmap::Port", Presence::Always, false),
+        ]
+    );
+    assert_eq!(Serve::FIELDS[1].show, Show::Withheld);
+}
+
+/// A struct over the spec with a group whose account the application
+/// checks where it uses it.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/mirror.toml")]
+struct DeferredMirrorAccount {
+    #[starmap("SHELF_MIRROR_ACCOUNT")]
+    account: starmap::Deferred<Option<String>>,
+}
+
+#[test]
+fn a_deferred_member_of_a_group_holds_the_group_finding() {
+    let env = DeferredMirrorAccount::from_vars(vars(&[("SHELF_MIRROR_KEY", "key")]))
+        .expect("the account is deferred");
+
+    let account = env.account.get().expect_err("the group needs the account");
+
+    assert_eq!(
+        account.to_string(),
+        "SHELF_MIRROR_ACCOUNT is unset, and the group mirror needs it because SHELF_MIRROR_KEY is set"
+    );
+}
+
+/// A struct over the example spec that defers the mode variable.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/starmap.toml")]
+struct DeferredStage {
+    #[starmap("SHELF_ENV")]
+    stage: starmap::Deferred<Stage>,
+}
+
+#[test]
+fn a_deferred_mode_variable_with_an_invalid_value_still_refuses_the_read() {
+    let invalid = DeferredStage::from_vars(vars(&[("SHELF_ENV", "staging")]))
+        .expect_err("the mode decides the other fields");
+    let valid = DeferredStage::from_vars(vars(&[("SHELF_ENV", "prod")])).expect("prod is a stage");
+
+    assert_eq!(
+        invalid.to_string(),
+        "SHELF_ENV: the value is not one of dev, prod (the value is \"staging\")"
+    );
+    assert_eq!(valid.stage.get(), Ok(&Stage::Prod));
+}
+
+/// A struct over the example spec that defers an optional variable into a
+/// type that is not inside an `Option`.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/starmap.toml")]
+struct DeferredWithoutOption {
+    #[starmap("SHELF_CATALOGUE_URL")]
+    _catalogue: starmap::Deferred<url::Url>,
+}
+
+#[test]
+fn a_deferred_field_without_an_option_cannot_hold_its_optional_variable_when_it_is_unset() {
+    let error = DeferredWithoutOption::from_vars(vars(&[])).expect_err("the url is unset");
+
+    let ReadError::Field(field) = &error else {
+        panic!("the struct and the file disagree, and gave {error:?}");
+    };
+    assert_eq!(field.name(), "SHELF_CATALOGUE_URL");
+}
+
+/// A struct over the spec of deferred fields in which a deferred field and
+/// a plain field read each of two variables, and the plain catalogue field
+/// names a check.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/deferred.toml")]
+struct DeferredBesidePlain {
+    #[starmap("SHELF_CATALOGUE_URL")]
+    deferred_catalogue: starmap::Deferred<url::Url>,
+    #[starmap("SHELF_CATALOGUE_URL", check = https)]
+    catalogue: url::Url,
+    #[starmap("SHELF_MIRROR_URL")]
+    deferred_mirror: starmap::Deferred<Option<url::Url>>,
+    #[starmap("SHELF_MIRROR_URL")]
+    mirror: Option<url::Url>,
+}
+
+#[test]
+fn a_plain_field_beside_a_deferred_field_on_one_variable_still_refuses_the_read() {
+    let invalid = DeferredBesidePlain::from_vars(vars(&[("SHELF_CATALOGUE_URL", "not a url")]))
+        .expect_err("the plain catalogue field does not defer the invalid address");
+    let optional = DeferredBesidePlain::from_vars(vars(&[
+        ("SHELF_CATALOGUE_URL", "https://catalogue.example/"),
+        ("SHELF_MIRROR_URL", "not a url"),
+    ]))
+    .expect_err("the plain mirror field reads no None for an invalid address");
+    let checked = DeferredBesidePlain::from_vars(vars(&[(
+        "SHELF_CATALOGUE_URL",
+        "http://catalogue.example/",
+    )]))
+    .expect_err("the plain catalogue field's check refuses http");
+    let ready = DeferredBesidePlain::from_vars(vars(&[
+        ("SHELF_CATALOGUE_URL", "https://catalogue.example/"),
+        ("SHELF_MIRROR_URL", "https://mirror.example/"),
+    ]))
+    .expect("both addresses fit and the catalogue is served over https");
+
+    for error in [&invalid, &optional, &checked] {
+        assert!(matches!(error, ReadError::Refused(_)), "{error:?}");
+    }
+    assert!(
+        invalid
+            .to_string()
+            .starts_with("SHELF_CATALOGUE_URL: the value is not a url"),
+        "{invalid}"
+    );
+    assert!(
+        optional
+            .to_string()
+            .starts_with("SHELF_MIRROR_URL: the value is not a url"),
+        "{optional}"
+    );
+    assert_eq!(
+        checked.to_string(),
+        "SHELF_CATALOGUE_URL: the catalogue is served over https (the value is \"http://catalogue.example/\")"
+    );
+    assert_eq!(ready.catalogue.as_str(), "https://catalogue.example/");
+    assert_eq!(
+        ready.deferred_catalogue.get().map(url::Url::as_str),
+        Ok("https://catalogue.example/")
+    );
+    assert_eq!(
+        ready.mirror.as_ref().map(url::Url::as_str),
+        Some("https://mirror.example/")
+    );
+    assert!(matches!(ready.deferred_mirror.get(), Ok(Some(_))));
+}

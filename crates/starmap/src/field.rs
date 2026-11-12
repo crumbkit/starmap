@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use url::Url;
 
-use crate::{Enumeration, Environment, Name, Port, Secret, SecretBytes, Show, Value};
+use crate::{Deferred, Enumeration, Environment, Name, Port, Secret, SecretBytes, Show, Value};
 
 #[cfg(test)]
 mod tests;
@@ -39,6 +39,12 @@ pub struct Field {
     pub presence: Presence,
     /// Whether the field's type holds a withheld value.
     pub show: Show,
+    /// Whether the field's type is a [`Deferred`], which holds the value
+    /// or the finding that refuses it. [`Field::rust_type`],
+    /// [`Field::shape`], [`Field::presence`] and [`Field::show`] then
+    /// describe the type inside it, so a `Deferred<Option<url::Url>>` has
+    /// the type `url::Url` and the presence [`Presence::Maybe`].
+    pub deferred: bool,
 }
 
 impl Field {
@@ -60,6 +66,24 @@ impl Field {
             shape: T::SHAPE,
             presence,
             show: T::SHOW,
+            deferred: false,
+        }
+    }
+
+    /// Describes a field of type `Deferred<T>`, or `Deferred<Option<T>>`
+    /// when `presence` is [`Presence::Maybe`], that reads the variable
+    /// `name`. The derive calls it, and `rust_type` is `T` as the struct
+    /// writes it.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn of_deferred<T: FieldType>(
+        name: &'static str,
+        rust_type: &'static str,
+        presence: Presence,
+    ) -> Self {
+        Self {
+            deferred: true,
+            ..Self::new::<T>(name, rust_type, presence)
         }
     }
 
@@ -77,7 +101,19 @@ impl Field {
             shape: T::SHAPE,
             presence: Presence::Always,
             show: T::SHOW,
+            deferred: false,
         }
+    }
+
+    /// Returns the name of the variable a field of one variable reads.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FieldError`] when the field's name is not a variable name.
+    fn variable(&self) -> Result<Name, FieldError> {
+        self.name
+            .parse()
+            .map_err(|_| FieldError::new(self.name, FieldProblem::Disagreement))
     }
 }
 
@@ -103,29 +139,68 @@ pub trait ReadField {
     /// Returns [`FieldError`] when [`ReadField::read`] does, or when the
     /// variable stays unset.
     fn require<T: FieldType>(&self, environment: &Environment) -> Result<T, FieldError>;
+
+    /// Reads the field's value from `environment` into a
+    /// `Deferred<Option<T>>`, which holds the finding of the variable when
+    /// the check deferred one, and otherwise the value as
+    /// [`ReadField::read`] reads it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FieldError`] when [`ReadField::read`] does.
+    fn defer_optional<T: FieldType>(
+        &self,
+        environment: &Environment,
+    ) -> Result<Deferred<Option<T>>, FieldError>;
+
+    /// Reads the field's value from `environment` into a `Deferred<T>`,
+    /// which holds the finding of the variable when the check deferred
+    /// one, and otherwise the value as [`ReadField::require`] reads it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FieldError`] when [`ReadField::require`] does, which it
+    /// does when the variable stays unset and has no finding, because the
+    /// variable is optional and the field's type is not
+    /// `Deferred<Option<T>>`.
+    fn defer<T: FieldType>(&self, environment: &Environment) -> Result<Deferred<T>, FieldError>;
 }
 
 impl ReadField for Field {
     fn read<T: FieldType>(&self, environment: &Environment) -> Result<Option<T>, FieldError> {
-        let error = |problem| FieldError {
-            name: self.name,
-            problem,
-        };
-        let name: Name = self
-            .name
-            .parse()
-            .map_err(|_| error(FieldProblem::Disagreement))?;
+        let name = self.variable()?;
         if !environment.is_set(&name) {
             return Ok(None);
         }
-        T::read(environment, &name).map(Some).map_err(error)
+        T::read(environment, &name)
+            .map(Some)
+            .map_err(|problem| FieldError::new(self.name, problem))
     }
 
     fn require<T: FieldType>(&self, environment: &Environment) -> Result<T, FieldError> {
-        self.read(environment)?.ok_or(FieldError {
-            name: self.name,
-            problem: FieldProblem::Disagreement,
-        })
+        self.read(environment)?
+            .ok_or(FieldError::new(self.name, FieldProblem::Disagreement))
+    }
+
+    fn defer_optional<T: FieldType>(
+        &self,
+        environment: &Environment,
+    ) -> Result<Deferred<Option<T>>, FieldError> {
+        let name = self.variable()?;
+        let result = match environment.deferred(&name) {
+            Some(finding) => Err(finding.clone()),
+            None => Ok(self.read(environment)?),
+        };
+        Ok(Deferred::new(name, result))
+    }
+
+    fn defer<T: FieldType>(&self, environment: &Environment) -> Result<Deferred<T>, FieldError> {
+        let name = self.variable()?;
+        let result = match environment.deferred(&name) {
+            Some(finding) => Err(finding.clone()),
+            None => Ok(self.require(environment)?),
+        };
+        Ok(Deferred::new(name, result))
     }
 }
 

@@ -4,7 +4,7 @@
 use std::ffi::OsString;
 use std::process::Command;
 
-use crate::{BuiltIns, Mode, Name, Secret, SecretBytes, Value};
+use crate::{BuiltIns, Finding, Mode, Name, Secret, SecretBytes, Value};
 
 #[cfg(test)]
 mod tests;
@@ -22,6 +22,9 @@ pub struct Environment {
     /// Each member of a family that is set, in prefix order and then key
     /// order.
     members: Vec<Member>,
+    /// The finding of each variable that a deferred field reads, which the
+    /// check gives to the field in place of refusing the read.
+    deferred: Vec<Finding>,
 }
 
 /// A member of a family that the environment holds a value for.
@@ -72,7 +75,20 @@ impl Environment {
             mode,
             entries,
             members,
+            deferred: Vec::new(),
         }
+    }
+
+    /// Gives the environment `deferred`, the findings of the variables that
+    /// deferred fields read.
+    pub(crate) fn with_deferred(self, deferred: Vec<Finding>) -> Self {
+        Self { deferred, ..self }
+    }
+
+    /// Returns the finding of `name` that the check deferred, if it has
+    /// one.
+    pub(crate) fn deferred(&self, name: &Name) -> Option<&Finding> {
+        self.deferred.iter().find(|finding| finding.name == *name)
     }
 
     /// Returns the key and the name of each member of the family whose

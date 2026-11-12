@@ -1,0 +1,39 @@
+# A spec for the tests of deferred fields: a server whose catalogue
+# address, token and worker count the application checks where it uses
+# them, and whose port the read checks.
+[variables.SHELF_CATALOGUE_URL]
+purpose = "The base URL of the catalogue the server reads."
+type = "url"
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_TOKEN]
+purpose = "The token the server sends to the catalogue."
+check = "The token has at least 16 characters."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+
+[variables.SHELF_WORKERS]
+purpose = "How many catalogue workers run."
+type = { integer = { min = 1, max = 64 } }
+empty = "value"
+unset = { default = "5" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_URL]
+purpose = "The base URL of a mirror of the catalogue, when there is one."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_PORT]
+purpose = "The port the server listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"

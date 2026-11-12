@@ -47,6 +47,7 @@ use std::fmt;
 mod bind;
 mod built_in;
 mod check;
+mod deferred;
 mod env;
 mod family;
 mod field;
@@ -63,6 +64,7 @@ pub use bind::{
 };
 pub use built_in::BuiltIns;
 pub use check::{Finding, Problem, Quote, Refusals, Verdict, capture, check, mode};
+pub use deferred::Deferred;
 pub use env::Environment;
 pub use family::Family;
 pub use field::{Field, FieldError, FieldProblem, Presence, Shape};
@@ -113,6 +115,15 @@ pub use starmap_derive::Enumeration;
 /// `#[starmap(family = "SHELF_DB_URL")]`, and its type is [`Family<T>`],
 /// where `T` is any type a field of one variable holds, without an
 /// `Option`. The field holds each member that is set, under its key.
+///
+/// A field of type [`Deferred<T>`], or `Deferred<Option<T>>` for an
+/// optional variable, where `T` is any type a field of one variable holds,
+/// defers every rule of its variable to the point of use: the unset rule,
+/// the type, the group rule and the field's own check. The read never
+/// refuses because of a deferred variable, and the field holds the value
+/// or the [`Finding`] the read would have reported. An invalid value of
+/// the mode variable still refuses the read. A family field cannot be
+/// deferred, and `Family<Deferred<T>>` fails to compile.
 #[cfg(feature = "derive")]
 pub use starmap_derive::Env;
 
@@ -178,13 +189,19 @@ pub trait Env: Sized {
     /// and `starmap_test::check_together` tests that the structs of an
     /// application read every declared variable between them.
     ///
+    /// A field of type [`Deferred`] defers its variable's rules: a finding
+    /// about that variable goes into the field, and never refuses the
+    /// read. A finding about the mode variable refuses the read even when
+    /// its field is deferred.
+    ///
     /// # Errors
     ///
     /// Returns [`ReadError::Spec`] when the embedded spec does not parse,
-    /// [`ReadError::Refused`] when a variable the struct reads, or the
-    /// mode variable, is missing, does not fit its type or is refused by
-    /// its field's own check, and [`ReadError::Field`] when a field cannot hold a
-    /// checked value.
+    /// [`ReadError::Refused`] when a variable the struct reads without
+    /// deferring it, or the mode variable, is missing, does not fit its
+    /// type or is refused by its field's own check, and
+    /// [`ReadError::Field`] when a field cannot hold a checked value, such
+    /// as a `Deferred<T>` field whose variable stays unset.
     fn from_vars(vars: impl IntoIterator<Item = (OsString, OsString)>) -> Result<Self, ReadError> {
         let spec = Spec::parse(Self::SPEC).map_err(ReadError::Spec)?;
         let bindings = capture(&spec, vars);

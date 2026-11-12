@@ -95,12 +95,12 @@ fn findings(verdict: Verdict) -> Vec<Finding> {
     }
 }
 
-/// Returns a finding of `problem` for the variable `text`.
+/// Returns a finding of `problem` for the variable `text`, in a spec that
+/// has modes.
 fn finding(text: &str, problem: Problem) -> Finding {
     Finding {
-        name: name(text),
-        problem,
-        value: None,
+        modes: true,
+        ..Finding::unquoted(name(text), problem)
     }
 }
 
@@ -433,8 +433,8 @@ source = "setting"
 
     assert_eq!(
         findings(check(&spec, &bindings, Mode::Local)),
-        [finding(
-            "SHELF_WORKERS",
+        [Finding::unquoted(
+            name("SHELF_WORKERS"),
             Problem::Missing { mode: Mode::Local }
         )]
     );
@@ -797,7 +797,10 @@ fn a_withheld_bytes_value_is_checked_without_its_text_in_any_message() {
 
         assert_eq!(
             refusals.iter().cloned().collect::<Vec<_>>(),
-            [finding("SHELF_COOKIE_KEY", Problem::Invalid(error))]
+            [Finding::unquoted(
+                name("SHELF_COOKIE_KEY"),
+                Problem::Invalid(error)
+            )]
         );
         assert!(!text.contains(raw), "{text}");
     }
@@ -998,14 +1001,13 @@ fn a_partly_set_group_gives_each_unset_member_a_finding_that_names_the_set_ones(
     let text = refusal_text(&verdict);
     assert_eq!(
         findings(verdict),
-        [Finding {
-            name: name("SHELF_MIRROR_SECRET"),
-            problem: Problem::GroupIncomplete {
+        [finding(
+            "SHELF_MIRROR_SECRET",
+            Problem::GroupIncomplete {
                 group: "mirror".parse().unwrap(),
                 set: vec![name("SHELF_MIRROR_ACCOUNT"), name("SHELF_MIRROR_KEY")],
-            },
-            value: None,
-        }]
+            }
+        )]
     );
     assert_eq!(
         text,
@@ -1074,13 +1076,12 @@ fn a_member_missing_in_production_gets_only_its_missing_finding() {
 
     assert_eq!(
         found,
-        [Finding {
-            name: name("SHELF_MIRROR_SECRET"),
-            problem: Problem::Missing {
+        [finding(
+            "SHELF_MIRROR_SECRET",
+            Problem::Missing {
                 mode: Mode::Production
-            },
-            value: None,
-        }]
+            }
+        )]
     );
 }
 

@@ -20,6 +20,22 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A field of type `starmap::Deferred<T>`, or `starmap::Deferred<Option<T>>`
+  for an optional variable, defers every rule of its variable to the point
+  of use: the unset rule, the type, the group rule and the field's own
+  check. `Env::from_vars` never refuses a read because of a deferred
+  variable, and the field holds the value or the `Finding` the read would
+  have reported. `Deferred::get` returns `Result<&T, &Finding>`,
+  `Deferred::into_result` returns it by value, and `Deferred::name` names
+  the variable. An invalid value of the mode variable still refuses the
+  read, and a `Deferred<T>` field whose optional variable stays unset gives
+  `ReadError::Field`, as a `T` field does. `starmap_test::check` reports a
+  deferred field on the mode variable, and a family field cannot be
+  deferred. `Field` gains `deferred`. The glossary's new deferred entry
+  states the rule for any implementation.
+- `Finding` implements `Display`, which writes the same text that
+  `Refusals` writes for that finding, such as `SHELF_TOKEN is required and
+  has no value`. The text of `Refusals` does not change.
 - A variable or a family may declare `empty = "value"`, so an empty value
   such as the value of `FOO=` is a value that its type reads. A string
   reads it as `""`, an absolute path type counts it as unset, and an
