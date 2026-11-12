@@ -92,7 +92,7 @@ fn the_errors_say_what_a_name_may_hold() {
             at: 5
         }
         .to_string(),
-        "a variable name holds '-' at byte 5, and a name holds only ascii \
+        "a variable name holds '-' at byte 5, and a name holds only ASCII \
          letters, digits and underscores and does not start with a digit"
     );
 }

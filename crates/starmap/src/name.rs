@@ -102,7 +102,7 @@ impl fmt::Display for NameError {
             Self::Character { character, at } => write!(
                 formatter,
                 "a variable name holds {character:?} at byte {at}, and a name holds only \
-                 ascii letters, digits and underscores and does not start with a digit"
+                 ASCII letters, digits and underscores and does not start with a digit"
             ),
         }
     }
