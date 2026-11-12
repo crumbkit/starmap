@@ -64,6 +64,27 @@ starmap adds no function for this. The glossary's
 [flag override](docs/glossary.md#flag-override) entry gives the `Option`
 method for each kind of variable and the limits of the pattern.
 
+## Several commands that share one file
+
+An application whose commands read different variables gives each command
+its own struct over the same `starmap.toml`. A struct's read enforces only
+the variables its fields read and the mode variable, so a variable that
+only the `serve` command requires does not stop the `api` command's struct
+from reading. One test checks that the structs read every declared
+variable between them:
+
+```rust
+#[test]
+fn the_structs_together_read_every_declared_variable() {
+    use starmap_test::Reader;
+    starmap_test::check_together(&[Reader::of::<Serve>(), Reader::of::<Api>()], &[]);
+}
+```
+
+`starmap run` still checks every variable, because it does not know which
+command the child runs. The glossary's
+[scoped read](docs/glossary.md#scoped-read) entry states the rule.
+
 ## Contributing
 
 [AGENTS.md](AGENTS.md) lists the checks that a change must pass, and

@@ -1,0 +1,26 @@
+# A spec with a group, for the tests of a struct that reads one member of
+# the group: the account and key of the catalogue mirror, set together or
+# not at all, and a required table that only another command reads.
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY"]
+
+[variables.SHELF_MIRROR_ACCOUNT]
+purpose = "The account shelf uses at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_KEY]
+purpose = "The key of the account at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_TABLE]
+purpose = "The table that the serve command writes the catalogue to."
+type = "string"
+unset = "required"
+show = "shown"
+source = "setting"

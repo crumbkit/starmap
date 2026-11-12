@@ -7,8 +7,8 @@ use std::fmt::{self, Write as _};
 use crate::env::{Held, Member};
 use crate::field::Rule;
 use crate::{
-    Bindings, Bound, Environment, FamilyDeclaration, GroupName, Mode, Name, Secret, Show, Spec,
-    Type, TypeError, Unset, Variable,
+    Bindings, Bound, Environment, FamilyDeclaration, Field, GroupName, Mode, Name, Secret, Show,
+    Spec, Type, TypeError, Unset, Variable,
 };
 
 #[cfg(test)]
@@ -152,9 +152,50 @@ pub fn mode(spec: &Spec, bindings: &Bindings) -> Mode {
 /// The verdict is [`Verdict::Ready`] only when no variable has a finding,
 /// and otherwise [`Verdict::Refused`] with each finding in the spec's order
 /// and a mode mismatch last (BASE-44).
+///
+/// A tool that prepares the whole environment of a child process, such as
+/// `starmap run`, calls `check`, because it does not know which variables
+/// the child reads. [`Env::from_vars`](crate::Env::from_vars) checks only
+/// the variables its struct reads and the mode variable.
 #[must_use]
 pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
-    check_with(spec, bindings, mode, &[])
+    check_with(spec, bindings, mode, Scope::Whole, &[])
+}
+
+/// The variables whose findings a check reports.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Scope<'a> {
+    /// Every variable the spec declares and every member of a family, as
+    /// [`check`] and a tool that prepares a whole environment report them.
+    Whole,
+    /// The variables that `fields`, the fields of a struct, read: each
+    /// variable a field reads, each member of a family a field reads, and
+    /// the mode variable, which decides whether each other variable is
+    /// required.
+    Fields(&'a [Field]),
+}
+
+impl Scope<'_> {
+    /// Whether a finding about `name` belongs to the scope.
+    fn covers(self, spec: &Spec, name: &Name) -> bool {
+        let Self::Fields(fields) = self else {
+            return true;
+        };
+        if spec.mode().is_some_and(|rule| rule.variable() == name) {
+            return true;
+        }
+        fields.iter().any(|field| {
+            if !field.family {
+                return field.name == name.as_str();
+            }
+            field
+                .name
+                .parse::<Name>()
+                .ok()
+                .and_then(|prefix| spec.family(&prefix))
+                .is_some_and(|family| family.key_of(name).is_some())
+        })
+    }
 }
 
 /// Checks `bindings` as [`check`] does, and runs each of `rules`, the
@@ -163,7 +204,19 @@ pub fn check(spec: &Spec, bindings: &Bindings, mode: Mode) -> Verdict {
 /// refuses the value adds a [`Problem::Rejected`] finding, which takes its
 /// variable's place in the spec's order. A variable that stays unset, or
 /// whose value its type refuses, is not passed to its rule.
-pub(crate) fn check_with(spec: &Spec, bindings: &Bindings, mode: Mode, rules: &[Rule]) -> Verdict {
+///
+/// Every rule of every variable is checked, a group's rule included, which
+/// looks at the values of all of its members. The verdict then keeps only
+/// the findings that `scope` covers, so a variable outside the scope never
+/// refuses the check. Such a variable that has a finding holds no value in
+/// the environment.
+pub(crate) fn check_with(
+    spec: &Spec,
+    bindings: &Bindings,
+    mode: Mode,
+    scope: Scope<'_>,
+    rules: &[Rule],
+) -> Verdict {
     let mode = if spec.mode().is_some() {
         mode
     } else {
@@ -238,6 +291,7 @@ pub(crate) fn check_with(spec: &Spec, bindings: &Bindings, mode: Mode, rules: &[
             findings.push((place, finding(&name, variable, bound, problem)));
         }
     }
+    findings.retain(|(_, finding)| scope.covers(spec, &finding.name));
     findings.sort_by_key(|(place, _)| *place);
     let mut findings: Vec<Finding> = findings.into_iter().map(|(_, finding)| finding).collect();
     let decided = self::mode(spec, bindings);

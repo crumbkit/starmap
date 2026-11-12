@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use snapbox::assert::DEFAULT_ACTION_ENV;
 use snapbox::{Assert, Data};
 
-use super::{Allow, check, check_allowing, compare};
+use super::{Allow, Reader, check, check_allowing, check_together, compare, compare_together};
 use starmap::Env;
 
 /// The example spec in `crates/starmap/tests/example/starmap.toml`.
@@ -425,4 +425,85 @@ fn an_allow_entry_excuses_a_family_the_struct_does_not_read() {
         compare("Regions", "starmap.toml", fields, REGIONS, &allow),
         Ok(())
     );
+}
+
+/// The serve command's struct over the example spec, which reads the
+/// stage, the port, the database and both secrets.
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/starmap.toml")]
+struct Serve {
+    #[starmap("SHELF_ENV")]
+    _stage: Stage,
+    #[starmap("SHELF_PORT")]
+    _port: starmap::Port,
+    #[starmap("SHELF_DATABASE")]
+    _database: PathBuf,
+    #[starmap("SHELF_MIRROR_TOKEN")]
+    _mirror_token: Option<starmap::Secret>,
+    #[starmap("SHELF_SESSION_KEY")]
+    _session_key: starmap::Secret,
+}
+
+/// The api command's struct over the example spec, which reads the port
+/// and every variable that [`Serve`] does not read.
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/starmap.toml")]
+struct Api {
+    #[starmap("SHELF_PORT")]
+    _port: starmap::Port,
+    #[starmap("SHELF_CATALOGUE_URL")]
+    _catalogue: Option<url::Url>,
+    #[starmap("SHELF_DEBUG")]
+    _debug: bool,
+    #[starmap("SHELF_PAGE_SIZE")]
+    _page_size: u8,
+    #[starmap("XDG_STATE_HOME")]
+    _state_home: Option<PathBuf>,
+}
+
+/// A stale api struct over the example spec: it reads the debug flag as
+/// text, and leaves the catalogue url, the page size and the state home
+/// unread.
+#[derive(starmap::Env)]
+#[starmap(spec = "../starmap/tests/example/starmap.toml")]
+struct StaleApi {
+    #[starmap("SHELF_PORT")]
+    _port: starmap::Port,
+    #[starmap("SHELF_DEBUG")]
+    _debug: String,
+}
+
+#[test]
+fn structs_that_together_read_every_declared_variable_agree_with_their_spec() {
+    check_together(&[Reader::of::<Serve>(), Reader::of::<Api>()], &[]);
+}
+
+#[test]
+fn the_report_of_several_structs_names_the_struct_of_each_field_and_each_variable_none_reads() {
+    let allow = [
+        Allow::new("SHELF_PAGE_SIZE", "only a dependency reads it"),
+        Allow::new("SHELF_PORT", "the server reads it"),
+    ];
+    let structs = [
+        (std::any::type_name::<Serve>(), Serve::FIELDS),
+        (std::any::type_name::<StaleApi>(), StaleApi::FIELDS),
+    ];
+    let actual = compare_together(&structs, "starmap.toml", EXAMPLE, &allow).unwrap_err();
+
+    golden(actual, "together.txt");
+}
+
+#[test]
+#[should_panic(
+    expected = "check_together checks structs that embed one file, and starmap_test::tests::Listen embeds ../starmap/tests/example/listen.toml, \
+                which is not the file that starmap_test::tests::Serve embeds"
+)]
+fn check_together_refuses_structs_that_embed_different_files() {
+    check_together(&[Reader::of::<Serve>(), Reader::of::<Listen>()], &[]);
+}
+
+#[test]
+#[should_panic(expected = "check_together needs at least one struct")]
+fn check_together_refuses_an_empty_list_of_structs() {
+    check_together(&[], &[]);
 }

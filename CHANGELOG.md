@@ -6,7 +6,24 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `Env::from_vars` and `Env::load` no longer refuse a read
+  because of a variable the struct does not read. A read enforces the rules
+  of each variable a field reads, each member of each family a field reads,
+  and the mode variable. A required variable that only another command's
+  struct reads, or an invalid value of a variable no field reads, no longer
+  stops the read. A group's rule still looks at every member, and refuses
+  the read only on a member the struct reads. `starmap::check` and
+  `starmap run` still check the whole file. The glossary's new scoped read
+  entry states the rule for any implementation.
+
 ### Added
+
+- `starmap_test::check_together` checks several structs that embed one
+  `starmap.toml`, given as `starmap_test::Reader::of::<Serve>()`. A
+  declared variable counts as read when any of the structs reads it, and
+  each message about a field names its struct.
 
 - A variable name may hold lower-case letters. A name matches
   `[A-Za-z_][A-Za-z0-9_]*` and keeps the case it is written in, so a file
