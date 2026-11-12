@@ -374,6 +374,44 @@ without a check sentence, and a check sentence whose variable no field in
 src checks. Each is a note on standard error and a list in the JSON
 document, and neither fails the command.
 
+## scoped read
+
+A scoped read is a read that enforces the rules of some of a file's
+variables. `Env::from_vars` and `Env::load` make a scoped read: they
+enforce the rules of each variable a field of the struct reads, each
+member of each family a field reads, and the mode variable. The mode
+variable is always enforced, because the mode decides whether each other
+variable is required. A declared variable outside that set never refuses
+the read, even when it is required or its value does not fit its type, so
+each command of an application can read its own struct from one
+`starmap.toml`.
+
+The read still checks every variable, and then reports only the findings
+about the variables it enforces. A group's rule therefore looks at the
+values of all of its members, and a `Problem::GroupIncomplete` finding
+refuses the read only when it names a member the struct reads. A variable
+outside the set that has a finding holds no value in the read's
+`Environment`.
+
+`starmap::check` and `starmap run` check the whole file. `starmap run`
+prepares the environment of a child process and does not know which
+variables the child reads, so it enforces every variable.
+
+`starmap_test::check_together` checks several structs that embed one
+`starmap.toml`, given as `starmap_test::Reader::of::<Serve>()`. A declared
+variable or family counts as read when any of the structs reads it, so the
+file stays the one declaration for the application, and the test fails
+when no struct reads a declared variable that no `Allow` entry names. Each
+struct's fields are compared with their declarations as
+`starmap_test::check` compares them, and each message about a field names
+its struct. The structs must embed the same file, and the check panics
+when they do not.
+
+Another implementation that reads some of a file's variables enforces the
+rules of those variables and of the mode variable, and reports a group's
+finding only on a member it reads. A tool that prepares a whole
+environment for a child process enforces every variable.
+
 ## flag override
 
 A flag override is a command-line flag that replaces a variable's value for
@@ -508,7 +546,8 @@ required gets only that finding. A group that is wholly unset or wholly
 set passes. A member may be required in production and optional locally;
 the group is then required in production and all or none locally.
 `starmap run` reports the finding with the code `starmap::group::incomplete`,
-and `#[derive(Env)]` refuses the read with the same text.
+and `#[derive(Env)]` refuses the read with the same text when the struct
+reads the unset member, as the [scoped read](#scoped-read) entry says.
 
 Groups count toward the canonical form and the digest, because a group
 changes what `check` accepts. The canonical form writes each group after

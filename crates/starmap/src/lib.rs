@@ -162,16 +162,30 @@ pub trait Env: Sized {
     /// the exception: a `bool` field reads it as `true` when it has any
     /// value, an empty one included, and as `false` when it is absent.
     ///
+    /// The read enforces the rules of the variables the struct reads: each
+    /// variable a field reads, each member of each family a field reads,
+    /// and the mode variable, because the mode decides whether each other
+    /// variable is required. A declared variable that no field reads never
+    /// refuses the read, even when it is required or its value does not
+    /// fit its type, so each command of an application can read its own
+    /// struct from one `starmap.toml`. A group's rule looks at the values
+    /// of all of its members, and refuses the read only on a member the
+    /// struct reads. [`check`] checks every variable the spec declares,
+    /// and `starmap_test::check_together` tests that the structs of an
+    /// application read every declared variable between them.
+    ///
     /// # Errors
     ///
     /// Returns [`ReadError::Spec`] when the embedded spec does not parse,
-    /// [`ReadError::Refused`] when a variable is missing, does not fit
-    /// its type or is refused by its field's own check, and [`ReadError::Field`] when a field cannot hold a
+    /// [`ReadError::Refused`] when a variable the struct reads, or the
+    /// mode variable, is missing, does not fit its type or is refused by
+    /// its field's own check, and [`ReadError::Field`] when a field cannot hold a
     /// checked value.
     fn from_vars(vars: impl IntoIterator<Item = (OsString, OsString)>) -> Result<Self, ReadError> {
         let spec = Spec::parse(Self::SPEC).map_err(ReadError::Spec)?;
         let bindings = capture(&spec, vars);
-        match check::check_with(&spec, &bindings, mode(&spec, &bindings), Self::RULES) {
+        let scope = check::Scope::Fields(Self::FIELDS);
+        match check::check_with(&spec, &bindings, mode(&spec, &bindings), scope, Self::RULES) {
             Verdict::Ready(environment) => {
                 Self::from_environment(&environment).map_err(ReadError::Field)
             }

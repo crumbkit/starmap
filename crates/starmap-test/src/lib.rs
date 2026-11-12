@@ -15,6 +15,18 @@
 //! struct against another file. Each message names that file by
 //! [`Env::SPEC_FILE`], which is the file a pointer names when the struct's
 //! `starmap.toml` is a pointer.
+//!
+//! An application whose commands each read their own struct from one
+//! `starmap.toml` checks the structs together with [`check_together`], so
+//! a variable counts as read when any of the structs reads it.
+//!
+//! ```rust,ignore
+//! #[test]
+//! fn the_structs_together_read_every_declared_variable() {
+//!     use starmap_test::Reader;
+//!     starmap_test::check_together(&[Reader::of::<Serve>(), Reader::of::<Api>()], &[]);
+//! }
+//! ```
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -91,6 +103,75 @@ pub fn check_allowing<E: Env>(allow: &[Allow]) {
     }
 }
 
+/// One struct that [`check_together`] checks: its name, its fields and the
+/// `starmap.toml` it embeds.
+#[derive(Debug, Clone, Copy)]
+pub struct Reader {
+    /// The struct's type name.
+    type_name: &'static str,
+    /// The path of the file the struct embeds, as [`Env::SPEC_FILE`] gives
+    /// it.
+    file: &'static str,
+    /// The text of the file the struct embeds.
+    spec: &'static str,
+    /// The struct's fields.
+    fields: &'static [Field],
+}
+
+impl Reader {
+    /// Returns the reader of the struct `E`.
+    #[must_use]
+    pub fn of<E: Env>() -> Self {
+        Self {
+            type_name: std::any::type_name::<E>(),
+            file: E::SPEC_FILE,
+            spec: E::SPEC,
+            fields: E::FIELDS,
+        }
+    }
+}
+
+/// Checks that the structs of `readers`, which each embed the same
+/// `starmap.toml`, agree with it together, where each of `allow` names a
+/// declared variable that none of them need read.
+///
+/// Each struct's fields are compared with their declarations as
+/// [`check_allowing`] compares them. A declared variable or family counts
+/// as read when any of the structs reads it, so an application whose
+/// commands each read their own struct keeps one declaration for all of
+/// them. Each struct's read enforces only the variables that struct reads,
+/// and this check is what keeps every declared variable read by some
+/// struct. An [`Allow`] entry that names a variable one of the structs
+/// reads excuses nothing, and is a disagreement.
+///
+/// # Panics
+///
+/// Panics when `readers` is empty, when the structs embed different files,
+/// and otherwise with every disagreement at once when the spec does not
+/// parse or the structs and the spec disagree.
+#[expect(
+    clippy::panic,
+    reason = "a failed check fails the test that calls it, as an assertion does"
+)]
+pub fn check_together(readers: &[Reader], allow: &[Allow]) {
+    let Some(first) = readers.first() else {
+        panic!("check_together needs at least one struct");
+    };
+    if let Some(other) = readers.iter().find(|reader| reader.spec != first.spec) {
+        panic!(
+            "check_together checks structs that embed one file, and {} embeds {}, which is not the file that {} embeds",
+            other.type_name, other.file, first.type_name
+        );
+    }
+    let structs: Vec<(&str, &[Field])> = readers
+        .iter()
+        .map(|reader| (reader.type_name, reader.fields))
+        .collect();
+    if let Err(report) = compare_together(&structs, first.file, first.spec, allow) {
+        panic!("{report}");
+    }
+}
+
 /// Returns the report of every disagreement between the struct `type_name`
 /// with `fields` and the spec `text`, read from `file`, or `Ok` when they
 /// agree. Each message names `file`.
@@ -101,9 +182,27 @@ fn compare(
     text: &str,
     allow: &[Allow],
 ) -> Result<(), String> {
+    compare_together(&[(type_name, fields)], file, text, allow)
+}
+
+/// Returns the report of every disagreement between `structs`, each a type
+/// name with its fields, and the spec `text`, read from `file`, or `Ok`
+/// when they agree. A declared variable counts as read when any of the
+/// structs reads it. When there is more than one struct, each message about
+/// a field names the struct whose field it is.
+fn compare_together(
+    structs: &[(&str, &[Field])],
+    file: &str,
+    text: &str,
+    allow: &[Allow],
+) -> Result<(), String> {
     let spec = Spec::parse(text).map_err(|error| format!("{file} does not parse: {error}"))?;
+    let several = structs.len() > 1;
     let mut found: Vec<(&str, String)> = Vec::new();
-    for field in fields {
+    for (type_name, field) in structs
+        .iter()
+        .flat_map(|(type_name, fields)| fields.iter().map(move |field| (*type_name, field)))
+    {
         let name = field.name.parse().ok();
         let messages = if field.family {
             match name.as_ref().and_then(|prefix| spec.family(prefix)) {
@@ -121,14 +220,30 @@ fn compare(
                 }
             }
         };
-        found.extend(messages.into_iter().map(|message| (field.name, message)));
+        found.extend(messages.into_iter().map(|message| {
+            let message = if several {
+                format!("in {type_name}, {message}")
+            } else {
+                message
+            };
+            (field.name, message)
+        }));
     }
     let read_by = |family: bool| -> BTreeSet<&str> {
-        fields
+        structs
             .iter()
+            .flat_map(|(_, fields)| fields.iter())
             .filter(|field| field.family == family)
             .map(|field| field.name)
             .collect()
+    };
+    // The struct an Allow message names as reading `name`.
+    let reader_of = |name: &str| {
+        structs
+            .iter()
+            .filter(|_| several)
+            .find(|(_, fields)| fields.iter().any(|field| field.name == name))
+            .map_or("the struct", |(type_name, _)| *type_name)
     };
     let (read, read_families) = (read_by(false), read_by(true));
     let allowed: BTreeSet<&str> = allow.iter().map(|entry| entry.name).collect();
@@ -140,12 +255,14 @@ fn compare(
         .families()
         .map(|family| (family.prefix().as_str(), "the family", &read_families))
         .filter(|(prefix, _, read)| !read.contains(prefix));
+    let unread = if several {
+        ", none of the structs reads it, and no Allow entry names it"
+    } else {
+        ", and the struct neither reads it nor has an Allow entry for it"
+    };
     for (name, what, _) in unread_variables.chain(unread_families) {
         if !allowed.contains(name) {
-            found.push((
-                name,
-                format!("{file} declares {what}, and the struct neither reads it nor has an Allow entry for it"),
-            ));
+            found.push((name, format!("{file} declares {what}{unread}")));
         }
     }
     for entry in allow {
@@ -154,7 +271,7 @@ fn compare(
             .parse()
             .is_ok_and(|name| spec.variable(&name).is_some() || spec.family(&name).is_some());
         let why = if read.contains(entry.name) || read_families.contains(entry.name) {
-            "the struct reads it".to_owned()
+            format!("{} reads it", reader_of(entry.name))
         } else if !declared {
             format!("{file} does not declare it")
         } else {
@@ -171,10 +288,14 @@ fn compare(
     found.sort_by(|left, right| left.0.cmp(right.0));
     let width = found.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
     let places = if found.len() == 1 { "place" } else { "places" };
-    let mut report = format!(
-        "{file} and {type_name} disagree in {} {places}:",
-        found.len()
-    );
+    let names: Vec<&str> = structs.iter().map(|(type_name, _)| *type_name).collect();
+    let who = match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => {
+            format!("the structs {} and {last}", rest.join(", "))
+        }
+        _ => names.concat(),
+    };
+    let mut report = format!("{file} and {who} disagree in {} {places}:", found.len());
     for (name, message) in found {
         // Writing to a String cannot fail.
         let _ = write!(report, "\n  {name:width$}  {message}");

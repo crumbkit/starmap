@@ -732,3 +732,138 @@ fn an_embedded_spec_that_does_not_parse_refuses_the_read() {
     assert!(matches!(error, ReadError::Spec(_)));
     assert_eq!(error.to_string(), "the embedded starmap.toml is invalid");
 }
+
+/// A struct over the example spec that reads only the port, as the
+/// struct of a command that needs nothing else would.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/starmap.toml")]
+struct PortOnly {
+    #[starmap("SHELF_PORT")]
+    port: starmap::Port,
+}
+
+#[test]
+fn a_required_variable_the_struct_does_not_read_does_not_refuse_the_read() {
+    let env = PortOnly::from_vars(vars(&[("SHELF_PORT", "8080")]))
+        .expect("SHELF_SESSION_KEY is required, and the struct does not read it");
+
+    assert_eq!(env.port, Port::try_from(8080).expect("8080 is a port"));
+}
+
+#[test]
+fn an_invalid_value_of_a_variable_the_struct_does_not_read_does_not_refuse_the_read() {
+    let env = PortOnly::from_vars(vars(&[
+        ("SHELF_PORT", "8080"),
+        ("SHELF_PAGE_SIZE", "500"),
+        ("SHELF_DEBUG", "perhaps"),
+    ]));
+
+    assert!(env.is_ok(), "{env:?}");
+}
+
+#[test]
+fn a_struct_read_reports_only_the_variables_its_fields_read() {
+    let error =
+        PortOnly::from_vars(vars(&[("SHELF_PAGE_SIZE", "500")])).expect_err("the port is missing");
+
+    assert_eq!(
+        error.to_string(),
+        "SHELF_PORT is required in local mode and has no value"
+    );
+}
+
+#[test]
+fn a_struct_read_enforces_the_mode_variable_although_no_field_reads_it() {
+    let invalid = PortOnly::from_vars(vars(&[("SHELF_ENV", "staging"), ("SHELF_PORT", "8080")]))
+        .expect_err("staging is not a stage");
+    let production = PortOnly::from_vars(vars(&[("SHELF_ENV", "prod"), ("SHELF_PORT", "8080")]))
+        .expect("the mirror token is required in production, and the struct does not read it");
+
+    assert_eq!(
+        invalid.to_string(),
+        "SHELF_ENV: the value is not one of dev, prod (the value is \"staging\")"
+    );
+    assert_eq!(
+        production.port,
+        Port::try_from(8080).expect("8080 is a port")
+    );
+}
+
+#[test]
+fn the_whole_file_check_still_refuses_a_variable_that_one_struct_does_not_read() {
+    let spec = starmap::Spec::parse(PortOnly::SPEC).expect("the example spec parses");
+    let bindings = starmap::capture(&spec, vars(&[("SHELF_PORT", "8080")]));
+    let starmap::Verdict::Refused(refusals) =
+        starmap::check(&spec, &bindings, starmap::Mode::Local)
+    else {
+        panic!("the session key is required");
+    };
+
+    assert_eq!(
+        refusals.to_string(),
+        "SHELF_SESSION_KEY is required in local mode and has no value"
+    );
+}
+
+/// A struct over the spec of families that reads only the stage.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/regions.toml")]
+struct StageOnly {
+    #[starmap("SHELF_STAGE")]
+    stage: Stage,
+}
+
+/// A struct over the spec of families that reads only the databases.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/regions.toml")]
+struct DatabasesOnly {
+    #[starmap(family = "SHELF_DB_URL")]
+    databases: starmap::Family<url::Url>,
+}
+
+#[test]
+fn a_member_of_a_family_the_struct_does_not_read_does_not_refuse_the_read() {
+    let unlisted = DatabasesOnly::from_vars(vars(&[
+        ("SHELF_DB_URL_US", "https://us.example/"),
+        ("SHELF_TOKEN_INITECH", "abc"),
+    ]))
+    .expect("SHELF_TOKEN is a family the struct does not read");
+    let production = StageOnly::from_vars(vars(&[("SHELF_STAGE", "prod")]))
+        .expect("production requires each token, and the struct does not read them");
+
+    assert_eq!(unlisted.databases.keys().collect::<Vec<_>>(), ["US"]);
+    assert_eq!(production.stage, Stage::Prod);
+}
+
+#[test]
+fn a_member_of_a_family_the_struct_reads_still_refuses_the_read() {
+    let error = DatabasesOnly::from_vars(vars(&[("SHELF_DB_URL_US", "not a url")]))
+        .expect_err("the member is not a url");
+
+    assert!(
+        error.to_string().starts_with("SHELF_DB_URL_US: "),
+        "{error}"
+    );
+}
+
+/// A struct over the spec with a group that reads one member of the group.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/mirror.toml")]
+struct MirrorAccount {
+    #[starmap("SHELF_MIRROR_ACCOUNT")]
+    account: Option<String>,
+}
+
+#[test]
+fn a_group_finding_refuses_the_read_only_on_a_member_the_struct_reads() {
+    let unread_member_unset = MirrorAccount::from_vars(vars(&[("SHELF_MIRROR_ACCOUNT", "shelf")]))
+        .expect("SHELF_MIRROR_KEY is unset, and the struct does not read it");
+    let read_member_unset = MirrorAccount::from_vars(vars(&[("SHELF_MIRROR_KEY", "key")]))
+        .expect_err("the struct reads the unset account, and the group needs it");
+
+    assert_eq!(unread_member_unset.account.as_deref(), Some("shelf"));
+    assert_eq!(
+        read_member_unset.to_string(),
+        "SHELF_MIRROR_ACCOUNT is unset, and the group mirror needs it because SHELF_MIRROR_KEY is set"
+    );
+}

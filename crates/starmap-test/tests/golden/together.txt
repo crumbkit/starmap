@@ -1,0 +1,5 @@
+starmap.toml and the structs starmap_test::tests::Serve and starmap_test::tests::StaleApi disagree in 4 places:
+  SHELF_CATALOGUE_URL  starmap.toml declares it, none of the structs reads it, and no Allow entry names it
+  SHELF_DEBUG          in starmap_test::tests::StaleApi, starmap.toml types it as a boolean, and the field type String holds a string
+  SHELF_PORT           its Allow entry excuses nothing, because starmap_test::tests::Serve reads it
+  XDG_STATE_HOME       starmap.toml declares it, none of the structs reads it, and no Allow entry names it
