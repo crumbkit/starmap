@@ -502,6 +502,9 @@ fields. A `Deferred<T>` field whose variable stays unset, because the
 variable is optional, gives `ReadError::Field`, as a `T` field does; the
 fix is `Deferred<Option<T>>`. `starmap_test::check` reports both. A family
 field cannot be deferred, and `Family<Deferred<T>>` fails to compile.
+When a field that is not deferred reads the same variable as a deferred
+field, the variable is not deferred: its finding refuses the read, and the
+plain field's check still applies.
 
 Another implementation may hand a variable's finding to the application at
 the point of use in place of refusing the read. The finding it hands over

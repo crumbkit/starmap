@@ -204,9 +204,11 @@ impl Scope<'_> {
     }
 
     /// Whether a finding about `name` goes to a deferred field, which holds
-    /// it in place of the check refusing: `name` is the variable of a
-    /// deferred field, and is not the mode variable, because the mode
-    /// decides the other fields.
+    /// it in place of the check refusing: at least one field reads `name`,
+    /// every field that reads it is deferred, and `name` is not the mode
+    /// variable, because the mode decides the other fields. When a field
+    /// that is not deferred reads `name` too, its finding refuses the read,
+    /// as it would without the deferred field.
     fn defers(self, spec: &Spec, name: &Name) -> bool {
         let Self::Fields(fields) = self else {
             return false;
@@ -214,9 +216,11 @@ impl Scope<'_> {
         if spec.mode().is_some_and(|rule| rule.variable() == name) {
             return false;
         }
-        fields
+        let mut readers = fields
             .iter()
-            .any(|field| field.deferred && !field.family && field.name == name.as_str())
+            .filter(|field| !field.family && field.name == name.as_str())
+            .peekable();
+        readers.peek().is_some() && readers.all(|field| field.deferred)
     }
 }
 

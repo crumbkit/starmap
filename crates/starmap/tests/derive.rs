@@ -1256,3 +1256,70 @@ fn a_deferred_field_without_an_option_cannot_hold_its_optional_variable_when_it_
     };
     assert_eq!(field.name(), "SHELF_CATALOGUE_URL");
 }
+
+/// A struct over the spec of deferred fields in which a deferred field and
+/// a plain field read each of two variables, and the plain catalogue field
+/// names a check.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/deferred.toml")]
+struct DeferredBesidePlain {
+    #[starmap("SHELF_CATALOGUE_URL")]
+    deferred_catalogue: starmap::Deferred<url::Url>,
+    #[starmap("SHELF_CATALOGUE_URL", check = https)]
+    catalogue: url::Url,
+    #[starmap("SHELF_MIRROR_URL")]
+    deferred_mirror: starmap::Deferred<Option<url::Url>>,
+    #[starmap("SHELF_MIRROR_URL")]
+    mirror: Option<url::Url>,
+}
+
+#[test]
+fn a_plain_field_beside_a_deferred_field_on_one_variable_still_refuses_the_read() {
+    let invalid = DeferredBesidePlain::from_vars(vars(&[("SHELF_CATALOGUE_URL", "not a url")]))
+        .expect_err("the plain catalogue field does not defer the invalid address");
+    let optional = DeferredBesidePlain::from_vars(vars(&[
+        ("SHELF_CATALOGUE_URL", "https://catalogue.example/"),
+        ("SHELF_MIRROR_URL", "not a url"),
+    ]))
+    .expect_err("the plain mirror field reads no None for an invalid address");
+    let checked = DeferredBesidePlain::from_vars(vars(&[(
+        "SHELF_CATALOGUE_URL",
+        "http://catalogue.example/",
+    )]))
+    .expect_err("the plain catalogue field's check refuses http");
+    let ready = DeferredBesidePlain::from_vars(vars(&[
+        ("SHELF_CATALOGUE_URL", "https://catalogue.example/"),
+        ("SHELF_MIRROR_URL", "https://mirror.example/"),
+    ]))
+    .expect("both addresses fit and the catalogue is served over https");
+
+    for error in [&invalid, &optional, &checked] {
+        assert!(matches!(error, ReadError::Refused(_)), "{error:?}");
+    }
+    assert!(
+        invalid
+            .to_string()
+            .starts_with("SHELF_CATALOGUE_URL: the value is not a url"),
+        "{invalid}"
+    );
+    assert!(
+        optional
+            .to_string()
+            .starts_with("SHELF_MIRROR_URL: the value is not a url"),
+        "{optional}"
+    );
+    assert_eq!(
+        checked.to_string(),
+        "SHELF_CATALOGUE_URL: the catalogue is served over https (the value is \"http://catalogue.example/\")"
+    );
+    assert_eq!(ready.catalogue.as_str(), "https://catalogue.example/");
+    assert_eq!(
+        ready.deferred_catalogue.get().map(url::Url::as_str),
+        Ok("https://catalogue.example/")
+    );
+    assert_eq!(
+        ready.mirror.as_ref().map(url::Url::as_str),
+        Some("https://mirror.example/")
+    );
+    assert!(matches!(ready.deferred_mirror.get(), Ok(Some(_))));
+}
