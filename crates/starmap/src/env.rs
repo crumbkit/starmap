@@ -160,6 +160,11 @@ impl Environment {
     /// It leaves every other variable of `command` as it was, so the caller
     /// decides whether the child inherits the rest of the environment.
     ///
+    /// On Windows, where an environment name ignores ASCII case, it does not
+    /// remove an unset variable whose name matches, ignoring ASCII case, the
+    /// name of a variable it sets, because the removal would remove that
+    /// variable too.
+    ///
     /// The command keeps its own copy of each withheld value, and that copy
     /// is not zeroed when the command is dropped, because `Command` holds
     /// its environment in plain strings.
@@ -175,7 +180,16 @@ impl Environment {
                     command.env(name.as_str(), secret.expose())
                 }
                 Some(Held::Presence(Some(raw))) => command.env(name.as_str(), raw),
-                Some(Held::Presence(None)) | None => command.env_remove(name.as_str()),
+                Some(Held::Presence(None)) | None => {
+                    let set = self.entries.iter().filter_map(|(other, held)| match held {
+                        Some(Held::Presence(None)) | None => None,
+                        Some(_) => Some(other),
+                    });
+                    if !removes(name, set, cfg!(windows)) {
+                        continue;
+                    }
+                    command.env_remove(name.as_str())
+                }
             };
         }
     }
@@ -247,4 +261,13 @@ impl Environment {
             .find(|(declared, _)| declared == name)
             .and_then(|(_, held)| held.as_ref())
     }
+}
+
+/// Whether [`Environment::apply`] removes the unset variable `name`, given
+/// `set`, the names of the variables the same apply sets. It always removes
+/// `name` when `ignore_case` is false. When `ignore_case` is true, as on
+/// Windows, it keeps `name` when one of `set` matches it ignoring ASCII case,
+/// because removing `name` there would remove that variable too.
+fn removes<'a>(name: &Name, mut set: impl Iterator<Item = &'a Name>, ignore_case: bool) -> bool {
+    !ignore_case || !set.any(|other| other.as_str().eq_ignore_ascii_case(name.as_str()))
 }

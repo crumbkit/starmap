@@ -10,8 +10,10 @@ A variable's name is the key of its table in `starmap.toml`, as in
 underscore and holds only ASCII letters, digits and underscores, so it
 matches `[A-Za-z_][A-Za-z0-9_]*`. A name keeps the case it is written in,
 which lets a file declare a variable that tools read in lower case, such as
-`[variables.https_proxy]`. `HTTPS_PROXY` and `https_proxy` are two
-variables, and a file may declare both. The parser refuses any other name
+`[variables.https_proxy]`. starmap matches a name exactly, so `HTTPS_PROXY` and `https_proxy` are
+two variables, and a file may declare both. On Windows, where environment
+names ignore case, such a pair is one variable, so a file for a Windows
+application should declare only one of them. The parser refuses any other name
 with `starmap::spec::bad_name`. The Rust API names it `starmap::Name`. A
 family key and a group name have their own rules, which the `family` and
 `group` entries give.

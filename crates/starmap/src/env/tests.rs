@@ -289,3 +289,64 @@ fn apply_only_declared_sets_each_member_of_a_family_that_is_set() {
     )]);
     assert_eq!(changes(&command), expected);
 }
+
+/// A spec that declares one proxy variable in upper case and one in lower
+/// case.
+const PROXIES: &str = r#"
+[variables.HTTPS_PROXY]
+purpose = "The proxy shelf sends catalogue requests through."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "inherited"
+
+[variables.https_proxy]
+purpose = "The proxy that shelf's download tool reads."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "inherited"
+"#;
+
+#[cfg(unix)]
+#[test]
+fn apply_on_unix_sets_one_name_and_removes_the_name_that_differs_only_in_case() {
+    let spec = Spec::parse(PROXIES).unwrap();
+    let inherited = vars(&[("HTTPS_PROXY", "http://proxy.example/")]);
+    let Verdict::Ready(environment) = check(&spec, &capture(&spec, inherited), Mode::Local) else {
+        panic!("the proxy fits");
+    };
+    let mut command = command();
+
+    environment.apply(&mut command);
+
+    let expected = BTreeMap::from([
+        (
+            "HTTPS_PROXY".to_owned(),
+            Some("http://proxy.example/".to_owned()),
+        ),
+        ("https_proxy".to_owned(), None),
+    ]);
+    assert_eq!(changes(&command), expected);
+}
+
+#[test]
+fn removes_an_unset_name_whose_case_differs_from_a_set_name_when_names_keep_their_case() {
+    let set = [name("HTTPS_PROXY")];
+
+    assert!(super::removes(&name("https_proxy"), set.iter(), false));
+}
+
+#[test]
+fn keeps_an_unset_name_that_matches_a_set_name_in_another_case_when_names_ignore_case() {
+    let set = [name("SHELF_PORT"), name("HTTPS_PROXY")];
+
+    assert!(!super::removes(&name("https_proxy"), set.iter(), true));
+}
+
+#[test]
+fn removes_an_unset_name_that_matches_no_set_name_when_names_ignore_case() {
+    let set = [name("HTTPS_PROXY")];
+
+    assert!(super::removes(&name("http_proxy"), set.iter(), true));
+}
