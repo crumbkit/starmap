@@ -8,9 +8,9 @@ starmap/commands-list/v1       output  document  One branch of the tool's comman
 starmap/schemas-list/v1        output  document  The JSON documents that the tool prints, with a description of each.
 starmap/schemas-show/v1        output  document  The JSON Schema of each document id given.
 starmap/self-usage/v1          output  document  The patterns in the usage log where callers waste effort, and a summary of the runs read.
-starmap/skills-install/v1      output  document  What install did in each skills directory: written, unchanged, skipped or failed.
-starmap/skills-check/v1        output  document  Whether each skills directory holds the skill that the binary embeds: current, linked, missing, differs or unreadable.
-starmap/skills-print/v1        output  document  The tool's agent skill: its name, its version and the text of its SKILL.md.
+starmap/skills-install/v1      output  document  What install did with each skill in each skills directory: written, unchanged, skipped or failed.
+starmap/skills-check/v1        output  document  Whether each skills directory holds each skill that the binary embeds: current, linked, missing, differs or unreadable.
+starmap/skills-print/v1        output  document  One agent skill of the tool: the tool's name and version, the skill's name, the text of its SKILL.md and the names of its other files.
 starmap/completion-install/v1  output  document  What install did with the shell's completion file: written, unchanged, skipped or failed.
 starmap/completion-check/v1    output  document  Whether the shell's completion file holds the script that install writes: current, linked, missing, differs or unreadable.
 starmap/completion-print/v1    output  document  The shell's registration script for the tool's completion.

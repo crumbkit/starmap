@@ -36,51 +36,56 @@ const DOTS: &str = "••••••••";
 
 /// One declared variable, with its rules and the value it has in this
 /// shell.
-#[derive(Debug, Serialize, JsonSchema)]
+#[derive(Debug, Serialize, JsonSchema, Row)]
 pub(crate) struct Explained {
     /// The variable's name.
+    #[row(column, uncut)]
     name: String,
     /// The type of the variable's value, such as port or integer 1..=100.
     #[serde(rename = "type")]
+    #[row(column)]
     kind: String,
     /// What happens when the variable has no value, in local mode and, when it differs, in production.
+    #[row(column)]
     unset: String,
     /// Where the variable's value comes from, with the kind of its bind.
+    #[row(column)]
     source: String,
     /// The variable's value in this shell, or its default; a withheld value prints as eight dots and has no text in JSON.
+    #[row(column)]
     value: Cell,
     /// Whether the value may be shown or is withheld.
+    #[row(long)]
     show: String,
     /// The variable's bind, such as a 1Password reference, when it has one.
+    #[row(long)]
     bind: Option<String>,
     /// `never` when the bind keeps the value out of any cache of resolved values; empty, and left out of `--json`, when a cache may keep it.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[row(long)]
     cache: Option<String>,
     /// The sentence that says what the variable is for.
+    #[row(long)]
     purpose: String,
     /// The sentence that says what the application does when the variable is unset; empty, and left out of `--json`, when the spec states none.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[row(long)]
     effect: Option<String>,
-    /// The sentence that states the check the application's own code makes of the value, which starmap never runs; empty, and left out of `--json`, when the spec states none.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    check: Option<String>,
     /// The name of the named enumeration that the variable's type is; left out of `--json` for any other type.
     #[serde(skip_serializing_if = "Option::is_none")]
     enumeration: Option<String>,
     /// Each value of a named enumeration with its description; empty, and left out of `--json`, for any other type.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[row(long)]
     values: Option<Values>,
+    /// The sentence that states the check the application's own code makes of the value, which starmap never runs; empty, and left out of `--json`, when the spec states none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[row(long)]
+    check: Option<String>,
     /// The name of the group of variables that are set together or not at all, which the variable belongs to; empty, and left out of `--json`, when it belongs to none.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[row(long)]
     group: Option<String>,
-}
-
-impl Row for Explained {
-    const COLUMNS: &'static [&'static str] = &["name", "type", "unset", "source", "value"];
-    const LONG_COLUMNS: &'static [&'static str] = &[
-        "show", "bind", "cache", "purpose", "effect", "values", "check", "group",
-    ];
-    const UNCUT_COLUMNS: &'static [&'static str] = &["name"];
 }
 
 /// The value of a variable as explain shows it. Its text is the value, the

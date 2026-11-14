@@ -143,19 +143,19 @@ fn the_root_help_lists_the_commands_under_six_goal_headings_in_order() {
 
 /// Returns the command line `words`, which runs in [`SPEC_FIXTURES`] and
 /// fails with `code`.
-const fn spec(code: &'static Code, words: &'static [&'static str]) -> Failing<'static> {
+const fn spec(code: Code<'static>, words: &'static [&'static str]) -> Failing<'static> {
     Failing::new(code, words).dir(SPEC_FIXTURES)
 }
 
 /// Returns the command line `words`, which runs in [`SOURCE_FIXTURES`] and
 /// fails with `code`.
-const fn source(code: &'static Code, words: &'static [&'static str]) -> Failing<'static> {
+const fn source(code: Code<'static>, words: &'static [&'static str]) -> Failing<'static> {
     Failing::new(code, words).dir(SOURCE_FIXTURES)
 }
 
 /// Returns the command line `words`, which runs in [`RUN_FIXTURES`] and
 /// fails with `code`.
-const fn run(code: &'static Code, words: &'static [&'static str]) -> Failing<'static> {
+const fn run(code: Code<'static>, words: &'static [&'static str]) -> Failing<'static> {
     Failing::new(code, words).dir(RUN_FIXTURES)
 }
 
@@ -165,84 +165,84 @@ const fn run(code: &'static Code, words: &'static [&'static str]) -> Failing<'st
 /// failures that lead to `init` run in a fresh copy of [`EXAMPLE`], so the
 /// file that init writes is gone after the chain.
 const STARTS: &[Failing<'static>] = &[
-    Failing::new(&codes::SPEC_NOT_FOUND, &["check", "--spec", "missing.toml"]),
-    spec(&codes::SPEC_UNREADABLE, &["check", "--spec", "."]),
-    spec(&codes::SPEC_SYNTAX, &["check", "--spec", "syntax.toml"]),
+    Failing::new(codes::SPEC_NOT_FOUND, &["check", "--spec", "missing.toml"]),
+    spec(codes::SPEC_UNREADABLE, &["check", "--spec", "."]),
+    spec(codes::SPEC_SYNTAX, &["check", "--spec", "syntax.toml"]),
     spec(
-        &codes::SPEC_UNKNOWN_FIELD,
+        codes::SPEC_UNKNOWN_FIELD,
         &["check", "--spec", "unknown_field.toml"],
     ),
     spec(
-        &codes::SPEC_MISSING_FIELD,
+        codes::SPEC_MISSING_FIELD,
         &["check", "--spec", "missing_field.toml"],
     ),
     spec(
-        &codes::SPEC_BAD_VALUE,
+        codes::SPEC_BAD_VALUE,
         &["check", "--spec", "bad_value.toml"],
     ),
-    spec(&codes::SPEC_BAD_NAME, &["check", "--spec", "bad_name.toml"]),
-    spec(&codes::SPEC_GUESS, &["check", "--spec", "guess.toml"]),
+    spec(codes::SPEC_BAD_NAME, &["check", "--spec", "bad_name.toml"]),
+    spec(codes::SPEC_GUESS, &["check", "--spec", "guess.toml"]),
     spec(
-        &codes::SPEC_BAD_DEFAULT,
+        codes::SPEC_BAD_DEFAULT,
         &["check", "--spec", "bad_default.toml"],
     ),
     spec(
-        &codes::SPEC_BAD_RANGE,
+        codes::SPEC_BAD_RANGE,
         &["check", "--spec", "bad_range.toml"],
     ),
     spec(
-        &codes::SPEC_EMPTY_ENUMERATION,
+        codes::SPEC_EMPTY_ENUMERATION,
         &["check", "--spec", "empty_enumeration.toml"],
     ),
     spec(
-        &codes::SPEC_SHOWN_SECRET,
+        codes::SPEC_SHOWN_SECRET,
         &["check", "--spec", "shown_secret.toml"],
     ),
     spec(
-        &codes::SPEC_WITHHELD_TYPE,
+        codes::SPEC_WITHHELD_TYPE,
         &["check", "--spec", "withheld_type.toml"],
     ),
     spec(
-        &codes::SPEC_WITHHELD_DEFAULT,
+        codes::SPEC_WITHHELD_DEFAULT,
         &["check", "--spec", "withheld_default.toml"],
     ),
     spec(
-        &codes::SPEC_BIND_MISMATCH,
+        codes::SPEC_BIND_MISMATCH,
         &["check", "--spec", "bind_mismatch.toml"],
     ),
     spec(
-        &codes::SPEC_BAD_BYTES,
+        codes::SPEC_BAD_BYTES,
         &["check", "--spec", "bad_bytes.toml"],
     ),
     spec(
-        &codes::SPEC_UNKNOWN_PLACEHOLDER,
+        codes::SPEC_UNKNOWN_PLACEHOLDER,
         &["check", "--spec", "unknown_placeholder.toml"],
     ),
     spec(
-        &codes::SPEC_MODE_UNDECLARED,
+        codes::SPEC_MODE_UNDECLARED,
         &["check", "--spec", "mode_undeclared.toml"],
     ),
     spec(
-        &codes::SPEC_MODE_SOURCE,
+        codes::SPEC_MODE_SOURCE,
         &["check", "--spec", "mode_source.toml"],
     ),
-    Failing::new(&codes::VARIABLE_UNKNOWN, &["explain", "SHELF_THEME"]),
-    Failing::new(&codes::SPEC_EXISTS, &["init", "--spec", "starmap.toml"]),
+    Failing::new(codes::VARIABLE_UNKNOWN, &["explain", "SHELF_THEME"]),
+    Failing::new(codes::SPEC_EXISTS, &["init", "--spec", "starmap.toml"]),
     Failing::new(
-        &codes::SPEC_UNWRITABLE,
+        codes::SPEC_UNWRITABLE,
         &["init", "--spec", "missing/starmap.toml"],
     ),
     source(
-        &codes::VARIABLE_UNDECLARED,
+        codes::VARIABLE_UNDECLARED,
         &["check", "--spec", "undeclared/starmap.toml"],
     ),
     source(
-        &codes::SOURCE_UNREADABLE,
+        codes::SOURCE_UNREADABLE,
         &["check", "--spec", "unreadable/starmap.toml"],
     ),
     DASH_REVISION,
     run(
-        &codes::DOTENV_SECRET,
+        codes::DOTENV_SECRET,
         &[
             "run",
             "--no-input",
@@ -253,7 +253,7 @@ const STARTS: &[Failing<'static>] = &[
         ],
     ),
     run(
-        &codes::DOTENV_SYNTAX,
+        codes::DOTENV_SYNTAX,
         &[
             "run",
             "--no-input",
@@ -264,7 +264,7 @@ const STARTS: &[Failing<'static>] = &[
         ],
     ),
     run(
-        &codes::DOTENV_UNREADABLE,
+        codes::DOTENV_UNREADABLE,
         &[
             "run",
             "--no-input",
@@ -275,7 +275,7 @@ const STARTS: &[Failing<'static>] = &[
         ],
     ),
     run(
-        &codes::VARIABLE_SECRET,
+        codes::VARIABLE_SECRET,
         &[
             "run",
             "--no-input",
@@ -286,47 +286,47 @@ const STARTS: &[Failing<'static>] = &[
         ],
     ),
     spec(
-        &codes::SPEC_POINTER_DECLARES,
+        codes::SPEC_POINTER_DECLARES,
         &["check", "--spec", "pointer_declares.toml"],
     ),
     spec(
-        &codes::SPEC_POINTER_CHAIN,
+        codes::SPEC_POINTER_CHAIN,
         &["check", "--spec", "pointer_chain.toml"],
     ),
     spec(
-        &codes::SPEC_BAD_PATTERN,
+        codes::SPEC_BAD_PATTERN,
         &["check", "--spec", "bad_pattern.toml"],
     ),
     spec(
-        &codes::SPEC_ENUMERATION_UNDECLARED,
+        codes::SPEC_ENUMERATION_UNDECLARED,
         &["check", "--spec", "enumeration_undeclared.toml"],
     ),
     spec(
-        &codes::SPEC_GROUP_UNDECLARED,
+        codes::SPEC_GROUP_UNDECLARED,
         &["check", "--spec", "group_undeclared.toml"],
     ),
     spec(
-        &codes::SPEC_BAD_GROUP,
+        codes::SPEC_BAD_GROUP,
         &["check", "--spec", "bad_group.toml"],
     ),
     spec(
-        &codes::SPEC_BAD_FAMILY,
+        codes::SPEC_BAD_FAMILY,
         &["check", "--spec", "bad_family.toml"],
     ),
     source(
-        &codes::FAMILY_UNDECLARED,
+        codes::FAMILY_UNDECLARED,
         &["check", "--spec", "undeclared-family/starmap.toml"],
     ),
     Failing::new(
-        &codes::CLIPPY_UNBANNED,
+        codes::CLIPPY_UNBANNED,
         &["check", "--spec", "unbanned/starmap.toml"],
     ),
     source(
-        &codes::CLIPPY_INVALID,
+        codes::CLIPPY_INVALID,
         &["init", "--clippy", "--spec", "clippy-invalid/starmap.toml"],
     ),
     source(
-        &codes::CLIPPY_UNWRITABLE,
+        codes::CLIPPY_UNWRITABLE,
         &[
             "init",
             "--clippy",
@@ -339,28 +339,28 @@ const STARTS: &[Failing<'static>] = &[
 /// A revision that starts with `-`, which diff refuses before git runs, so
 /// the line fails the same way outside a git repository.
 const DASH_REVISION: Failing<'static> =
-    Failing::new(&codes::REVISION_NOT_FOUND, &["diff", "--", "-x"]);
+    Failing::new(codes::REVISION_NOT_FOUND, &["diff", "--", "-x"]);
 
 /// The declared codes that no command line in this file provokes.
 const UNPROVOKED: &[Unprovoked<'_>] = &[
     Unprovoked::new(
-        &codes::SPEC_TOO_LARGE,
+        codes::SPEC_TOO_LARGE,
         "Only a file over 256 KiB provokes it, which is too large to keep as a fixture, so tests/spec.rs writes one and checks the failure.",
     ),
-    Unprovoked::new(&codes::REVISION_NO_REPOSITORY, DIFF_NEEDS_GIT),
+    Unprovoked::new(codes::REVISION_NO_REPOSITORY, DIFF_NEEDS_GIT),
     Unprovoked::new(
-        &codes::REVISION_UNREADABLE,
+        codes::REVISION_UNREADABLE,
         "Only a git that cannot start or cannot read the repository provokes it, which no fixture can set up portably.",
     ),
-    Unprovoked::new(&codes::VARIABLE_MISSING, RUN_RESOLVES_FIRST),
-    Unprovoked::new(&codes::VARIABLE_INVALID, RUN_RESOLVES_FIRST),
-    Unprovoked::new(&codes::GROUP_INCOMPLETE, RUN_RESOLVES_FIRST),
-    Unprovoked::new(&codes::FAMILY_UNLISTED_KEY, RUN_RESOLVES_FIRST),
-    Unprovoked::new(&codes::BIND_NO_PROVIDER, RUN_RESOLVES_FIRST),
-    Unprovoked::new(&codes::BIND_NO_PLACE, RUN_RESOLVES_FIRST),
-    Unprovoked::new(&codes::SECRET_UNBOUND, RUN_RESOLVES_FIRST),
+    Unprovoked::new(codes::VARIABLE_MISSING, RUN_RESOLVES_FIRST),
+    Unprovoked::new(codes::VARIABLE_INVALID, RUN_RESOLVES_FIRST),
+    Unprovoked::new(codes::GROUP_INCOMPLETE, RUN_RESOLVES_FIRST),
+    Unprovoked::new(codes::FAMILY_UNLISTED_KEY, RUN_RESOLVES_FIRST),
+    Unprovoked::new(codes::BIND_NO_PROVIDER, RUN_RESOLVES_FIRST),
+    Unprovoked::new(codes::BIND_NO_PLACE, RUN_RESOLVES_FIRST),
+    Unprovoked::new(codes::SECRET_UNBOUND, RUN_RESOLVES_FIRST),
     Unprovoked::new(
-        &codes::SECRET_UNREADABLE,
+        codes::SECRET_UNREADABLE,
         "Only 1Password or the Keychain provokes it, which a test must not touch, so starmap-resolve's tests provoke each SecretError through a fake op program and a fake resolver, and src/run/tests.rs checks how run reports one.",
     ),
 ];

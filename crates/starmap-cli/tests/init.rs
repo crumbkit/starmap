@@ -164,7 +164,8 @@ fn init_without_rust_source_lists_no_variables_and_writes_no_clippy_toml() {
             "{NO_VARIABLES}\
              Wrote starmap.toml with 0 variables that src reads. Each value marked ? is a guess.\n\
              {NO_RUST}\n\
-             Next: starmap check refuses the file until each guess is confirmed and its ? deleted.\n"
+             Next: Check the file, which check refuses until each guess is confirmed and its ? deleted.\n  \
+             starmap check\n"
         ));
     starmap(dir.path(), &["init", "--clippy"])
         .success()

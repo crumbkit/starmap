@@ -42,7 +42,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use crumbkit_process::{Capture, Outcome, OverLimit, RunOptions, Status};
+use crumbkit_process::{Capture, Outcome, RunOptions, Status};
 use starmap::Spec;
 
 #[cfg(test)]
@@ -180,11 +180,8 @@ fn git(dir: &Path, args: &[&str], limit: usize, deadline: Instant) -> io::Result
         .env("GIT_NO_LAZY_FETCH", "1")
         .env("GIT_TERMINAL_PROMPT", "0");
     let options = RunOptions::new()
-        .stdout(Capture::Whole {
-            limit,
-            over: OverLimit::Stop,
-        })
-        .stderr(Capture::Tail { limit: SMALL })
+        .stdout(Capture::whole(limit))
+        .stderr(Capture::tail(SMALL))
         .deadline(deadline);
     let finished = crumbkit_process::run(command, &options).map_err(io::Error::other)?;
     let success = ended(finished.outcome(), finished.stdout().over_limit(), limit)?;

@@ -34,23 +34,23 @@ pub(crate) const DIFF: Document<Listing<Change>> = Document::new(
 
 /// One difference between the two specs: a variable that was added or
 /// removed, or one field of a variable that changed.
-#[derive(Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, JsonSchema, Row)]
 pub(crate) struct Change {
     /// Whether the variable was added, changed or removed.
+    #[row(column)]
     change: Kind,
     /// The variable's name.
+    #[row(column, uncut)]
     name: String,
     /// The field that changed, such as type or unset; null for a variable that was added or removed.
+    #[row(column)]
     field: Option<String>,
     /// The field's value at the revision, or the type, show and source of a removed variable; null for an added variable.
+    #[row(column)]
     was: Option<String>,
     /// The field's value in the working tree, or the type, show and source of an added variable; null for a removed variable.
+    #[row(column)]
     now: Option<String>,
-}
-
-impl Row for Change {
-    const COLUMNS: &'static [&'static str] = &["change", "name", "field", "was", "now"];
-    const UNCUT_COLUMNS: &'static [&'static str] = &["name"];
 }
 
 /// How a variable differs between the two specs.

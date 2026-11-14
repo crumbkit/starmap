@@ -391,15 +391,15 @@ impl Diagnostic for SpecFailure {
 }
 
 impl Failure for SpecFailure {
-    fn code(&self) -> &'static Code {
+    fn code(&self) -> Code<'_> {
         match self {
-            Self::NotFound { .. } => &codes::SPEC_NOT_FOUND,
-            Self::Exists { .. } => &codes::SPEC_EXISTS,
-            Self::Unwritable { .. } => &codes::SPEC_UNWRITABLE,
-            Self::Unreadable { .. } => &codes::SPEC_UNREADABLE,
-            Self::TooLarge { .. } => &codes::SPEC_TOO_LARGE,
-            Self::NotUtf8 { .. } => &codes::SPEC_SYNTAX,
-            Self::Invalid { .. } => self.first_kind().map_or(&codes::SPEC_SYNTAX, code),
+            Self::NotFound { .. } => codes::SPEC_NOT_FOUND,
+            Self::Exists { .. } => codes::SPEC_EXISTS,
+            Self::Unwritable { .. } => codes::SPEC_UNWRITABLE,
+            Self::Unreadable { .. } => codes::SPEC_UNREADABLE,
+            Self::TooLarge { .. } => codes::SPEC_TOO_LARGE,
+            Self::NotUtf8 { .. } => codes::SPEC_SYNTAX,
+            Self::Invalid { .. } => self.first_kind().map_or(codes::SPEC_SYNTAX, code),
         }
     }
 
@@ -475,12 +475,12 @@ impl Failure for SpecFailure {
 /// [`codes::ALL`] that spells as [`SpecProblemKind::code`]. A kind that a
 /// later release of starmap adds reports as a syntax problem until
 /// `codes` declares its code.
-fn code(kind: SpecProblemKind) -> &'static Code {
+fn code(kind: SpecProblemKind) -> Code<'static> {
     codes::ALL
         .iter()
         .copied()
-        .find(|code| Spelling::COLONS.spell(code) == kind.code())
-        .unwrap_or(&codes::SPEC_SYNTAX)
+        .find(|code| Spelling::COLONS.spell(*code) == kind.code())
+        .unwrap_or(codes::SPEC_SYNTAX)
 }
 
 /// Returns the next step for a spec problem of `kind`.

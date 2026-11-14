@@ -1,4 +1,4 @@
-Print starmap's skill
+Print this tool's skill
 
 Usage: starmap skills print [OPTIONS]
 

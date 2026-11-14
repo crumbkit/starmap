@@ -13,9 +13,9 @@ starmap schemas show        Print the JSON Schema of each document
 starmap self                Review starmap's own use
 starmap self usage          Report the patterns in starmap's usage log where callers waste effort
 starmap skills              Give coding agents starmap's skill
-starmap skills install      Install starmap's skill into each agent skills directory that exists
-starmap skills check        Check that each installed copy of starmap's skill matches this starmap
-starmap skills print        Print starmap's skill
+starmap skills install      Install this tool's skills into each agent skills directory that exists
+starmap skills check        Check that each installed copy of this tool's skills matches this build
+starmap skills print        Print this tool's skill
 starmap completion          Set up starmap's completion in a shell
 starmap completion install  Install starmap's completion where the shell loads it
 starmap completion check    Check that starmap's installed completion file matches this starmap

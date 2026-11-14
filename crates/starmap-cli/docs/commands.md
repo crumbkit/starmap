@@ -337,6 +337,7 @@ Report the patterns in starmap's usage log where callers waste effort
 
 - `--since <DURATION>`: How far back to read the usage log, such as 12h, 7d or 2w. Default: `7d`.
 - `--log <FILE>`: Read this usage log instead of the tool's own
+- `--exclude-program <NAME>`: Leave out the runs that a program with this name marked, such as flightdeck. Takes more than one value.
 
 ### Examples
 
@@ -361,13 +362,13 @@ Give coding agents starmap's skill
 
 ### Commands
 
-- [`starmap skills install`](#starmap-skills-install): Install starmap's skill into each agent skills directory that exists
-- [`starmap skills check`](#starmap-skills-check): Check that each installed copy of starmap's skill matches this starmap
-- [`starmap skills print`](#starmap-skills-print): Print starmap's skill
+- [`starmap skills install`](#starmap-skills-install): Install this tool's skills into each agent skills directory that exists
+- [`starmap skills check`](#starmap-skills-check): Check that each installed copy of this tool's skills matches this build
+- [`starmap skills print`](#starmap-skills-print): Print this tool's skill
 
 ## `starmap skills install`
 
-Install starmap's skill into each agent skills directory that exists
+Install this tool's skills into each agent skills directory that exists
 
 ### Arguments
 
@@ -376,13 +377,13 @@ Install starmap's skill into each agent skills directory that exists
 
 ### Examples
 
-Install starmap's skill into each agent skills directory that exists.
+Install the skills into each agent skills directory that exists.
 
 ```sh
 starmap skills install
 ```
 
-Install it, replacing a file or a link that install did not write.
+Install them, replacing a file or a link that install did not write.
 
 ```sh
 starmap skills install --force
@@ -391,18 +392,19 @@ starmap skills install --force
 ### Columns
 
 - `state`: What install did: failed, skipped, written or unchanged.
+- `skill`: The skill's name, which names its folder in each skills directory, such as `shelf`.
 - `dirs`: The skills directories that share this copy, as named. Directories that resolve to one place through a symbolic link share one copy.
 - `reason`: Why install skipped or failed, or what it replaced under --force, such as `linked to /src/shelf/skill`, or null.
 
 ### Columns that `--long` adds
 
-- `path`: The SKILL.md file that install wrote or left, at its real path.
+- `path`: The SKILL.md file that install wrote or left, or the skill's other file whose write failed, at its real path.
 
 Effects: additive, idempotent, closed-world.
 
 ## `starmap skills check`
 
-Check that each installed copy of starmap's skill matches this starmap
+Check that each installed copy of this tool's skills matches this build
 
 ### Arguments
 
@@ -419,8 +421,9 @@ starmap skills check
 ### Columns
 
 - `state`: Whether the copy is the binary's: missing, differs, unreadable, linked or current.
+- `skill`: The skill's name, which names its folder in each skills directory, such as `shelf`.
 - `dirs`: The skills directories that share this copy, as named. Directories that resolve to one place through a symbolic link share one copy.
-- `reason`: Why the copy differs, cannot be read or is linked, such as `written by shelf 0.2.0` or `linked to /src/shelf/skill`, or null.
+- `reason`: Why the copy is missing a file, differs, cannot be read or is linked, such as `written by shelf 0.2.0`, `REFERENCE.md is missing` or `linked to /src/shelf/skill`, or null.
 
 ### Columns that `--long` adds
 
@@ -430,11 +433,11 @@ Effects: read-only, closed-world.
 
 ## `starmap skills print`
 
-Print starmap's skill
+Print this tool's skill
 
 ### Examples
 
-Print starmap's skill.
+Print the skill.
 
 ```sh
 starmap skills print
@@ -480,7 +483,7 @@ starmap completion install --shell zsh --force
 - `state`: What install did: failed, skipped, written or unchanged.
 - `shell`: The shell: bash, elvish, fish, powershell or zsh.
 - `path`: The completion file that install wrote or left. When the file is a link to a file that install wrote, the path of that file.
-- `reason`: Why install skipped or failed, or what it replaced under --force, such as `linked to /src/shelf/shelf.fish`, or null.
+- `reason`: Why install skipped or failed, or what it replaced under --force, such as `linked to /path/to/target.fish`, or null.
 
 Effects: additive, idempotent, closed-world.
 
@@ -505,7 +508,7 @@ starmap completion check --shell zsh
 - `state`: Whether the file holds the script that install writes: missing, differs, unreadable, linked or current.
 - `shell`: The shell: bash, elvish, fish, powershell or zsh.
 - `path`: The completion file that was checked. When the file is a link to a file that install wrote, the path of that file.
-- `reason`: Why the file differs, cannot be read or is linked, such as `linked to /src/shelf/shelf.fish`, or null.
+- `reason`: Why the file differs, cannot be read or is linked, such as `linked to /path/to/target.fish`, or null.
 
 Effects: read-only, closed-world.
 

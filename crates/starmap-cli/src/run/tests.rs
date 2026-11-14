@@ -258,7 +258,7 @@ fn secret(ready: &Ready, variable: &str) -> Option<String> {
 }
 
 /// Returns the code of each failure.
-fn codes(refused: &Refused) -> Vec<&'static Code> {
+fn codes(refused: &Refused) -> Vec<Code<'_>> {
     refused
         .failures
         .iter()
@@ -377,7 +377,7 @@ fn an_empty_secret_in_the_shell_is_refused_as_unbound_when_no_person_can_answer(
         &mut Person::absent(),
     )
     .unwrap_err();
-    assert_eq!(codes(&refused), [&codes::SECRET_UNBOUND]);
+    assert_eq!(codes(&refused), [codes::SECRET_UNBOUND]);
 }
 
 #[test]
@@ -435,7 +435,7 @@ fn set_is_refused_for_a_secret_and_admitted_for_a_setting() {
 
     let secret_set = checkout.args(&[("SHELF_UPSTREAM_TOKEN", "typed-on-the-command-line")]);
     let refused = prepared(&secret_set, &[TOKEN], &resolver, &mut person).unwrap_err();
-    assert_eq!(codes(&refused), [&codes::VARIABLE_SECRET]);
+    assert_eq!(codes(&refused), [codes::VARIABLE_SECRET]);
 
     let setting_set = checkout.args(&[("SHELF_PAGE_SIZE", "7")]);
     assert!(prepared(&setting_set, &[TOKEN], &resolver, &mut person).is_ok());
@@ -451,7 +451,7 @@ fn set_is_refused_for_an_undeclared_variable() {
         &mut Person::absent(),
     )
     .unwrap_err();
-    assert_eq!(codes(&refused), [&codes::VARIABLE_UNKNOWN]);
+    assert_eq!(codes(&refused), [codes::VARIABLE_UNKNOWN]);
 }
 
 #[test]
@@ -465,7 +465,7 @@ fn a_secret_in_dotenv_is_refused_and_names_the_variable() {
     )
     .unwrap_err();
 
-    assert_eq!(codes(&refused), [&codes::DOTENV_SECRET]);
+    assert_eq!(codes(&refused), [codes::DOTENV_SECRET]);
     let message = refused.failures[0].to_string();
     assert!(message.contains("SHELF_UPSTREAM_TOKEN"), "{message}");
     assert!(!message.contains("pasted-test-value"), "{message}");
@@ -494,7 +494,7 @@ fn an_unbound_secret_is_refused_when_no_person_can_answer() {
         &mut Person::absent(),
     )
     .unwrap_err();
-    assert_eq!(codes(&refused), [&codes::SECRET_UNBOUND]);
+    assert_eq!(codes(&refused), [codes::SECRET_UNBOUND]);
 }
 
 #[test]
@@ -508,7 +508,7 @@ fn an_unbound_secret_is_refused_when_the_person_types_nothing() {
         &mut person,
     )
     .unwrap_err();
-    assert_eq!(codes(&refused), [&codes::SECRET_UNBOUND]);
+    assert_eq!(codes(&refused), [codes::SECRET_UNBOUND]);
     assert_eq!(person.asked, ["secret SHELF_UPSTREAM_TOKEN"]);
 }
 
@@ -580,7 +580,7 @@ fn a_value_that_does_not_fit_its_type_is_refused_as_invalid() {
         &mut Person::absent(),
     )
     .unwrap_err();
-    assert_eq!(codes(&refused), [&codes::VARIABLE_INVALID]);
+    assert_eq!(codes(&refused), [codes::VARIABLE_INVALID]);
     assert!(
         refused
             .notes
@@ -672,7 +672,7 @@ fn a_withheld_bytes_value_that_does_not_fit_is_not_quoted_in_the_failure() {
         .unwrap_err();
         let failure = &refused.failures[0];
 
-        assert_eq!(codes(&refused), [&codes::VARIABLE_INVALID]);
+        assert_eq!(codes(&refused), [codes::VARIABLE_INVALID]);
         assert_eq!(
             failure.fields(),
             [
@@ -850,7 +850,7 @@ fn each_required_variable_without_a_value_is_refused_and_each_is_admitted_with_o
     let refused = prepared(&checkout.args(&[]), &[], &resolver, &mut person).unwrap_err();
     assert_eq!(
         codes(&refused),
-        [&codes::BIND_NO_PROVIDER, &codes::BIND_NO_PLACE]
+        [codes::BIND_NO_PROVIDER, codes::BIND_NO_PLACE]
     );
     assert_eq!(
         repairs(&refused),
@@ -870,7 +870,7 @@ fn each_required_variable_without_a_value_is_refused_and_each_is_admitted_with_o
 
     let vars = [("SHELF_PORT", "8080"), ("HOME", "/home/test")];
     let refused = prepared(&checkout.args(&[]), &vars, &resolver, &mut person).unwrap_err();
-    assert_eq!(codes(&refused), [&codes::VARIABLE_MISSING]);
+    assert_eq!(codes(&refused), [codes::VARIABLE_MISSING]);
 
     let set = checkout.args(&[("SHELF_NAME", "shelf")]);
     let ready = prepared(&set, &vars, &resolver, &mut person).unwrap();
@@ -895,7 +895,7 @@ fn each_secret_store_problem_is_unreadable_and_says_what_the_store_returned() {
     ];
     for (problem, says) in cases {
         let failure = RunFailure::resolve(name("SHELF_MIRROR_TOKEN"), problem);
-        assert_eq!(crumbkit::Failure::code(&failure), &codes::SECRET_UNREADABLE);
+        assert_eq!(crumbkit::Failure::code(&failure), codes::SECRET_UNREADABLE);
         assert_eq!(
             failure.to_string(),
             format!("SHELF_MIRROR_TOKEN could not be read, because {says}")
@@ -914,7 +914,7 @@ fn a_generated_variable_that_no_store_handles_fails_as_unreadable_and_names_the_
     )
     .unwrap_err();
 
-    assert_eq!(codes(&refused), [&codes::SECRET_UNREADABLE]);
+    assert_eq!(codes(&refused), [codes::SECRET_UNREADABLE]);
     assert_eq!(
         refused.failures.first().map(ToString::to_string).as_deref(),
         Some("no secret store that starmap run uses on this machine handles SHELF_SESSION_KEY")
@@ -934,7 +934,7 @@ fn an_unbound_secret_is_not_asked_for_when_another_variable_fails() {
     .unwrap_err();
     assert_eq!(
         codes(&refused),
-        [&codes::BIND_NO_PROVIDER, &codes::SECRET_UNBOUND]
+        [codes::BIND_NO_PROVIDER, codes::SECRET_UNBOUND]
     );
     assert!(person.asked.is_empty(), "{:?}", person.asked);
 
@@ -1051,7 +1051,7 @@ fn an_unbound_secret_is_not_asked_for_while_a_setting_fails_the_check() {
     .unwrap_err();
     assert_eq!(
         codes(&refused),
-        [&codes::VARIABLE_INVALID, &codes::SECRET_UNBOUND]
+        [codes::VARIABLE_INVALID, codes::SECRET_UNBOUND]
     );
     assert!(person.asked.is_empty(), "{:?}", person.asked);
 
@@ -1100,7 +1100,7 @@ fn a_partly_set_group_is_refused_and_offers_to_set_the_rest_or_unset_the_others(
     )
     .unwrap_err();
 
-    assert_eq!(codes(&refused), [&codes::GROUP_INCOMPLETE]);
+    assert_eq!(codes(&refused), [codes::GROUP_INCOMPLETE]);
     assert_eq!(
         refused.failures[0].to_string(),
         "SHELF_MIRROR_KEY is unset, and the group mirror needs it because SHELF_MIRROR_ACCOUNT \
@@ -1194,7 +1194,7 @@ fn an_unlisted_key_is_refused_and_offers_to_unset_it_or_to_list_the_key() {
     )
     .unwrap_err();
 
-    assert_eq!(codes(&refused), [&codes::FAMILY_UNLISTED_KEY]);
+    assert_eq!(codes(&refused), [codes::FAMILY_UNLISTED_KEY]);
     assert_eq!(
         refused.failures[0].to_string(),
         "SHELF_TOKEN_INITECH is set, and the family SHELF_TOKEN lists only the keys ACME and \
