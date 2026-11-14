@@ -13,6 +13,7 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   commands take crumbkit's help text, and their JSON gains a `skill` field.
   `commands list --json` gains `built_in`, and `self usage` accepts
   `--exclude-program`. The `check` key of `explain --json` follows `values`.
+
 ## [0.4.0](https://github.com/crumbkit/starmap/compare/v0.3.0...v0.4.0) - 2026-11-12
 ### Changed
 
