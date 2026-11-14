@@ -139,7 +139,7 @@ fn refused(text: &[u8]) -> ClippyFailure {
 #[test]
 fn a_file_that_is_not_toml_is_refused_and_kept() {
     let failure = refused(b"disallowed-methods = [\n");
-    assert_eq!(failure.code(), &CLIPPY_INVALID);
+    assert_eq!(failure.code(), CLIPPY_INVALID);
     assert!(
         failure.to_string().contains("is not valid TOML"),
         "{failure}"
@@ -155,7 +155,7 @@ fn a_disallowed_methods_that_is_not_an_array_is_refused_and_kept() {
         "[disallowed-methods]\npath = \"std::env::var\"\n",
     ] {
         let failure = refused(text.as_bytes());
-        assert_eq!(failure.code(), &CLIPPY_INVALID, "{text}");
+        assert_eq!(failure.code(), CLIPPY_INVALID, "{text}");
         assert!(
             failure
                 .to_string()
@@ -168,7 +168,7 @@ fn a_disallowed_methods_that_is_not_an_array_is_refused_and_kept() {
 #[test]
 fn a_file_over_256_kib_is_refused_and_kept() {
     let failure = refused("#".repeat(256 * 1024 + 1).as_bytes());
-    assert_eq!(failure.code(), &CLIPPY_INVALID);
+    assert_eq!(failure.code(), CLIPPY_INVALID);
     assert!(failure.to_string().ends_with("is over 256 KiB"));
 }
 
@@ -365,7 +365,7 @@ fn a_symbolic_link_that_leads_to_no_file_or_to_itself_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         std::os::unix::fs::symlink(target, dir.path().join("clippy.toml")).unwrap();
         let failure = beside(dir.path()).unwrap_err();
-        assert_eq!(failure.code(), &CLIPPY_INVALID, "{target}");
+        assert_eq!(failure.code(), CLIPPY_INVALID, "{target}");
         assert!(failure.to_string().contains("cannot be read"), "{failure}");
     }
 }

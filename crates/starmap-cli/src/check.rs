@@ -166,7 +166,7 @@ pub(crate) enum Finding {
     /// `starmap::Env`.
     #[failure(
         code = CLIPPY_UNBANNED,
-        recovery = Recovery::Run(SpecFile::call(&["init"], spec).arg("clippy")),
+        recovery = Recovery::Run(SpecFile::call(&["init"], spec).flag("clippy")),
         field(file = file.as_str()),
         field(methods = FieldValue::list(methods.iter().copied())),
     )]

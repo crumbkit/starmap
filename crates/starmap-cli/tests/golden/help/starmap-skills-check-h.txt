@@ -1,4 +1,4 @@
-Check that each installed copy of starmap's skill matches this starmap
+Check that each installed copy of this tool's skills matches this build
 
 Usage: starmap skills check [OPTIONS]
 

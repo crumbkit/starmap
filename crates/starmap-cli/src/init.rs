@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crumbkit::schemars::{Schema, SchemaGenerator};
 use crumbkit::serde::Serializer;
-use crumbkit::{Document, Listing, Row, Shown};
+use crumbkit::{Document, Listing, Row, Shown, Step};
 use schemars::JsonSchema;
 use serde::Serialize;
 use starmap::Name;
@@ -59,27 +59,27 @@ const HEADER: &str = "\
 
 /// One variable that src reads, with the guess for each field that init
 /// writes. Each guess ends in `?`, as it does in the file.
-#[derive(Debug, Serialize, JsonSchema)]
+#[derive(Debug, Serialize, JsonSchema, Row)]
 pub(crate) struct Guess {
     /// The variable's name.
+    #[row(column, uncut)]
     name: String,
     /// The guessed type, such as port?.
     #[serde(rename = "type")]
+    #[row(column)]
     ty: String,
     /// The guessed unset rule: required? for a setting, and optional? otherwise.
+    #[row(column)]
     unset: String,
     /// The guessed show: withheld? for a secret, and shown? otherwise.
+    #[row(long)]
     show: String,
     /// The guessed source: setting?, secret? or inherited?.
+    #[row(column)]
     source: String,
     /// The places in src that read the variable, such as src/serve.rs:22.
+    #[row(column)]
     read_at: Places,
-}
-
-impl Row for Guess {
-    const COLUMNS: &'static [&'static str] = &["name", "type", "unset", "source", "read_at"];
-    const LONG_COLUMNS: &'static [&'static str] = &["show"];
-    const UNCUT_COLUMNS: &'static [&'static str] = &["name"];
 }
 
 /// The places that read a variable. The text separates them with spaces,
@@ -153,7 +153,7 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
             .note(format!(
                 "{src} {reads} {count} {noun}, and init wrote nothing.\n{banned}"
             ))
-            .next(SpecFile::call(&["init"], &given), "writes the file.")
+            .step(Step::new("Write the file.").call(SpecFile::call(&["init"], &given)))
     } else {
         files::write_new(&located.file, &spec_text(&guesses)).map_err(|error| {
             if error.kind() == io::ErrorKind::AlreadyExists {
@@ -172,9 +172,11 @@ pub(crate) fn init(args: &InitArgs, dry_run: bool) -> Result<Listing<Guess>, cru
             .note(format!(
                 "Wrote {file} with {count} {noun} that {src} {reads}. Each value marked ? is a guess.\n{banned}"
             ))
-            .next(
-                SpecFile::call(&["check"], &given),
-                "refuses the file until each guess is confirmed and its ? deleted.",
+            .step(
+                Step::new(
+                    "Check the file, which check refuses until each guess is confirmed and its ? deleted.",
+                )
+                .call(SpecFile::call(&["check"], &given)),
             )
     };
     Ok(listing.described(noun))

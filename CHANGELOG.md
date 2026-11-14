@@ -5,6 +5,15 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+
+- The `starmap` command uses crumbkit 0.5.0. `init` prints its next step on
+  two lines, such as `Next: Write the file.` followed by the command, and the
+  `next` entry of `init --json` carries the same sentence. The `skills`
+  commands take crumbkit's help text, and their JSON gains a `skill` field.
+  `commands list --json` gains `built_in`, and `self usage` accepts
+  `--exclude-program`. The `check` key of `explain --json` follows `values`.
+
 ## [0.4.0](https://github.com/crumbkit/starmap/compare/v0.3.0...v0.4.0) - 2026-11-12
 ### Changed
 

@@ -30,9 +30,7 @@ use clap::CommandFactory as _;
 
 #[doc(hidden)]
 pub use crate::cli::{Cli, TOOL};
-use crate::cli::{
-    CommandsCommand, CompletionCommand, SKILL, SchemasCommand, SelfCommand, SkillsCommand, Verb,
-};
+use crate::cli::{CommandsCommand, CompletionCommand, SKILL, SchemasCommand, SelfCommand, Verb};
 
 /// Parses `args`, runs the command and returns the process's exit code. The
 /// first argument is the program's name. `vars` is the process environment,
@@ -103,20 +101,7 @@ where
                 Ok::<_, crumbkit::Error>(crumbkit_usage::findings(&mut output, &TOOL, &args));
             crumbkit::finish(output, crumbkit_usage::SELF_USAGE, result)
         }
-        Verb::Skills { command } => match command {
-            SkillsCommand::Install(args) => {
-                let result = Ok::<_, crumbkit::Error>(crumbkit_skills::install(&SKILL, &args));
-                crumbkit::finish(output, crumbkit_skills::SKILLS_INSTALL, result)
-            }
-            SkillsCommand::Check(args) => {
-                let result = Ok::<_, crumbkit::Error>(crumbkit_skills::check(&SKILL, &args));
-                crumbkit::finish(output, crumbkit_skills::SKILLS_CHECK, result)
-            }
-            SkillsCommand::Print => {
-                let result = Ok::<_, crumbkit::Error>(crumbkit_skills::print(&SKILL));
-                crumbkit::finish(output, crumbkit_skills::SKILLS_PRINT, result)
-            }
-        },
+        Verb::Skills { command } => crumbkit_skills::run(output, &[SKILL], &command),
         Verb::Completion { command } => match command {
             CompletionCommand::Install(args) => {
                 let result = crumbkit::completion::install(Cli::command, &args);

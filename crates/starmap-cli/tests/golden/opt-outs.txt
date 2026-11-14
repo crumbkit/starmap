@@ -66,7 +66,7 @@ twins/no-twin: starmap diff -- -x
 starmap has 2 declarations.
 
 root-verbs: starmap init, starmap check, starmap explain, starmap diff, starmap run
-  Declares: Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.
+  Declares: Each command sits directly under the root as a verb, and root help lists it under the heading of the root goal that names it.
   Reason: starmap acts on one file, starmap.toml, so its commands need no resource word.
 
 passes-on-exit: starmap run
