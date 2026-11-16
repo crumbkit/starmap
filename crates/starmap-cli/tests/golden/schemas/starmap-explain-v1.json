@@ -500,13 +500,6 @@
           "description": "The variable's name.",
           "type": "string"
         },
-        "owner": {
-          "description": "The library that reads the variable in every tool that uses it, such as `crumbkit`; left out of `--json` for a variable that the tool's own spec declares.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "purpose": {
           "description": "The sentence that says what the variable is for.",
           "type": "string"

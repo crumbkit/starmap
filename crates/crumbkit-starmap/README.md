@@ -9,19 +9,21 @@ embeds in the tool.
 
 The command reads the tool's own process environment and resolves nothing. A
 bind is named and never read, and the value of a withheld variable has no
-text. It also lists the variables that crumbkit reads in every tool, such as
-`<TOOL>_PROGRAM`, `NO_COLOR` and `XDG_STATE_HOME`, each marked with the owner
-`crumbkit`. A variable that the tool declares itself keeps the tool's
+text. It also lists the variables that the `crumbkit` crate reads in every
+tool, `<TOOL>_OUTPUT_BUDGET`, `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` and
+`TERM`, each with the owner `crumbkit` in its `owner` column. The variables that
+only `crumbkit-usage` reads are not listed, because a tool that does not use
+that crate never reads them. A variable that the tool declares itself keeps the tool's
 declaration.
 
-A tool adds an `environment` resource with a `list` verb that takes
-`SelfEnvironment` to its `self` group, adds `list_leaf` to its help record,
-and passes the result of `environment` to `crumbkit::finish` with
+A tool adds an `environment` resource with a `list` verb that takes no
+arguments to its `self` group, adds `list_leaf` to its help record, and passes
+the result of `environment` to `crumbkit::finish` with
 `SELF_ENVIRONMENT_LIST`:
 
 ```ignore
-SelfCommand::Environment { verb: EnvironmentVerb::List(args) } => {
-    let result = crumbkit_starmap::environment(&mut run, <Settings as starmap::Env>::SPEC, vars, &args);
+SelfCommand::Environment { verb: EnvironmentVerb::List } => {
+    let result = crumbkit_starmap::environment(&mut run, <Settings as starmap::Env>::SPEC, &vars);
     crumbkit::finish(run, crumbkit_starmap::SELF_ENVIRONMENT_LIST, result)
 }
 ```

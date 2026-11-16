@@ -9,7 +9,7 @@ use std::ffi::OsString;
 use clap::{Parser, Subcommand};
 use crumbkit::help::{Group, Help};
 use crumbkit::{Sink, Tool, ViewFlags, finish_to, try_parse_to};
-use crumbkit_starmap::{SELF_ENVIRONMENT_LIST, SelfEnvironment, environment, list_leaf};
+use crumbkit_starmap::{SELF_ENVIRONMENT_LIST, environment, list_leaf};
 
 /// The declaration that the tool embeds.
 const SPEC: &str = include_str!("../../starmap/tests/example/starmap.toml");
@@ -54,7 +54,7 @@ enum SelfCommand {
 #[derive(Debug, Subcommand)]
 enum EnvironmentVerb {
     /// List the variables that the tool declares and their values.
-    List(SelfEnvironment),
+    List,
 }
 
 /// The tool's help record.
@@ -80,11 +80,11 @@ fn list(flags: &[&str], vars: &[(&str, &str)]) -> String {
         .collect();
     let Root::SelfCommand {
         command: SelfCommand::Environment {
-            verb: EnvironmentVerb::List(args),
+            verb: EnvironmentVerb::List,
         },
     } = cli.command;
     let _ = cli.view;
-    let result = environment(&mut run, SPEC, vars, &args);
+    let result = environment(&mut run, SPEC, &vars);
     let code = finish_to(&mut sink, run, SELF_ENVIRONMENT_LIST, result);
     assert_eq!(code, 0, "{}", String::from_utf8_lossy(&err));
     String::from_utf8(out).unwrap()
@@ -99,22 +99,59 @@ impl Cli {
 
 #[test]
 fn the_command_prints_each_declared_variable_and_crumbkits_as_json() {
-    let printed = list(
-        &["--json", "--long"],
-        &[("SHELF_PORT", "8080"), ("SHELF_PROGRAM", "flightdeck")],
-    );
+    let vars = [
+        ("SHELF_PORT", "8080"),
+        ("SHELF_OUTPUT_BUDGET", "4096"),
+        ("SHELF_MIRROR_TOKEN", "hunter2"),
+    ];
+    let printed = list(&["--json", "--long"], &vars);
     let document: serde_json::Value = serde_json::from_str(&printed).unwrap();
     let rows = document["data"].as_array().unwrap();
-    let state = |name: &str| {
+    let field = |name: &str, key: &str| {
         rows.iter()
             .find(|row| row["name"] == name)
-            .map(|row| row["state"].clone())
+            .map(|row| row[key].clone())
     };
 
-    assert_eq!(state("SHELF_PORT"), Some("set".into()));
-    assert_eq!(state("SHELF_PROGRAM"), Some("set".into()));
-    assert_eq!(state("SHELF_MIRROR_TOKEN"), Some("unset".into()));
-    assert!(!printed.contains("hunter2"));
+    assert_eq!(field("SHELF_PORT", "state"), Some("set".into()));
+    assert_eq!(field("SHELF_OUTPUT_BUDGET", "state"), Some("set".into()));
+    assert_eq!(
+        field("SHELF_OUTPUT_BUDGET", "owner"),
+        Some("crumbkit".into())
+    );
+    assert_eq!(field("SHELF_MIRROR_TOKEN", "state"), Some("set".into()));
+    assert_eq!(field("SHELF_PORT", "owner"), Some(serde_json::Value::Null));
+}
+
+#[test]
+fn a_withheld_value_never_reaches_any_output_form() {
+    let vars = [("SHELF_MIRROR_TOKEN", "hunter2")];
+    for flags in [
+        &[][..],
+        &["--long"][..],
+        &["--json"][..],
+        &["--json", "--full"][..],
+        &["--fields", "value"][..],
+    ] {
+        let printed = list(flags, &vars);
+        assert!(
+            !printed.contains("hunter2"),
+            "{flags:?} printed the withheld value"
+        );
+    }
+}
+
+#[test]
+fn the_table_marks_the_variables_that_crumbkit_owns() {
+    let printed = list(&[], &[]);
+    let header = printed.lines().next().unwrap();
+    let budget = printed
+        .lines()
+        .find(|line| line.contains("SHELF_OUTPUT_BUDGET"))
+        .unwrap();
+
+    assert!(header.contains("OWNER"), "{header}");
+    assert!(budget.contains("crumbkit"), "{budget}");
 }
 
 #[test]

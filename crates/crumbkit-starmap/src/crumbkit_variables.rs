@@ -11,25 +11,15 @@ use starmap::{Spec, SpecError};
 #[cfg(test)]
 mod tests;
 
-/// The end of the name of the variable that gives the program that runs the
-/// tool, which the tool's name starts, such as `SHELF_PROGRAM`.
-const PROGRAM: &str = "PROGRAM";
-
 /// The end of the name of the variable that lowers the tool's output
 /// budget, which the tool's name starts, such as `SHELF_OUTPUT_BUDGET`.
 const OUTPUT_BUDGET: &str = "OUTPUT_BUDGET";
 
-/// The declaration of the variables that crumbkit reads in every tool, with `{PROGRAM}` and
-/// `{OUTPUT_BUDGET}` standing for the names that start with the tool's name.
+/// The declaration of the variables that the `crumbkit` crate reads in every
+/// tool, with `{OUTPUT_BUDGET}` standing for the name that starts with the
+/// tool's name. The variables that only `crumbkit-usage` reads are left out,
+/// because a tool that does not use that crate never reads them.
 const TEMPLATE: &str = r#"
-[variables.{PROGRAM}]
-purpose = "The name of the program that runs the tool, such as flightdeck, which the tool records in its usage log."
-type = { string = { pattern = "^[a-z][a-z0-9_-]{0,31}$" } }
-unset = "optional"
-effect = "The usage log records no program name."
-show = "shown"
-source = "setting"
-
 [variables.{OUTPUT_BUDGET}]
 purpose = "The most bytes that one run prints, which lowers the tool's own limit and never raises it."
 type = { integer = { min = 1, max = 4294967295 } }
@@ -70,29 +60,6 @@ effect = "Colour follows the other colour variables and the terminal."
 show = "shown"
 source = "inherited"
 
-[variables.XDG_STATE_HOME]
-purpose = "The directory that holds the tool's state, such as its usage log, under a directory named after the tool."
-type = { path = { absolute = true } }
-unset = "optional"
-effect = "The state directory is .local/state under the home directory."
-show = "shown"
-source = "inherited"
-
-[variables.TRACEPARENT]
-purpose = "The W3C trace context of the caller, which the tool's usage log joins."
-type = "string"
-unset = "optional"
-effect = "The run starts a new trace."
-show = "shown"
-source = "inherited"
-
-[variables.TRACESTATE]
-purpose = "The W3C trace state of the caller, which goes with TRACEPARENT."
-type = "string"
-unset = "optional"
-effect = "The run records no trace state."
-show = "shown"
-source = "inherited"
 "#;
 
 /// Returns the declaration of the variables that crumbkit reads in the tool
@@ -105,8 +72,6 @@ source = "inherited"
 /// variable name.
 pub(crate) fn spec(tool: &str) -> Result<Spec, SpecError> {
     let name = ToolName::new(tool);
-    let text = TEMPLATE
-        .replace("{PROGRAM}", &name.variable(PROGRAM))
-        .replace("{OUTPUT_BUDGET}", &name.variable(OUTPUT_BUDGET));
+    let text = TEMPLATE.replace("{OUTPUT_BUDGET}", &name.variable(OUTPUT_BUDGET));
     Spec::parse(&text)
 }

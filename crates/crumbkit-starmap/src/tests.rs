@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::{EnvironmentFailure, listing};
 
-/// The example spec of a tool named shelf, which declares `XDG_STATE_HOME`.
+/// The example spec of a tool named shelf.
 const SHELF: &str = include_str!("../../starmap/tests/example/starmap.toml");
 
 /// The spec whose fields defer their rules.
@@ -148,28 +148,29 @@ fn a_deferred_variable_that_is_unset_is_unset_and_not_invalid() {
 
 #[test]
 fn crumbkits_variables_start_with_the_tools_name() {
-    let rows = rows("my-tool", SHELF, &[("MY_TOOL_PROGRAM", "flightdeck")]);
-    let program = find(&rows, "MY_TOOL_PROGRAM");
+    let rows = rows("my-tool", SHELF, &[("MY_TOOL_OUTPUT_BUDGET", "4096")]);
+    let budget = find(&rows, "MY_TOOL_OUTPUT_BUDGET");
 
-    assert_eq!(program["owner"], "crumbkit");
-    assert_eq!(program["state"], "set");
-    assert_eq!(program["value"]["text"], "flightdeck");
-    assert_eq!(find(&rows, "MY_TOOL_OUTPUT_BUDGET")["state"], "unset");
+    assert_eq!(budget["owner"], "crumbkit");
+    assert_eq!(budget["state"], "set");
+    assert_eq!(budget["value"]["text"], "4096");
+    assert_eq!(find(&rows, "TERM")["state"], "unset");
 }
 
 #[test]
-fn a_program_name_that_is_not_one_is_invalid() {
-    let rows = rows("shelf", SHELF, &[("SHELF_PROGRAM", "Not A Name")]);
+fn an_output_budget_that_is_not_a_number_of_bytes_is_invalid() {
+    let rows = rows("shelf", SHELF, &[("SHELF_OUTPUT_BUDGET", "plenty")]);
 
-    assert_eq!(find(&rows, "SHELF_PROGRAM")["state"], "invalid");
+    assert_eq!(find(&rows, "SHELF_OUTPUT_BUDGET")["state"], "invalid");
 }
 
 #[test]
 fn a_variable_that_the_tool_declares_keeps_the_tools_declaration() {
-    let rows = rows("shelf", SHELF, &[("XDG_STATE_HOME", "/state")]);
+    let own = "[variables.NO_COLOR]\npurpose = \"The tool's own colour switch.\"\ntype = \"string\"\nunset = \"optional\"\neffect = \"Colour stays on.\"\nshow = \"shown\"\nsource = \"inherited\"\n";
+    let rows = rows("shelf", own, &[("NO_COLOR", "1")]);
     let declared: Vec<&Value> = rows
         .iter()
-        .filter(|row| row["name"] == "XDG_STATE_HOME")
+        .filter(|row| row["name"] == "NO_COLOR")
         .collect();
 
     assert_eq!(declared.len(), 1);

@@ -5,14 +5,18 @@ mod explained;
 
 use std::ffi::OsString;
 
-use clap::Args;
 use crumbkit::help::{Effects, Example, Leaf};
 use crumbkit::{Code, Document, Failure, Listing, Run};
 use starmap::{Name, Spec, SpecError};
 
+pub use crate::explained::{Cell, Explained, Listed, State, row};
+
+// The text of each part of a row, which `starmap explain`, `starmap diff` and
+// `starmap check` share with this crate. They are not part of the API that a
+// tool uses.
+#[doc(hidden)]
 pub use crate::explained::{
-    Cell, Explained, State, Values, bind_text, cache_text, empty_text, kind_text, row, source_text,
-    unset_text, value_text,
+    Values, bind_text, cache_text, empty_text, kind_text, source_text, unset_text, value_text,
 };
 
 /// The failure code of a tool whose embedded declaration does not parse.
@@ -22,33 +26,15 @@ pub const SPEC_INVALID: Code<'static> = Code::new("crumbkit", "environment", "sp
 
 /// The document that `self environment list` prints: one row for each
 /// variable that the tool declares, and one for each variable that crumbkit
-/// reads in every tool. Each row has the columns of `starmap explain` and a
-/// top-level `state`.
-pub const SELF_ENVIRONMENT_LIST: Document<Listing<Explained>> = Document::new(
+/// reads in every tool. Each row has the columns of `starmap explain`, a
+/// top-level `state` and the `owner` of a variable that crumbkit reads.
+pub const SELF_ENVIRONMENT_LIST: Document<Listing<Listed>> = Document::new(
     "crumbkit",
     "self-environment-list",
     1,
     "The environment variables that the tool declares and the library reads, each with its rules and the value it has in this process.",
 )
 .built_in();
-
-/// The arguments of `<tool> self environment list`, which has none. A tool
-/// adds an `environment` resource with a `list` verb that takes
-/// `SelfEnvironment` to its `self` group, and its handler passes the result
-/// of [`environment`] to [`finish`](crumbkit::finish) with the document
-/// [`SELF_ENVIRONMENT_LIST`]:
-///
-/// ```ignore
-/// SelfCommand::Environment { verb: EnvironmentVerb::List(args) } => {
-///     let result = crumbkit_starmap::environment(&mut run, <Env as starmap::Env>::SPEC, vars, &args);
-///     crumbkit::finish(run, crumbkit_starmap::SELF_ENVIRONMENT_LIST, result)
-/// }
-/// ```
-#[derive(Args, Clone, Copy, Debug, Default, PartialEq, Eq)]
-// The doc comment is rustdoc, and clap would copy it into the help of a
-// command without a description of its own.
-#[command(about = None, long_about = None)]
-pub struct SelfEnvironment {}
 
 /// The embedded declaration of a tool does not parse.
 #[derive(Debug, Failure)]
@@ -96,7 +82,16 @@ pub const fn list_leaf(path: &'static [&'static str]) -> Leaf {
 /// Returns a row for each variable that `spec`, the tool's embedded
 /// declaration, holds, and for each variable that crumbkit reads in every
 /// tool, with the value that `vars` gives it, for the tool to pass to
-/// [`finish`](crumbkit::finish) with [`SELF_ENVIRONMENT_LIST`].
+/// [`finish`](crumbkit::finish) with [`SELF_ENVIRONMENT_LIST`]. A tool adds
+/// an `environment` resource with a `list` verb that takes no arguments to its
+/// `self` group, and its handler passes the result to `finish`:
+///
+/// ```ignore
+/// SelfCommand::Environment { verb: EnvironmentVerb::List } => {
+///     let result = crumbkit_starmap::environment(&mut run, <Env as starmap::Env>::SPEC, &vars);
+///     crumbkit::finish(run, crumbkit_starmap::SELF_ENVIRONMENT_LIST, result)
+/// }
+/// ```
 ///
 /// `spec` is `starmap::Env::SPEC` of the struct that the tool derives. `vars`
 /// is the tool's own process environment, which `main` reads once. Nothing is
@@ -109,11 +104,10 @@ pub const fn list_leaf(path: &'static [&'static str]) -> Leaf {
 pub fn environment(
     run: &mut Run,
     spec: &str,
-    vars: Vec<(OsString, OsString)>,
-    _args: &SelfEnvironment,
-) -> Result<Listing<Explained>, EnvironmentFailure> {
+    vars: &[(OsString, OsString)],
+) -> Result<Listing<Listed>, EnvironmentFailure> {
     let tool = run.command().get_name().to_owned();
-    listing(&tool, spec, &vars)
+    listing(&tool, spec, vars)
 }
 
 /// Returns the listing of `tool`'s variables in `spec` and crumbkit's, with
@@ -122,18 +116,22 @@ fn listing(
     tool: &str,
     spec: &str,
     vars: &[(OsString, OsString)],
-) -> Result<Listing<Explained>, EnvironmentFailure> {
+) -> Result<Listing<Listed>, EnvironmentFailure> {
     let failed = |error| EnvironmentFailure { error };
     let spec = Spec::parse(spec).map_err(failed)?;
     let crumbkit = crumbkit_variables::spec(tool).map_err(failed)?;
-    let mut rows = rows(&spec, vars);
+    let own = rows(&spec, vars);
     // A variable that the tool declares itself keeps the tool's declaration.
-    let declared: Vec<String> = rows.iter().map(|row| row.name().to_owned()).collect();
-    rows.extend(
-        rows_of(&crumbkit, vars, "crumbkit")
-            .into_iter()
-            .filter(|row| !declared.iter().any(|name| name == row.name())),
-    );
+    let declared: Vec<String> = own.iter().map(|row| row.name().to_owned()).collect();
+    let crumbkits = rows(&crumbkit, vars)
+        .into_iter()
+        .filter(|row| !declared.iter().any(|name| name == row.name()))
+        .map(|row| row.listed(Some("crumbkit")));
+    let rows: Vec<Listed> = own
+        .into_iter()
+        .map(|row| row.listed(None))
+        .chain(crumbkits)
+        .collect();
     Ok(Listing::from_all(rows, None)
         .described("variables")
         .note("Values come from this process's environment, and nothing is resolved. Each variable owned by crumbkit is read by every crumbkit tool."))
@@ -146,14 +144,6 @@ fn rows(spec: &Spec, vars: &[(OsString, OsString)]) -> Vec<Explained> {
     names
         .into_iter()
         .filter_map(|name| row(spec, &bindings, name))
-        .collect()
-}
-
-/// Returns the rows of every variable of `spec`, each marked as `owner`'s.
-fn rows_of(spec: &Spec, vars: &[(OsString, OsString)], owner: &str) -> Vec<Explained> {
-    rows(spec, vars)
-        .into_iter()
-        .map(|row| row.owned_by(owner))
         .collect()
 }
 

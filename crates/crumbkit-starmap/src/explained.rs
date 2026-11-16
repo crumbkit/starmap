@@ -20,10 +20,47 @@ mod tests;
 /// does not reveal how long the secret is.
 const DOTS: &str = "••••••••";
 
-/// One declared variable, with its rules and the value it has in this
-/// shell.
-#[derive(Debug, Serialize, JsonSchema, Row)]
-pub struct Explained {
+/// Writes `Explained`, the row of `starmap explain`, and `Listed`, the row of
+/// `self environment list`, from one list of fields. `Listed` has the same
+/// fields and `owner` after them, so the two documents describe a variable
+/// alike and `starmap explain` never has a field that it does not send.
+macro_rules! row_types {
+    ($($(#[$meta:meta])* $field:ident: $ty:ty,)*) => {
+        /// One declared variable, with its rules and the value it has in this
+        /// shell.
+        #[derive(Debug, Serialize, JsonSchema, Row)]
+        pub struct Explained {
+            $($(#[$meta])* $field: $ty,)*
+        }
+
+        /// One variable of `self environment list`: the fields of
+        /// [`Explained`] and the library that owns the variable.
+        #[derive(Debug, Serialize, JsonSchema, Row)]
+        pub struct Listed {
+            $($(#[$meta])* $field: $ty,)*
+            /// The library that reads the variable in every tool, such as `crumbkit`; empty, and left out of `--json`, for a variable that the tool's own declaration holds.
+            #[serde(skip_serializing_if = "Option::is_none")]
+            #[row(column)]
+            owner: Option<String>,
+        }
+
+        impl Explained {
+            /// Returns the row of `self environment list` for this variable,
+            /// owned by the library `owner` names, or by the tool itself
+            /// without one.
+            #[must_use]
+            pub fn listed(self, owner: Option<&str>) -> Listed {
+                let Self { $($field,)* } = self;
+                Listed {
+                    $($field,)*
+                    owner: owner.map(str::to_owned),
+                }
+            }
+        }
+    };
+}
+
+row_types! {
     /// The variable's name.
     #[row(column, uncut)]
     name: String,
@@ -75,9 +112,6 @@ pub struct Explained {
     /// Where the value comes from: `set` when this shell sets the variable, `default` when it leaves the variable unset and the default applies, `unset` when the variable has no value, and `invalid` when this shell sets a value that does not fit the type. The same state as `value.state`, at the top level.
     #[row(long)]
     state: State,
-    /// The library that reads the variable in every tool that uses it, such as `crumbkit`; left out of `--json` for a variable that the tool's own spec declares.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    owner: Option<String>,
 }
 
 /// The value of a variable as explain shows it. Its text is the value, the
@@ -235,7 +269,6 @@ pub fn row(spec: &Spec, bindings: &Bindings, name: Name) -> Option<Explained> {
     let value = cell(variable, bindings.get(&name));
     Some(Explained {
         state: value.state(),
-        owner: None,
         kind: explained_kind(variable),
         unset: unset_text(variable),
         source: source_text(variable.source()),
@@ -254,16 +287,6 @@ pub fn row(spec: &Spec, bindings: &Bindings, name: Name) -> Option<Explained> {
 }
 
 impl Explained {
-    /// Marks the row as the declaration of `owner`, a library that reads the
-    /// variable in every tool that uses it.
-    #[must_use]
-    pub(crate) fn owned_by(self, owner: &str) -> Self {
-        Self {
-            owner: Some(owner.to_owned()),
-            ..self
-        }
-    }
-
     /// Returns the variable's name.
     #[must_use]
     pub fn name(&self) -> &str {

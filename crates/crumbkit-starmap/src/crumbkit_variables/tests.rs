@@ -6,9 +6,9 @@ use regex::Regex;
 use super::spec;
 
 /// The crumbkit crates whose reads of the environment happen in every
-/// tool that uses them: the core crate, and the usage log that each tool
-/// that records usage starts.
-const CRATES: &[&str] = &["crumbkit", "crumbkit-usage"];
+/// tool: the core crate. `crumbkit-usage` reads more, but only in a tool
+/// that records usage, so the list leaves its variables out.
+const CRATES: &[&str] = &["crumbkit"];
 
 /// A variable that the crates read and the listing leaves out, with why.
 const LEFT_OUT: &[(&str, &str)] = &[
@@ -29,10 +29,6 @@ const LEFT_OUT: &[(&str, &str)] = &[
         "only `completion install` reads it",
     ),
     (
-        "WT_SESSION",
-        "only the Windows build of the usage log reads it",
-    ),
-    (
         "SHELF_COMPLETE",
         "a documentation example of `declare_completion_variable`",
     ),
@@ -51,7 +47,13 @@ fn locked_version(name: &str) -> String {
         .unwrap_or_else(|| panic!("Cargo.lock has no {name}"))
         + header.len();
     let rest = &lock[start..];
-    rest[..rest.find('"').unwrap()].to_owned()
+    let version = &rest[..rest.find('"').unwrap()];
+    let entry = &rest[..rest.find("\n\n").unwrap_or(rest.len())];
+    assert!(
+        entry.contains("source = \"registry+"),
+        "{name} {version} does not come from a registry, so this test cannot read its source; point the test at the checkout that provides {name}"
+    );
+    version.to_owned()
 }
 
 /// Returns the directory of the registry source of `name` at `version`.
@@ -128,14 +130,20 @@ fn every_variable_in_the_list_appears_in_crumbkits_source() {
 
 #[test]
 fn every_variable_that_crumbkit_reads_is_in_the_list_or_left_out_with_a_reason() {
-    let read = Regex::new(
+    // A read through a call with a literal, or through a constant whose name
+    // ends in VARIABLE, such as `const VARIABLE: &str = "OUTPUT_BUDGET";`.
+    let read = Regex::new(concat!(
         r#"(?:var|var_os|env|read|colour_variable|variable)\(\s*"([A-Za-z_][A-Za-z0-9_]*)""#,
-    )
+        r#"|const\s+[A-Z_]*VARIABLE\s*:\s*&(?:'static\s+)?str\s*=\s*"([A-Za-z_][A-Za-z0-9_]*)""#,
+    ))
     .unwrap();
     let declared = declared();
     for text in crumbkit_sources() {
         for found in read.captures_iter(&text) {
-            let name = &found[1];
+            let name = found
+                .get(1)
+                .or_else(|| found.get(2))
+                .map_or("", |name| name.as_str());
             assert!(
                 declared.iter().any(|declared| declared == name)
                     || LEFT_OUT.iter().any(|(left_out, _)| left_out == &name),
@@ -153,18 +161,20 @@ fn the_list_names_the_variables_that_start_with_the_tools_name() {
         .map(|(name, _)| name.as_str().to_owned())
         .collect();
 
-    assert!(names.contains(&"SHELF_PROGRAM".to_owned()));
     assert!(names.contains(&"SHELF_OUTPUT_BUDGET".to_owned()));
     assert!(names.contains(&"NO_COLOR".to_owned()));
 }
 
 #[test]
 fn a_tool_name_with_a_dash_or_a_leading_digit_gives_variable_names_a_shell_accepts() {
-    for (tool, program) in [("my-tool", "MY_TOOL_PROGRAM"), ("2fa", "_2FA_PROGRAM")] {
+    for (tool, budget) in [
+        ("my-tool", "MY_TOOL_OUTPUT_BUDGET"),
+        ("2fa", "_2FA_OUTPUT_BUDGET"),
+    ] {
         let spec = spec(tool).unwrap();
         assert!(
-            spec.variables().any(|(name, _)| name.as_str() == program),
-            "{tool} should declare {program}"
+            spec.variables().any(|(name, _)| name.as_str() == budget),
+            "{tool} should declare {budget}"
         );
     }
 }
