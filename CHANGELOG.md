@@ -20,7 +20,9 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `check` case gives a file and an environment with the decided mode and
   the text each variable gives the child, or with each refused variable and
   its code. `conformance/README.md` gives the layout, which is version 1,
-  and starmap's test suite runs every case.
+  and the order in which the parser reports problems, and starmap's test
+  suite runs every case. The glossary's canonical form and digest entries
+  give the rules that write the canonical form byte for byte.
 
 ### Changed
 

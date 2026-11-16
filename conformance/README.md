@@ -17,6 +17,7 @@ new required file, moves the cases to `conformance/v2/`.
 ```text
 conformance/
   README.md
+  .gitattributes
   parse/<case>/starmap.toml     the input file
   parse/<case>/case.toml        what to expect
   parse/<case>/canonical.toml   the expected canonical form, for a file that parses
@@ -30,10 +31,12 @@ the cases of `parse` and then those of `check`, each in the byte order of
 their names. Every file is UTF-8 text with `\n` line endings, which
 `.gitattributes` keeps on every checkout.
 
-A runner refuses a case directory that lacks a file the layout needs, that
-holds a file the layout does not name, or whose `case.toml` holds a key the
-layout does not name. A mistyped case then fails instead of passing with
-nothing checked. A runner reports every failing case in one run, by its
+A runner refuses an entry at the root of `conformance/` other than
+`README.md`, `.gitattributes`, `parse` and `check`, so a mistyped
+directory such as `chek` fails. It also refuses a case directory that lacks
+a file the layout needs, that holds a file the layout does not name, or
+whose `case.toml` holds a key the layout does not name. A mistyped case
+then fails instead of passing with nothing checked. A runner reports every failing case in one run, by its
 path.
 
 ## case.toml
@@ -64,10 +67,65 @@ problems = ["starmap::spec::bad_default"]
 ```
 
 A digest is `sha256:` followed by the 64 lower case hex digits of the
-SHA-256 hash of the canonical form's UTF-8 bytes. A runner compares the
-canonical form it writes with `canonical.toml` byte for byte, and checks
+SHA-256 hash of the canonical form's UTF-8 bytes. The glossary's
+[canonical form](../docs/glossary.md#canonical-form) and
+[digest](../docs/glossary.md#digest) entries give the rules that decide
+those bytes: the order of tables and fields, the fields and tables the form
+leaves out, how it quotes strings, and its line endings. A runner compares
+the canonical form it writes with `canonical.toml` byte for byte, and checks
 that parsing `canonical.toml` gives the same digest. A case that expects
 `problems` has no `canonical.toml`.
+
+### The order of problems
+
+`problems` is an ordered list, and a runner compares it in order. starmap
+reports the problems of a file in this order:
+
+1. A file over 262,144 bytes gives the one problem
+   `starmap::spec::too_large`, and a file that is not TOML gives the one
+   problem `starmap::spec::syntax`. starmap reads nothing more of either.
+2. A file whose top level has the key `spec` is a pointer. It gives
+   `starmap::spec::pointer_declares` once for each of `mode`,
+   `enumerations`, `groups`, `families` and `variables` that it has, in the
+   file's order, or else the one problem `starmap::spec::pointer_chain`.
+   starmap reports nothing else of a pointer.
+3. Any other file first gives each top-level key that starmap does not
+   know, in the file's order. starmap then reads the top-level tables in a
+   fixed order, whatever their order in the file: `enumerations`,
+   `families`, `variables`, `mode`, `groups` and `tool`.
+4. Inside `enumerations`, `families`, `variables`, `groups` and `tool`,
+   starmap reads the entries in the file's order. After the last family,
+   it reports each family whose prefix is a member name of another family,
+   in the file's order.
+
+A variable reports its problems in this order, and a family reports them in
+the same order:
+
+1. A key that is not a variable name, or not a family prefix.
+2. A value that is not a table, after which the entry reports nothing more.
+3. Each key of the table that the entry does not take, in the file's order.
+   A family does not take `presence`.
+4. The fields `purpose`, `effect`, `check`, `type`, `show`, `unset`,
+   `presence`, `empty`, `source`, `bind` and `tool`, in that order. A
+   missing required field is reported in its place in this order, so a
+   variable that has only a `purpose` gives four
+   `starmap::spec::missing_field` problems, for `type`, `show`, `unset` and
+   `source`.
+5. The rules that join fields: `starmap::spec::shown_secret`, then
+   `starmap::spec::withheld_type`, then a `bytes` field that the variable
+   does not take, then a bind that does not fit the source or a generated
+   length that does not fit its type.
+6. For a family, its `keys`, and then a default, a required open family and
+   a source that a family does not take, in that order.
+7. For a variable, a declared variable that is a member of a family.
+
+The `mode` table reports each key it does not take, then its `variable`,
+then its `production`, and then a variable that the file does not declare
+or that cannot decide the mode. An enumeration reports its name, then a
+value that is not a table and an empty table, and then each value in the
+file's order. A group reports its name, then a value that is not a table,
+each key it does not take, its `variables` field, a list of fewer than two
+members, and then each member's problem in the list's order.
 
 The message and the span of each problem are not part of a case. They are
 English text and positions in the file, and each implementation words and
@@ -145,13 +203,13 @@ implementation tests the limit with an input it builds for itself.
 
 ## Running the cases from another language
 
-1. List the directories under `parse` and under `check`, each in the byte
-   order of their names.
+1. Refuse an unknown entry at the root, and list the directories under
+   `parse` and under `check`, each in the byte order of their names.
 2. For each case, refuse a missing or unknown file and an unknown key in
    `case.toml`, as the layout section says.
 3. For a parse case, parse `starmap.toml`. Compare the digest and the
    canonical form with `digest` and `canonical.toml`, or the codes of the
-   problems with `problems`.
+   problems, in order, with `problems`.
 4. For a check case, parse `starmap.toml`, check the `environment` table in
    the mode it decides, and compare the mode and the text each variable
    gives the child with `mode` and `values`, or each refused variable and

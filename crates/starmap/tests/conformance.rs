@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use starmap::{Environment, Problem, Spec, SpecError, Verdict};
-use toml_edit::{DocumentMut, Item, TableLike};
+use toml_edit::{DocumentMut, Item, Table, TableLike};
 
 /// The repository's conformance cases.
 const CONFORMANCE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../conformance");
@@ -43,6 +43,9 @@ source = "setting"
 /// source text.
 const SPEC_SOURCE: &str = include_str!("../src/spec.rs");
 
+/// The entries that the layout allows at the root of `conformance/`.
+const ROOT_ENTRIES: &[&str] = &[".gitattributes", "README.md", "check", "parse"];
+
 /// The codes that no `parse` case covers. A file over 256 KiB is refused
 /// with `too_large`, and such an input is too large to keep in the
 /// repository.
@@ -66,6 +69,16 @@ fn run(root: &Path) -> Vec<String> {
             .to_string()
     };
     let mut failures = Vec::new();
+    match unknown_entries(root) {
+        Ok(unknown) => failures.extend(unknown.iter().map(|path| {
+            format!(
+                "{}: the layout holds only {} at the root",
+                shown(path),
+                ROOT_ENTRIES.join(", ")
+            )
+        })),
+        Err(reason) => failures.push(format!("{}: {reason}", shown(root))),
+    }
     let kinds: [(&str, CaseRunner); 2] = [("parse", parse_case), ("check", check_case)];
     for (kind, run_case) in kinds {
         let dir = root.join(kind);
@@ -81,6 +94,22 @@ fn run(root: &Path) -> Vec<String> {
         }
     }
     failures
+}
+
+/// Returns each entry of `root` that [`ROOT_ENTRIES`] does not name, in
+/// name order.
+fn unknown_entries(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let entries = fs::read_dir(root).map_err(|error| format!("cannot be read: {error}"))?;
+    let mut unknown = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("cannot be read: {error}"))?;
+        let name = entry.file_name();
+        if !ROOT_ENTRIES.iter().any(|known| name == **known) {
+            unknown.push(entry.path());
+        }
+    }
+    unknown.sort();
+    Ok(unknown)
 }
 
 /// Returns each case directory in `dir`, in name order, or the reason
@@ -150,10 +179,11 @@ fn known(table: &dyn TableLike, path: &str, known: &[&str]) -> Outcome {
     Ok(())
 }
 
-/// Parses `case.toml`, checks its top-level keys against `keys`, checks its
-/// description, and returns the document and its `expect` table.
-fn case_toml(text: &str, keys: &[&str]) -> Result<DocumentMut, String> {
-    let document: DocumentMut = text
+/// Parses `case.toml`, checks its top-level keys against `keys` and its
+/// description, and returns the rest of the document and its `expect`
+/// table.
+fn case_toml(text: &str, keys: &[&str]) -> Result<(DocumentMut, Table), String> {
+    let mut document: DocumentMut = text
         .parse()
         .map_err(|error| format!("case.toml is not valid TOML: {error}"))?;
     known(document.as_table(), "", keys)?;
@@ -161,22 +191,12 @@ fn case_toml(text: &str, keys: &[&str]) -> Result<DocumentMut, String> {
         Some(description) if !description.trim().is_empty() => {}
         _ => return Err("case.toml has no `description` sentence".to_owned()),
     }
-    if document
-        .get("expect")
-        .and_then(Item::as_table_like)
-        .is_none()
-    {
-        return Err("case.toml has no `[expect]` table".to_owned());
-    }
-    Ok(document)
-}
-
-/// Returns the `expect` table of a document that [`case_toml`] checked.
-fn expect_table(document: &DocumentMut) -> &dyn TableLike {
-    document
-        .get("expect")
-        .and_then(Item::as_table_like)
-        .unwrap_or_else(|| document.as_table())
+    let expect = match document.remove("expect") {
+        Some(Item::Table(table)) => table,
+        Some(Item::Value(toml_edit::Value::InlineTable(table))) => table.into_table(),
+        _ => return Err("case.toml has no `[expect]` table".to_owned()),
+    };
+    Ok((document, expect))
 }
 
 /// Returns the text of `item`, whose dotted path is `path`.
@@ -228,9 +248,8 @@ fn codes(error: &SpecError) -> Vec<String> {
 /// Runs the parse case in `case`.
 fn parse_case(case: &Path) -> Outcome {
     let files = read_files(case, &["starmap.toml", "case.toml"], &["canonical.toml"])?;
-    let document = case_toml(&files["case.toml"], &["description", "expect"])?;
-    let expect = expect_table(&document);
-    known(expect, "expect", &["digest", "problems"])?;
+    let (_, expect) = case_toml(&files["case.toml"], &["description", "expect"])?;
+    known(&expect, "expect", &["digest", "problems"])?;
     let parsed = Spec::parse(&files["starmap.toml"]);
     match (expect.get("digest"), expect.get("problems")) {
         (Some(digest), None) => {
@@ -439,11 +458,11 @@ fn expected_check(expect: &dyn TableLike) -> Result<CheckResult, String> {
 /// Runs the check case in `case`.
 fn check_case(case: &Path) -> Outcome {
     let files = read_files(case, &["starmap.toml", "case.toml"], &[])?;
-    let document = case_toml(
+    let (document, expect) = case_toml(
         &files["case.toml"],
         &["description", "environment", "expect"],
     )?;
-    let expected = expected_check(expect_table(&document))?;
+    let expected = expected_check(&expect)?;
     let environment = match document.get("environment") {
         Some(item) => text_table(item, "environment")?,
         None => Vec::new(),
@@ -741,6 +760,25 @@ fn a_case_that_lacks_a_file_is_refused() {
         "{failures:?}"
     );
     assert!(failures[0].contains("starmap.toml"), "{failures:?}");
+}
+
+#[test]
+fn the_runner_refuses_an_entry_at_the_root_that_the_layout_does_not_name() {
+    let root = cases("unknown-root-entry");
+    write_digest_case(&root, "chek/port", None);
+    fs::write(root.join("notes.txt"), "A note.\n").unwrap();
+
+    let failures = run(&root);
+
+    assert_eq!(failures.len(), 2, "{failures:?}");
+    assert!(
+        failures[0].starts_with("conformance/chek: "),
+        "{failures:?}"
+    );
+    assert!(
+        failures[1].starts_with("conformance/notes.txt: "),
+        "{failures:?}"
+    );
 }
 
 #[test]
