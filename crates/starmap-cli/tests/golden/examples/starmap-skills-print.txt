@@ -12,8 +12,7 @@ one's type, whether it is a setting, a secret or inherited, what happens when
 it is unset, and where its value comes from.
 
 Use starmap when a repository has a starmap.toml, when code in `src` reads an
-undeclared environment variable, or when a program needs its variables set
-from a spec.
+undeclared variable, or when a program needs its variables set.
 
 The commands read `starmap.toml` in the current directory, or the file that
 `--spec FILE` names. A starmap.toml that holds only `spec = "path"` points to
@@ -27,9 +26,10 @@ the file that declares the variables.
   `std::env::var`, `var_os`, `vars` and `vars_os`. A read in a build script
   or test takes `#[expect(clippy::disallowed_methods, reason = "...")]`.
   `starmap init --dry-run` prints the guesses and writes nothing.
-- `starmap check` confirms that the spec is valid and complete. It checks
+- `starmap check` confirms the spec is valid and complete. It checks
   every rule of the file, fails for each variable that `src` reads and the
   file does not declare, and refuses a guess that still ends in `?`.
+  `--src DIR` replaces `src`.
 - `starmap explain` prints each variable's type, unset rule, source and value
   in this shell. A withheld value prints as eight dots and has no text in
   JSON. `starmap explain NAME` explains one variable.

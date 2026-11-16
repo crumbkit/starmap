@@ -106,6 +106,15 @@
       "budget": null
     },
     {
+      "rule": "filters/repeats-and-commas",
+      "applies_to": "starmap check --src",
+      "reason": "A directory name may hold a comma, so each use names one directory whole.",
+      "costs": [
+        "An agent that writes the form the option does not accept gets a refusal or a wrong value."
+      ],
+      "budget": null
+    },
+    {
       "rule": "examples/run",
       "applies_to": "starmap run --set SHELF_DEBUG=true -- cargo run",
       "reason": "The example directory's spec reads a secret through op and keeps a generated value in the Keychain, which a test must not touch, and the examples run cargo, so tests/run.rs runs the command against fixtures without either and checks what the program receives.",

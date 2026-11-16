@@ -357,3 +357,16 @@ fn a_bare_clap_env_that_clap_renames_is_read_under_the_field_name() {
     let text = "#[command(rename_all_env = \"kebab-case\")]\nstruct Cli {\n    #[arg(env, id = \"other\")]\n    listen_port: u16,\n}\n";
     assert_eq!(reads(text), [read("LISTEN_PORT", 3)]);
 }
+
+#[test]
+fn a_named_directory_that_is_missing_fails_and_a_default_one_has_no_reads() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("api").join("src");
+    assert!(scan(&missing).unwrap().reads.is_empty());
+    let failure = super::scan_named(std::slice::from_ref(&missing)).unwrap_err();
+    assert!(
+        failure
+            .to_string()
+            .starts_with(&format!("{} does not exist", missing.display()))
+    );
+}

@@ -83,6 +83,12 @@ const ALLOW: &[Allow] = &[
         "--set",
         "A value of --set is any text, which may hold commas, so each use gives one NAME=VALUE whole.",
     ),
+    Allow::option(
+        Rule::RepeatsAndCommas,
+        "check",
+        "--src",
+        "A directory name may hold a comma, so each use names one directory whole.",
+    ),
     Allow::example(
         "run",
         &["--set", "SHELF_DEBUG=true", "--", "cargo", "run"],

@@ -1,0 +1,1 @@
+starmap.toml declares 9 variables, and src/books reads 1 of them.

@@ -248,16 +248,21 @@ pub(crate) fn check(
 ) -> Result<Prose<Checked, Finding>, crumbkit::Error> {
     let spec::Opened { spec, located } = spec::open(&args.file.spec)?;
     let file = located.file.display().to_string();
+    let (dirs, scanned) = if args.src.is_empty() {
+        (&located.src, scan::scan_all(&located.src)?)
+    } else {
+        (&args.src, scan::scan_named(&args.src)?)
+    };
     let scan::Scanned {
         reads,
         checks,
         families,
         unresolved,
         rust,
-    } = scan::scan_all(&located.src)?;
+    } = scanned;
     let bindings = starmap::capture(&spec, vars);
     let (mode, note) = mode::decide(&spec, &bindings);
-    let src = Dirs(&located.src);
+    let src = Dirs(dirs);
     let mut notes = vec![note];
     let mut checks_without_sentence = Vec::new();
     for (name, at) in &checks {
@@ -337,9 +342,9 @@ pub(crate) fn check(
         checks_without_sentence,
         sentences_without_check,
         unresolved,
-        src: Dirs(&located.src).to_string(),
-        src_verb: Dirs(&located.src).verb("reads", "read"),
-        scanned_nothing: Dirs(&located.src).is_empty(),
+        src: src.to_string(),
+        src_verb: src.verb("reads", "read"),
+        scanned_nothing: src.is_empty(),
         spec: file,
         mode: mode.into(),
     };

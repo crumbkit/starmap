@@ -160,9 +160,14 @@ struct Read {
 ///
 /// Returns [`SourceFailure`] as [`scan`] does for any of the directories.
 pub(crate) fn scan_all(dirs: &[PathBuf]) -> Result<Scanned, SourceFailure> {
+    scan_each(dirs, Presence::Optional)
+}
+
+/// Scans each of `dirs` and merges the reads, as [`scan_all`] describes.
+fn scan_each(dirs: &[PathBuf], presence: Presence) -> Result<Scanned, SourceFailure> {
     let mut all = Scanned::default();
     for dir in dirs {
-        let scanned = scan(dir)?;
+        let scanned = scan_dir(dir, presence)?;
         for (name, places) in scanned.reads {
             all.reads.entry(name).or_default().extend(places);
         }
@@ -176,6 +181,27 @@ pub(crate) fn scan_all(dirs: &[PathBuf]) -> Result<Scanned, SourceFailure> {
         all.rust.extend(scanned.rust);
     }
     Ok(all)
+}
+
+/// Reads every `.rs` file under each directory of `dirs`, as [`scan_all`]
+/// does, except that a directory that does not exist is a failure, because
+/// the caller named it.
+///
+/// # Errors
+///
+/// Returns [`SourceFailure`] as [`scan_named`] does for a missing directory,
+/// and as [`scan`] does for any other problem.
+pub(crate) fn scan_named(dirs: &[PathBuf]) -> Result<Scanned, SourceFailure> {
+    scan_each(dirs, Presence::Required)
+}
+
+/// Whether a source directory that does not exist is a failure.
+#[derive(Debug, Clone, Copy)]
+enum Presence {
+    /// A missing directory has no reads.
+    Optional,
+    /// A missing directory is a [`SourceFailure`].
+    Required,
 }
 
 /// The source directories of a scan, which print as `src`, as `src and
@@ -216,10 +242,27 @@ impl fmt::Display for Dirs<'_> {
 ///
 /// Returns [`SourceFailure`] for a directory or file that cannot be read,
 /// a file over 1 MiB, and a file that is not UTF-8 text or not Rust tokens.
+#[cfg(test)]
 pub(crate) fn scan(src: &Path) -> Result<Scanned, SourceFailure> {
+    scan_dir(src, Presence::Optional)
+}
+
+/// Scans one directory as [`scan`] does, and fails on a missing directory
+/// when `presence` is [`Presence::Required`].
+fn scan_dir(src: &Path, presence: Presence) -> Result<Scanned, SourceFailure> {
     let paths = match files::rust_files(src) {
         Ok(paths) => paths,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Scanned::default()),
+        Err(error)
+            if error.kind() == io::ErrorKind::NotFound
+                && matches!(presence, Presence::Optional) =>
+        {
+            return Ok(Scanned::default());
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(SourceFailure::Missing {
+                file: src.display().to_string(),
+            });
+        }
         Err(error) => return Err(SourceFailure::new(src, format!("cannot be read: {error}"))),
     };
     let mut scanned = Scanned::default();
@@ -602,6 +645,16 @@ pub(crate) enum SourceFailure {
         /// What is wrong with it, such as `is not valid Rust at line 3`.
         problem: String,
     },
+    /// A directory that the caller named with `--src` does not exist.
+    #[failure(
+        code = SOURCE_UNREADABLE,
+        hint = "name a directory that exists in place of {file}",
+        field(file = file.as_str()),
+    )]
+    Missing {
+        /// The directory, as the caller typed it.
+        file: String,
+    },
     /// The file is over 1 MiB. Such a file is usually generated and
     /// builds, so its one repair is to move it.
     #[failure(
@@ -636,6 +689,7 @@ impl fmt::Display for SourceFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unbuildable { file, problem } => write!(formatter, "{file} {problem}"),
+            Self::Missing { file } => write!(formatter, "{file} does not exist"),
             Self::TooLarge { file } => {
                 write!(
                     formatter,

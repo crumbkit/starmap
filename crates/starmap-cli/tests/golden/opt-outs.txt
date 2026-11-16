@@ -1,4 +1,4 @@
-starmap has 14 opt-outs from the conventions.
+starmap has 15 opt-outs from the conventions.
 
 examples/run: starmap self usage
   Reason: The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.
@@ -47,6 +47,10 @@ effects/items: starmap run
 
 filters/repeats-and-commas: starmap run --set
   Reason: A value of --set is any text, which may hold commas, so each use gives one NAME=VALUE whole.
+  Cost: An agent that writes the form the option does not accept gets a refusal or a wrong value.
+
+filters/repeats-and-commas: starmap check --src
+  Reason: A directory name may hold a comma, so each use names one directory whole.
   Cost: An agent that writes the form the option does not accept gets a refusal or a wrong value.
 
 examples/run: starmap run --set SHELF_DEBUG=true -- cargo run
