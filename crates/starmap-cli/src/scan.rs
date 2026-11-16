@@ -258,6 +258,11 @@ fn scan_dir(src: &Path, presence: Presence) -> Result<Scanned, SourceFailure> {
         {
             return Ok(Scanned::default());
         }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(SourceFailure::Missing {
+                file: src.display().to_string(),
+            });
+        }
         Err(error) => return Err(SourceFailure::new(src, format!("cannot be read: {error}"))),
     };
     let mut scanned = Scanned::default();
@@ -640,6 +645,16 @@ pub(crate) enum SourceFailure {
         /// What is wrong with it, such as `is not valid Rust at line 3`.
         problem: String,
     },
+    /// A directory that the caller named with `--src` does not exist.
+    #[failure(
+        code = SOURCE_UNREADABLE,
+        hint = "name a directory that exists in place of {file}",
+        field(file = file.as_str()),
+    )]
+    Missing {
+        /// The directory, as the caller typed it.
+        file: String,
+    },
     /// The file is over 1 MiB. Such a file is usually generated and
     /// builds, so its one repair is to move it.
     #[failure(
@@ -674,6 +689,7 @@ impl fmt::Display for SourceFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unbuildable { file, problem } => write!(formatter, "{file} {problem}"),
+            Self::Missing { file } => write!(formatter, "{file} does not exist"),
             Self::TooLarge { file } => {
                 write!(
                     formatter,

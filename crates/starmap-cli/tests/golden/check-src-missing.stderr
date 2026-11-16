@@ -1,4 +1,3 @@
-error: rooted/nowhere cannot be read: No such file or directory (os error 2)
-  help:  fix rooted/nowhere so that cargo builds it
-  help:  move rooted/nowhere out of src
+error: rooted/nowhere does not exist
+  help:  name a directory that exists in place of rooted/nowhere
   code:  starmap::source::unreadable

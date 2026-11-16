@@ -86,8 +86,8 @@ const HELP: Help = Help::new()
                 Example::new(&[], "Check starmap.toml in the current directory"),
                 Example::new(&["--json"], "Print the result of the check as JSON"),
                 Example::new(
-                    &["--src", "api/src"],
-                    "Scan api/src in place of the default source directories",
+                    &["--src", "src/books"],
+                    "Scan src/books in place of the default source directories",
                 ),
             ])
             .effects(Effects::read_only())
@@ -239,8 +239,7 @@ pub(crate) enum Verb {
     ///
     /// check scans src beside the spec, or the directories that a pointer
     /// lists. --src DIR scans the directory it names in place of those, and
-    /// takes several directories, separated by commas or by repeating
-    /// the option. A path is read from the current directory
+    /// repeats to name several. A path is read from the current directory
     /// and printed as typed. A named directory that does not exist fails,
     /// where a missing default src has no reads.
     Check(CheckArgs),
@@ -386,8 +385,8 @@ pub(crate) struct CheckArgs {
     #[command(flatten)]
     pub(crate) file: SpecFile,
 
-    /// Scan this source directory, in place of the default directories; separate several with commas or repeat the option
-    #[arg(long, value_name = "DIR", value_delimiter = ',', action = clap::ArgAction::Append, value_parser = NonEmptyStringValueParser::new().map(PathBuf::from))]
+    /// Scan this source directory, in place of the default directories; repeat the option to scan several
+    #[arg(long, value_name = "DIR", value_parser = NonEmptyStringValueParser::new().map(PathBuf::from))]
     pub(crate) src: Vec<PathBuf>,
 }
 

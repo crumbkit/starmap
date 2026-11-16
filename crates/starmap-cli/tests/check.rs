@@ -225,7 +225,7 @@ fn an_undeclared_read_in_a_directory_that_src_names_fails_at_its_place_as_typed(
     let run = starmap(&[
         "check",
         "--spec",
-        "rooted-undeclared/starmap.toml",
+        "rooted/starmap.toml",
         "--src",
         "rooted-undeclared/api/src",
         "--json",

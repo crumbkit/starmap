@@ -367,6 +367,6 @@ fn a_named_directory_that_is_missing_fails_and_a_default_one_has_no_reads() {
     assert!(
         failure
             .to_string()
-            .starts_with(&format!("{} cannot be read", missing.display()))
+            .starts_with(&format!("{} does not exist", missing.display()))
     );
 }
