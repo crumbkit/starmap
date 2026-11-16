@@ -1,0 +1,4 @@
+description = "A group name with an upper case letter is refused."
+
+[expect]
+problems = ["starmap::spec::bad_value"]

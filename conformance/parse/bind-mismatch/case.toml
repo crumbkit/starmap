@@ -1,0 +1,4 @@
+description = "A setting with a one-password bind is refused."
+
+[expect]
+problems = ["starmap::spec::bind_mismatch"]

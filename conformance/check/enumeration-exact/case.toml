@@ -1,0 +1,9 @@
+description = "An enumeration matches exactly, so Borrow is invalid."
+
+[environment]
+READER_MODE = "Borrow"
+
+[expect]
+refused = [
+  { variable = "READER_MODE", code = "starmap::variable::invalid" },
+]

@@ -1,0 +1,4 @@
+description = "A group with one member is refused."
+
+[expect]
+problems = ["starmap::spec::bad_group"]

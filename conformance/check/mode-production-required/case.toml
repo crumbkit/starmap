@@ -1,0 +1,9 @@
+description = "A variable required only in production is missing in production mode."
+
+[environment]
+SHELF_ENV = "prod"
+
+[expect]
+refused = [
+  { variable = "LIBRARY_TOKEN", code = "starmap::variable::missing" },
+]

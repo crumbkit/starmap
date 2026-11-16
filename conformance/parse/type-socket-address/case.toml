@@ -1,0 +1,4 @@
+description = "The type word socket-address parses."
+
+[expect]
+digest = "sha256:8e374225bcdd8e67d3a26edae8f3a13f7d83eb9a57c58788ac92d4ff6d502ca9"

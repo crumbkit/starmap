@@ -1,0 +1,4 @@
+description = "A group that lists an undeclared variable is refused."
+
+[expect]
+problems = ["starmap::spec::group_undeclared"]

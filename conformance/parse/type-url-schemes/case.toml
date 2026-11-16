@@ -1,0 +1,4 @@
+description = "A url type table with a scheme list parses and keeps the list's order."
+
+[expect]
+digest = "sha256:d07dbacdf9d20916b8951e70957ca6330736f436e65967af4657884bb2ddae18"

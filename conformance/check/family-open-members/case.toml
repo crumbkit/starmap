@@ -1,0 +1,9 @@
+description = "Every member of an open family reaches the child."
+
+[environment]
+SHELF_DB_URL_US = "https://us.example/"
+SHELF_DB_URL_EU = "https://eu.example/"
+
+[expect]
+mode = "local"
+values = { SHELF_PORT = "8080", SHELF_DB_URL_EU = "https://eu.example/", SHELF_DB_URL_US = "https://us.example/" }

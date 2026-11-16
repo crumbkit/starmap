@@ -1,0 +1,9 @@
+description = "A value that decodes to the wrong number of bytes is invalid."
+
+[environment]
+SHELF_KEY = "deadbeef00"
+
+[expect]
+refused = [
+  { variable = "SHELF_KEY", code = "starmap::variable::invalid" },
+]

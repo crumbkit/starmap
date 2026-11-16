@@ -1,0 +1,9 @@
+description = "A mode value that does not fit its type decides local mode and is invalid."
+
+[environment]
+SHELF_ENV = "staging"
+
+[expect]
+refused = [
+  { variable = "SHELF_ENV", code = "starmap::variable::invalid" },
+]

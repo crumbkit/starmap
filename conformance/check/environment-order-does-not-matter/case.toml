@@ -1,0 +1,9 @@
+description = "The order of the environment does not change the values."
+
+[environment]
+READER_NAME = "Ada"
+SHELF_PORT = "9000"
+
+[expect]
+mode = "local"
+values = { SHELF_PORT = "9000", READER_NAME = "Ada" }

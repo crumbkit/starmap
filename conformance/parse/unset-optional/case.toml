@@ -1,0 +1,4 @@
+description = "The unset word optional parses."
+
+[expect]
+digest = "sha256:f1731018e1c4f7bc29c2a9da387af160eaf55157547917ad82bbc243449492c3"

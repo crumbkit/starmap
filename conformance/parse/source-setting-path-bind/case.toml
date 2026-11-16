@@ -1,0 +1,4 @@
+description = "A setting may have a path bind that names each placeholder."
+
+[expect]
+digest = "sha256:b24f160f81a9a9e12161a10cd4f8b0be4f7377f7dc76774de738d939961da133"

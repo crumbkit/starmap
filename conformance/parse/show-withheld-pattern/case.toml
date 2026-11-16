@@ -1,0 +1,4 @@
+description = "A withheld variable may have a string type with a pattern."
+
+[expect]
+digest = "sha256:f4160dc9e228cd96cbd5f48e835af95534c01f64318fa8c13cd10dc0c1192965"

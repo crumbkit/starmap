@@ -1,0 +1,4 @@
+description = "A bytes type with an exact length parses."
+
+[expect]
+digest = "sha256:1deeede571094e8e1ad6ede8e4c09e1078a126b15cfa79071f8367f9a695043c"

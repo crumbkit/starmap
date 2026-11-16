@@ -1,0 +1,4 @@
+description = "An open family parses and is written after the groups and before the variables."
+
+[expect]
+digest = "sha256:7ad9f2577e34c6b805b78a7f6d21235ff863cc0ff26f3d62fe2724cbff9d4764"

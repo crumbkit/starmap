@@ -1,0 +1,4 @@
+description = "A variable without type, unset, show and source is refused once for each field."
+
+[expect]
+problems = ["starmap::spec::missing_field", "starmap::spec::missing_field", "starmap::spec::missing_field", "starmap::spec::missing_field"]

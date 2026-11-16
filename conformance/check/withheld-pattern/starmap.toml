@@ -1,0 +1,6 @@
+[variables.LIBRARY_TOKEN]
+purpose = "The token the library service accepts."
+type = { string = { pattern = "lib_[0-9]{4}" } }
+unset = "required"
+show = "withheld"
+source = "setting"

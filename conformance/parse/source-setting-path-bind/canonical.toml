@@ -1,0 +1,23 @@
+[variables.SHELF_DATA_DIR]
+purpose = "The directory that holds the catalogue."
+type = "path"
+unset = "required"
+show = "shown"
+source = "setting"
+bind = { path = "{checkout}/data" }
+
+[variables.SHELF_CACHE_DIR]
+purpose = "The directory that holds the cache."
+type = "path"
+unset = "required"
+show = "shown"
+source = "setting"
+bind = { path = "{workspace}/cache" }
+
+[variables.SHELF_CONFIG_DIR]
+purpose = "The directory that holds the reader's settings."
+type = "path"
+unset = "required"
+show = "shown"
+source = "setting"
+bind = { path = "{home}/.shelf" }

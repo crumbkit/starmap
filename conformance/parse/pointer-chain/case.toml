@@ -1,0 +1,4 @@
+description = "A pointer read where a declaring file belongs is refused."
+
+[expect]
+problems = ["starmap::spec::pointer_chain"]

@@ -1,0 +1,9 @@
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT"]
+
+[variables.SHELF_MIRROR_ACCOUNT]
+purpose = "The account at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"

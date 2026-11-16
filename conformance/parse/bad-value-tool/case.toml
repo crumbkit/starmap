@@ -1,0 +1,4 @@
+description = "A tool field that is not a table of tables is refused."
+
+[expect]
+problems = ["starmap::spec::bad_value"]

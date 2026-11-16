@@ -1,0 +1,7 @@
+[variables.NO_COLOR]
+purpose = "Turns colour off when it is set."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "inherited"
+presence = true

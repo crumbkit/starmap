@@ -1,0 +1,4 @@
+description = "A purpose of ? is refused as a guess."
+
+[expect]
+problems = ["starmap::spec::guess"]

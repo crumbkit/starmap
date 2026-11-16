@@ -1,0 +1,5 @@
+description = "A variable that is absent takes its default."
+
+[expect]
+mode = "local"
+values = { SHELF_PORT = "8080" }

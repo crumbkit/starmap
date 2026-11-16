@@ -1,0 +1,18 @@
+[mode]
+variable = "SHELF_ENV"
+production = ["prod"]
+
+[variables.SHELF_PORT]
+purpose = "The port the catalogue listens on."
+type = "port"
+unset = { default = "eighty" }
+show = "shown"
+source = "setting"
+default = "8080"
+
+[variables.SHELF-DEBUG]
+purpose = "Logs each catalogue query."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"

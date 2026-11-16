@@ -1,0 +1,8 @@
+description = "A named enumeration's values fit."
+
+[environment]
+READER_MODE = "browse"
+
+[expect]
+mode = "local"
+values = { READER_MODE = "browse" }

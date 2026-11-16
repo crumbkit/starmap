@@ -1,0 +1,9 @@
+description = "With empty = \"value\", an integer refuses an empty value."
+
+[environment]
+SHELF_WORKERS = ""
+
+[expect]
+refused = [
+  { variable = "SHELF_WORKERS", code = "starmap::variable::invalid" },
+]

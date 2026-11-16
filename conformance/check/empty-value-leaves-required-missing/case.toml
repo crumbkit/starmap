@@ -1,0 +1,9 @@
+description = "An empty value leaves a required variable missing."
+
+[environment]
+LIBRARY_URL = ""
+
+[expect]
+refused = [
+  { variable = "LIBRARY_URL", code = "starmap::variable::missing" },
+]

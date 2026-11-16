@@ -1,0 +1,7 @@
+[variables.SHELF_DATA_DIR]
+purpose = "The directory that holds the catalogue."
+type = "path"
+unset = "required"
+show = "shown"
+source = "setting"
+bind = { path = "{repository}/data" }

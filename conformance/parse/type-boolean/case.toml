@@ -1,0 +1,4 @@
+description = "The type word boolean parses."
+
+[expect]
+digest = "sha256:a94cdeb04fd97296417c5cda30b7359814760a00714cb1700fe9e88e86ab2c75"

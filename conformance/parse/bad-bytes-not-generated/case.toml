@@ -1,0 +1,4 @@
+description = "A bytes field on a variable that is not generated is refused."
+
+[expect]
+problems = ["starmap::spec::bad_bytes"]

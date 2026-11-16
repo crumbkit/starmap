@@ -1,0 +1,4 @@
+description = "An integer range may hold negative numbers."
+
+[expect]
+digest = "sha256:af4b69d17929e6cf605673d4082a70900df82dc73f7e832b817a18e3b0520383"

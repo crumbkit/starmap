@@ -1,0 +1,10 @@
+description = "Each unset member of a partly set group is refused."
+
+[environment]
+SHELF_MIRROR_KEY = "mirror-key"
+
+[expect]
+refused = [
+  { variable = "SHELF_MIRROR_ACCOUNT", code = "starmap::group::incomplete" },
+  { variable = "SHELF_MIRROR_REGION", code = "starmap::group::incomplete" },
+]

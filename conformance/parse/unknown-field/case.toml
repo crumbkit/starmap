@@ -1,0 +1,4 @@
+description = "A variable with a key the format does not name is refused."
+
+[expect]
+problems = ["starmap::spec::unknown_field"]

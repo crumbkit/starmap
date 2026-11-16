@@ -1,0 +1,4 @@
+description = "A shown secret is refused."
+
+[expect]
+problems = ["starmap::spec::shown_secret"]

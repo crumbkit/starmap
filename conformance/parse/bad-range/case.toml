@@ -1,0 +1,4 @@
+description = "An integer range whose min is above its max is refused."
+
+[expect]
+problems = ["starmap::spec::bad_range"]

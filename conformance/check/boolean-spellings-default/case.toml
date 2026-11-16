@@ -1,0 +1,5 @@
+description = "The default of a boolean with its own spellings reaches the child as written."
+
+[expect]
+mode = "local"
+values = { SHELF_DEBUG = "no" }

@@ -1,0 +1,4 @@
+description = "An inline enumeration type parses and keeps its values in the file's order."
+
+[expect]
+digest = "sha256:b2acb07ee81766411653a7f615f6fc69cfc313ce604fdf01249a65cc9eef163d"

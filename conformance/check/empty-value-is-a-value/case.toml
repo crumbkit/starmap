@@ -1,0 +1,8 @@
+description = "With empty = \"value\", a string reads an empty value as empty text and the default does not apply."
+
+[environment]
+READER_GREETING = ""
+
+[expect]
+mode = "local"
+values = { READER_GREETING = "" }

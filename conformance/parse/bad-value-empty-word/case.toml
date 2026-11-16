@@ -1,0 +1,4 @@
+description = "An empty word other than unset and value is refused."
+
+[expect]
+problems = ["starmap::spec::bad_value"]

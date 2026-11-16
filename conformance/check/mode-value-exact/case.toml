@@ -1,0 +1,8 @@
+description = "A production value matches exactly, so PROD decides local mode."
+
+[environment]
+SHELF_STAGE = "PROD"
+
+[expect]
+mode = "local"
+values = { SHELF_STAGE = "PROD" }

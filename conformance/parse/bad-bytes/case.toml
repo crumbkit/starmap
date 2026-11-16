@@ -1,0 +1,4 @@
+description = "A generated string with fewer than 16 bytes is refused."
+
+[expect]
+problems = ["starmap::spec::bad_bytes"]

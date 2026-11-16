@@ -1,0 +1,4 @@
+description = "A pattern that does not compile is refused."
+
+[expect]
+problems = ["starmap::spec::bad_pattern"]

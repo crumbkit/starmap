@@ -1,0 +1,7 @@
+[variables.SHELF_PORT]
+purpose = "The port the catalogue listens on."
+type = "port"
+unset = "optional"
+show = "shown"
+source = "setting"
+presence = true

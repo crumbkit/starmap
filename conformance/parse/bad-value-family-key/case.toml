@@ -1,0 +1,4 @@
+description = "A listed family key with a lower case letter is refused."
+
+[expect]
+problems = ["starmap::spec::bad_value"]

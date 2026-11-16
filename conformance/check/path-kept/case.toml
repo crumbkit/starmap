@@ -1,0 +1,8 @@
+description = "A path reaches the child as it was set."
+
+[environment]
+SHELF_DATA_DIR = "data//books/"
+
+[expect]
+mode = "local"
+values = { SHELF_DATA_DIR = "data//books/" }

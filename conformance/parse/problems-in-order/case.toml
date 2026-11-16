@@ -1,0 +1,4 @@
+description = "Every problem is reported, in the order the parser finds them."
+
+[expect]
+problems = ["starmap::spec::unknown_field", "starmap::spec::bad_default", "starmap::spec::bad_name", "starmap::spec::mode_undeclared"]

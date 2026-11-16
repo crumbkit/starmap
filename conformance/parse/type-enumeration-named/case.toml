@@ -1,0 +1,4 @@
+description = "A named enumeration is written before the variables, and an unused one is kept."
+
+[expect]
+digest = "sha256:abe9ce504cb108267e7c395bf6ad7a9276c18923302950885967ae2f183fe062"

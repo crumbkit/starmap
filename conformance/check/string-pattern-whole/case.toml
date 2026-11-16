@@ -1,0 +1,8 @@
+description = "A pattern that matches the whole value fits."
+
+[environment]
+SHELF_REVISION = "0a1b2c3d"
+
+[expect]
+mode = "local"
+values = { SHELF_REVISION = "0a1b2c3d" }

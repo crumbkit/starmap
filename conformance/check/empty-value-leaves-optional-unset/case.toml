@@ -1,0 +1,8 @@
+description = "An empty value leaves an optional variable unset."
+
+[environment]
+READER_NAME = ""
+
+[expect]
+mode = "local"
+values = {}

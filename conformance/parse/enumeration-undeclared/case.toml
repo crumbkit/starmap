@@ -1,0 +1,4 @@
+description = "A variable that names an undeclared enumeration is refused."
+
+[expect]
+problems = ["starmap::spec::enumeration_undeclared"]

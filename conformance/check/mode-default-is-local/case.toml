@@ -1,0 +1,5 @@
+description = "The mode variable's default decides local mode, and a production rule does not apply."
+
+[expect]
+mode = "local"
+values = { SHELF_ENV = "dev" }

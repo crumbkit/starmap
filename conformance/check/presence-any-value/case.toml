@@ -1,0 +1,8 @@
+description = "A variable that reads its presence passes any value to the child as it was set."
+
+[environment]
+NO_COLOR = "false"
+
+[expect]
+mode = "local"
+values = { NO_COLOR = "false" }

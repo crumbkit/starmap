@@ -1,0 +1,13 @@
+[variables.https_proxy]
+purpose = "The proxy that lower case readers use."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "inherited"
+
+[variables.HTTPS_PROXY]
+purpose = "The proxy that upper case readers use."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "inherited"

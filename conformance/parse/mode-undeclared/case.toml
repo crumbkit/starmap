@@ -1,0 +1,4 @@
+description = "A mode table that names an undeclared variable is refused."
+
+[expect]
+problems = ["starmap::spec::mode_undeclared"]

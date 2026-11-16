@@ -1,0 +1,10 @@
+[mode]
+variable = "SHELF_STAGE"
+production = ["prod"]
+
+[variables.SHELF_STAGE]
+purpose = "Selects local or production behaviour."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"

@@ -1,0 +1,6 @@
+[variables.SHELF_OFFSET]
+purpose = "The hour offset of the catalogue clock."
+type = { integer = { min = -12, max = 12 } }
+unset = { default = "-3" }
+show = "shown"
+source = "setting"

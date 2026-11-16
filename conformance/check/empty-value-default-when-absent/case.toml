@@ -1,0 +1,5 @@
+description = "With empty = \"value\", the default still applies when the variable is absent."
+
+[expect]
+mode = "local"
+values = { READER_GREETING = "Welcome." }

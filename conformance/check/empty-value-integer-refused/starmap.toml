@@ -1,0 +1,7 @@
+[variables.SHELF_WORKERS]
+purpose = "How many catalogue workers run."
+type = { integer = { min = 1, max = 64 } }
+unset = { default = "5" }
+show = "shown"
+source = "setting"
+empty = "value"

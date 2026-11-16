@@ -1,0 +1,9 @@
+description = "A value that is not a url is invalid."
+
+[environment]
+LIBRARY_URL = "library.example"
+
+[expect]
+refused = [
+  { variable = "LIBRARY_URL", code = "starmap::variable::invalid" },
+]

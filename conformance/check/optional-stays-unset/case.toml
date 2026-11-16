@@ -1,0 +1,5 @@
+description = "An optional variable that is absent stays unset and gives the child nothing."
+
+[expect]
+mode = "local"
+values = {}

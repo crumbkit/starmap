@@ -1,0 +1,4 @@
+description = "A secret without a bind parses and is withheld."
+
+[expect]
+digest = "sha256:31b86841c62133cbe5d90cfc8078bf74554866ae289c762cff139e9b5c3275cf"

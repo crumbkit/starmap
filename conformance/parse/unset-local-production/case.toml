@@ -1,0 +1,4 @@
+description = "An unset table with different local and production rules parses."
+
+[expect]
+digest = "sha256:91c7495c732b57180e3fc16f583a551f458f19a27c83d4bfe1e913bf29867dee"

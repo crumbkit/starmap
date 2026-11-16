@@ -1,0 +1,6 @@
+[variables.READER_MODE]
+purpose = "What the reader does."
+type = { enumeration = [] }
+unset = "optional"
+show = "shown"
+source = "setting"

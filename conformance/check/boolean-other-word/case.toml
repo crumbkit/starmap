@@ -1,0 +1,9 @@
+description = "A word that is not one of the eight boolean words is invalid."
+
+[environment]
+SHELF_DEBUG = "y"
+
+[expect]
+refused = [
+  { variable = "SHELF_DEBUG", code = "starmap::variable::invalid" },
+]

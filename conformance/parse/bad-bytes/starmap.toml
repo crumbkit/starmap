@@ -1,0 +1,7 @@
+[variables.SHELF_SESSION_KEY]
+purpose = "The key that signs reader sessions."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "generated"
+bytes = 8

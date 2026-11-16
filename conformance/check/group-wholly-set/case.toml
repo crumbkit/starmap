@@ -1,0 +1,10 @@
+description = "A group whose members are all set passes."
+
+[environment]
+SHELF_MIRROR_ACCOUNT = "shelf"
+SHELF_MIRROR_KEY = "mirror-key"
+SHELF_MIRROR_REGION = "eu"
+
+[expect]
+mode = "local"
+values = { SHELF_MIRROR_ACCOUNT = "shelf", SHELF_MIRROR_KEY = "mirror-key", SHELF_MIRROR_REGION = "eu" }

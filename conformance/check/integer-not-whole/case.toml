@@ -1,0 +1,9 @@
+description = "A number with a fraction is invalid."
+
+[environment]
+SHELF_PAGE_SIZE = "2.5"
+
+[expect]
+refused = [
+  { variable = "SHELF_PAGE_SIZE", code = "starmap::variable::invalid" },
+]

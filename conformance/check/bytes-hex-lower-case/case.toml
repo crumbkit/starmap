@@ -1,0 +1,8 @@
+description = "A shown hex value reaches the child in lower case."
+
+[environment]
+SHELF_KEY = "DEADBEEF"
+
+[expect]
+mode = "local"
+values = { SHELF_KEY = "deadbeef" }

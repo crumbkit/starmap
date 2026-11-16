@@ -1,0 +1,4 @@
+description = "The type word path parses."
+
+[expect]
+digest = "sha256:6f5030d03333993898f03e4f81dacaaec22cae5a6b5d89d0dea726fdb7dd775c"

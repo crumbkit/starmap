@@ -1,0 +1,4 @@
+description = "A word that still ends in ? is refused as a guess."
+
+[expect]
+problems = ["starmap::spec::guess"]

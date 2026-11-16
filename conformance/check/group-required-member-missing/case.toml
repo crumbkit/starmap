@@ -1,0 +1,10 @@
+description = "A required member of a partly set group gets only its missing finding."
+
+[environment]
+SHELF_MIRROR_KEY = "mirror-key"
+
+[expect]
+refused = [
+  { variable = "SHELF_MIRROR_ACCOUNT", code = "starmap::variable::missing" },
+  { variable = "SHELF_MIRROR_REGION", code = "starmap::group::incomplete" },
+]

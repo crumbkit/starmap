@@ -1,0 +1,4 @@
+description = "A provided variable without a provided bind is refused."
+
+[expect]
+problems = ["starmap::spec::bind_mismatch"]

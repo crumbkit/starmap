@@ -1,0 +1,4 @@
+description = "An inherited variable parses."
+
+[expect]
+digest = "sha256:a0506706c55a9e080091d92679b937edb9411112ec14fdf0e1c9d90396287831"

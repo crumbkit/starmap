@@ -1,0 +1,15 @@
+description = "The boolean words in any ASCII case reach the child as true or false."
+
+[environment]
+SHELF_FLAG_1 = "1"
+SHELF_FLAG_2 = "TRUE"
+SHELF_FLAG_3 = "Yes"
+SHELF_FLAG_4 = "on"
+SHELF_FLAG_5 = "0"
+SHELF_FLAG_6 = "False"
+SHELF_FLAG_7 = "NO"
+SHELF_FLAG_8 = "Off"
+
+[expect]
+mode = "local"
+values = { SHELF_FLAG_1 = "true", SHELF_FLAG_2 = "true", SHELF_FLAG_3 = "true", SHELF_FLAG_4 = "true", SHELF_FLAG_5 = "false", SHELF_FLAG_6 = "false", SHELF_FLAG_7 = "false", SHELF_FLAG_8 = "false" }

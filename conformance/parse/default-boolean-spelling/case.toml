@@ -1,0 +1,4 @@
+description = "A boolean default is written in the canonical form as true or false."
+
+[expect]
+digest = "sha256:bc54d1240b0154e96f895d0ba014c1fbd7de2d106bc5c37acd2750250c48ffe8"

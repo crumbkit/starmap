@@ -13,6 +13,14 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   directories by repeating it. A path is read from the current directory and
   printed as typed, and a named directory that does not exist fails with
   `starmap::source::unreadable`.
+- The repository's `conformance/` directory holds conformance cases that let
+  another implementation of the `starmap.toml` format prove that it reads
+  files as starmap does. A `parse` case gives a file with its digest and
+  canonical form, or with the codes of the problems that refuse it. A
+  `check` case gives a file and an environment with the decided mode and
+  the text each variable gives the child, or with each refused variable and
+  its code. `conformance/README.md` gives the layout, which is version 1,
+  and starmap's test suite runs every case.
 
 ### Changed
 

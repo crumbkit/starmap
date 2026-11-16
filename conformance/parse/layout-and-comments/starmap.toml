@@ -1,0 +1,22 @@
+# The shelf decides its mode from SHELF_ENV.
+[variables]
+SHELF_ENV.purpose = 'Selects local or production behaviour.'
+SHELF_ENV.source = "setting"   # set by the person
+SHELF_ENV.show = 'shown'
+SHELF_ENV.unset.default = "dev"
+SHELF_ENV.type.enumeration = [
+  "dev",
+  "prod",
+  "production",
+]
+
+[variables.LIBRARY_TOKEN]
+show     = "withheld"
+source   = "setting"
+type     = "string"
+unset    = { production = "required", local = "optional" }
+purpose  = """The token the library service accepts."""
+
+[mode]
+production = [ 'prod', 'production' ]
+variable = 'SHELF_ENV'

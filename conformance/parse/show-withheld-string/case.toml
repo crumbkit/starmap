@@ -1,0 +1,4 @@
+description = "A withheld setting with the type string parses."
+
+[expect]
+digest = "sha256:b6a61a9cbcad5fbf177afbc282aecf0d339f97f357ef2fb9f7b3c01ef16748d5"

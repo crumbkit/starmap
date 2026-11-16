@@ -1,0 +1,8 @@
+description = "A withheld bytes value reaches the child in the spelling it was set in."
+
+[environment]
+SHELF_KEY = "DEADBEEF"
+
+[expect]
+mode = "local"
+values = { SHELF_KEY = "DEADBEEF" }

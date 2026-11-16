@@ -1,0 +1,10 @@
+[enumerations.reader-mode]
+browse = "Lists books."
+borrow = "Lends a book."
+
+[variables.READER_MODE]
+purpose = "What the reader does."
+type = { enumeration = "reader-mode" }
+unset = "optional"
+show = "shown"
+source = "setting"

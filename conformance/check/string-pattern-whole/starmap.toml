@@ -1,0 +1,6 @@
+[variables.SHELF_REVISION]
+purpose = "The revision of the catalogue."
+type = { string = { pattern = "[0-9a-f]{8}" } }
+unset = "optional"
+show = "shown"
+source = "setting"

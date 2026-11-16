@@ -1,0 +1,4 @@
+description = "An integer type table with a range parses."
+
+[expect]
+digest = "sha256:3dee6ef3a54d067d94afc4b41342a13278abb3ae36e2460c3fbc41fb88b987e3"

@@ -847,3 +847,17 @@ tables out, so an edit to a tool table never changes a file's digest, and
 `starmap explain`, `check`, `diff` and `init` print the same output for a
 file with tool tables as for the same file without them. starmap never
 merges a pointer's tool tables into those of the file it names.
+
+## conformance case
+
+A conformance case is one directory under the repository's `conformance/`
+directory that pins one result of the `starmap.toml` format. A `parse` case
+gives a file and its digest and canonical form, or the codes of the
+problems that refuse it. A `check` case gives a file and an environment,
+and the mode and the text each variable gives the child, or the variable
+and code of each refusal. Messages and spans are not part of a case, so
+another implementation may word and place them for itself.
+[The conformance README](../conformance/README.md) gives the layout, which
+is version 1, and how to run the cases from another language. starmap's
+test suite runs every case, and a test fails when a `starmap::spec::*` code
+other than `starmap::spec::too_large` has no `parse` case.

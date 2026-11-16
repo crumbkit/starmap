@@ -1,0 +1,9 @@
+description = "A variable the file does not declare is ignored."
+
+[environment]
+SHELF_PORT = "9000"
+EDITOR = "vi"
+
+[expect]
+mode = "local"
+values = { SHELF_PORT = "9000" }

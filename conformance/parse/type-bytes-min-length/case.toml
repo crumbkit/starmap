@@ -1,0 +1,4 @@
+description = "A bytes type with a smallest length parses."
+
+[expect]
+digest = "sha256:a3041e10f2d29f2988021eb74e18dd02a710ec11ae83eaa7fb208811211aee8f"

@@ -1,0 +1,4 @@
+description = "A variable name with a hyphen is refused."
+
+[expect]
+problems = ["starmap::spec::bad_name"]

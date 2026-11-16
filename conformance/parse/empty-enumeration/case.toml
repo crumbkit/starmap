@@ -1,0 +1,4 @@
+description = "An inline enumeration without values is refused."
+
+[expect]
+problems = ["starmap::spec::empty_enumeration"]

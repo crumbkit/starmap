@@ -1,0 +1,6 @@
+[variables.SHELF_KEY]
+purpose = "The key that signs catalogue links."
+type = { bytes = { encoding = "base64", min-length = 16 } }
+unset = "optional"
+show = "shown"
+source = "setting"

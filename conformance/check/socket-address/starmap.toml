@@ -1,0 +1,6 @@
+[variables.SHELF_LISTEN]
+purpose = "The address the catalogue listens on."
+type = "socket-address"
+unset = "required"
+show = "shown"
+source = "setting"

@@ -1,0 +1,4 @@
+description = "A listed family writes its keys in key order, last."
+
+[expect]
+digest = "sha256:ee9932a0a8cdf5ae7cba7163b76a7dcd3b19cb97956cf7c93df39195d3aba5ca"

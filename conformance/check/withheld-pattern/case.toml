@@ -1,0 +1,9 @@
+description = "A withheld value that does not match its pattern is invalid."
+
+[environment]
+LIBRARY_TOKEN = "lib_12"
+
+[expect]
+refused = [
+  { variable = "LIBRARY_TOKEN", code = "starmap::variable::invalid" },
+]

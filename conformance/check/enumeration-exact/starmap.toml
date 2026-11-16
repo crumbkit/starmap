@@ -1,0 +1,6 @@
+[variables.READER_MODE]
+purpose = "What the reader does."
+type = { enumeration = ["browse", "borrow"] }
+unset = { default = "browse" }
+show = "shown"
+source = "setting"

@@ -1,0 +1,6 @@
+[variables.SHELF_DATA_DIR]
+purpose = "The directory that holds the catalogue."
+type = "path"
+unset = { default = "data//books/" }
+show = "shown"
+source = "setting"

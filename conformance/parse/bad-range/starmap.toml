@@ -1,0 +1,6 @@
+[variables.SHELF_PAGE_SIZE]
+purpose = "How many books one page holds."
+type = { integer = { min = 100, max = 1 } }
+unset = "optional"
+show = "shown"
+source = "setting"

@@ -1,0 +1,9 @@
+description = "A production value of the mode variable decides production mode."
+
+[environment]
+SHELF_ENV = "production"
+LIBRARY_TOKEN = "lib-token-1234"
+
+[expect]
+mode = "production"
+values = { SHELF_ENV = "production", LIBRARY_TOKEN = "lib-token-1234" }
