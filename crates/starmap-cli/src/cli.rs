@@ -111,7 +111,8 @@ const HELP: Help = Help::new()
             .effects(Effects::read_only())
             .document(DIFF),
         // run may add an item to the Keychain when a person agrees to save
-        // a typed secret, and it changes nothing else.
+        // a typed secret. It starts any program that the caller names, and
+        // that program may do anything, so run is open-world.
         Leaf::new(&["run"])
             .examples(&[
                 Example::new(
@@ -127,7 +128,7 @@ const HELP: Help = Help::new()
                     "Run the tests with only the declared and built-in variables, so a read of an undeclared one finds it unset",
                 ),
             ])
-            .effects(Effects::additive())
+            .effects(Effects::additive().open_world())
             .passes_on_exit("the program after --"),
         Leaf::new(&["commands", "list"])
             .examples(&[Example::new(&[], "List every command")])

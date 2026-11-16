@@ -275,6 +275,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "crumbkit-starmap"
+version = "0.4.0"
+dependencies = [
+ "clap",
+ "crumbkit",
+ "regex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "starmap",
+]
+
+[[package]]
 name = "crumbkit-test"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1091,6 +1104,7 @@ dependencies = [
  "crumbkit-child",
  "crumbkit-process",
  "crumbkit-skills",
+ "crumbkit-starmap",
  "crumbkit-test",
  "crumbkit-usage",
  "miette",

@@ -512,6 +512,10 @@
           "description": "Where the variable's value comes from, with the kind of its bind.",
           "type": "string"
         },
+        "state": {
+          "description": "Where the value comes from: `set` when this shell sets the variable, `default` when it leaves the variable unset and the default applies, `unset` when the variable has no value, and `invalid` when this shell sets a value that does not fit the type. The same state as `value.state`, at the top level.",
+          "$ref": "#/$defs/State"
+        },
         "type": {
           "description": "The type of the variable's value, such as port or integer 1..=100.",
           "type": "string"
