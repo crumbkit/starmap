@@ -29,6 +29,9 @@ doc = false
 [dependencies]
 # The CLI parses, checks and describes starmap.toml with the core crate.
 starmap = { workspace = true }
+# `explain` builds each row with the code that `self environment list`
+# uses, so the two documents describe a variable alike.
+crumbkit-starmap = { workspace = true }
 # `derive` writes the `Failure` impls of the CLI's failures from their
 # `#[failure(...)]` attributes, `miette` prints a spec problem with an
 # excerpt of starmap.toml, and `complete` answers a shell's completion

@@ -53,5 +53,5 @@ Examples:
   starmap run --only-declared -- cargo test
           Run the tests with only the declared and built-in variables, so a read of an undeclared one finds it unset
 
-Effects: additive, not idempotent, closed-world.
+Effects: additive, not idempotent, open-world.
 Exit code: the command passes on the exit code of the program after --.

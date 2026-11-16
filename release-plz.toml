@@ -77,5 +77,9 @@ name = "starmap-resolve"
 version_group = "starmap"
 
 [[package]]
+name = "crumbkit-starmap"
+version_group = "starmap"
+
+[[package]]
 name = "starmap-cli"
 version_group = "starmap"

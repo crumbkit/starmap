@@ -17,6 +17,6 @@ Examples:
   starmap run --set SHELF_DEBUG=true -- cargo run
   starmap run --only-declared -- cargo test
 
-Effects: additive, not idempotent, closed-world.
+Effects: additive, not idempotent, open-world.
 Exit code: the command passes on the exit code of the program after --.
 Global flags: --json, --fields <FIELD>, --long, --full, --no-input. `starmap run --help` describes them.

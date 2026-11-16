@@ -1,0 +1,34 @@
+[package]
+name = "crumbkit-starmap"
+description = "The self environment list command, which prints the environment variables that a crumbkit tool declares with starmap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["environment", "configuration", "cli"]
+categories = ["command-line-utilities", "config"]
+include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[dependencies]
+# The command describes a spec's variables and reads their values from the
+# bindings that `starmap::capture` builds.
+starmap = { workspace = true }
+# `derive` writes the `Row` and `Failure` impls of the command's document.
+crumbkit = { workspace = true, features = ["derive"] }
+# clap derives the argument struct that a tool mounts under `self environment
+# list`. The workspace entry enables only `std`.
+clap = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+schemars = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+# `std` reads the JSON documents that the tests compare.
+serde_json = { workspace = true, features = ["std"] }
+# The test that checks the list of crumbkit's variables scans crumbkit's
+# source for each read of the environment.
+regex = { workspace = true }
+
+[lints]
+workspace = true
