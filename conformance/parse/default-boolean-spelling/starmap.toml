@@ -1,0 +1,6 @@
+[variables.SHELF_DEBUG]
+purpose = "Logs each catalogue query."
+type = "boolean"
+unset = { default = "YES" }
+show = "shown"
+source = "setting"

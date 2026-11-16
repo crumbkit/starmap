@@ -1,0 +1,4 @@
+description = "A path type table with absolute = true parses."
+
+[expect]
+digest = "sha256:b31d8954bbcba77465723f2824baf3c47ba1b334a03b75ad43dc28d155a52796"

@@ -1,0 +1,6 @@
+[variables.LIBRARY_TOKEN]
+purpose = "The token the library service accepts."
+type = "string"
+unset = { default = "open" }
+show = "withheld"
+source = "setting"

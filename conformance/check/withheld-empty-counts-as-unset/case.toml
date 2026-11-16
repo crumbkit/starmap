@@ -1,0 +1,9 @@
+description = "An empty withheld value counts as unset."
+
+[environment]
+LIBRARY_TOKEN = ""
+
+[expect]
+refused = [
+  { variable = "LIBRARY_TOKEN", code = "starmap::variable::missing" },
+]

@@ -1,0 +1,11 @@
+description = "An empty value counts as unset in a group."
+
+[environment]
+SHELF_MIRROR_ACCOUNT = "shelf"
+SHELF_MIRROR_KEY = "mirror-key"
+SHELF_MIRROR_REGION = ""
+
+[expect]
+refused = [
+  { variable = "SHELF_MIRROR_REGION", code = "starmap::group::incomplete" },
+]

@@ -1,0 +1,4 @@
+description = "A path default is written in the canonical form from its components."
+
+[expect]
+digest = "sha256:35f6a054c6b973d3462262db81341b68a6f4ff73bcf879adf5e54f7cc92e8f07"

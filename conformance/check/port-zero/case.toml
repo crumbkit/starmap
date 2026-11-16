@@ -1,0 +1,9 @@
+description = "Port 0 is invalid, because a port runs from 1 to 65535."
+
+[environment]
+SHELF_PORT = "0"
+
+[expect]
+refused = [
+  { variable = "SHELF_PORT", code = "starmap::variable::invalid" },
+]

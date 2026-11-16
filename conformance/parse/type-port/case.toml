@@ -1,0 +1,4 @@
+description = "The type word port parses."
+
+[expect]
+digest = "sha256:3c0d956718a4a207a255755b4e47fd0b9fefe2793c92a11895fa9a89c97aeec0"

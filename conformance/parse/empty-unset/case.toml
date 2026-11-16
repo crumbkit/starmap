@@ -1,0 +1,4 @@
+description = "A variable with empty = \"unset\" has the canonical form of a variable without the field."
+
+[expect]
+digest = "sha256:9086f990120d203ae3b0f94fb94cb3889da9c00051fd1cae5dfc7a1d170c0ea3"

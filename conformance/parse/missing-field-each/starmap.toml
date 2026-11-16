@@ -1,0 +1,2 @@
+[variables.SHELF_PORT]
+purpose = "The port the catalogue listens on."

@@ -1,0 +1,9 @@
+description = "A member whose value does not fit the family's type is invalid."
+
+[environment]
+SHELF_DB_URL_EU = "eu.example"
+
+[expect]
+refused = [
+  { variable = "SHELF_DB_URL_EU", code = "starmap::variable::invalid" },
+]

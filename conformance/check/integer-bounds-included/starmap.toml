@@ -1,0 +1,13 @@
+[variables.SHELF_PAGE_SIZE]
+purpose = "How many books one page holds."
+type = { integer = { min = 1, max = 100 } }
+unset = { default = "20" }
+show = "shown"
+source = "setting"
+
+[variables.SHELF_OFFSET]
+purpose = "The hour offset of the catalogue clock."
+type = { integer = { min = -12, max = 12 } }
+unset = "optional"
+show = "shown"
+source = "setting"

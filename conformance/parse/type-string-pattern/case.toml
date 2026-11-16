@@ -1,0 +1,4 @@
+description = "A string type table with a pattern parses."
+
+[expect]
+digest = "sha256:20d44ae8de1991e31eefbc2780dceae0512cf0731c9851b2bb8fe39dfc96004e"

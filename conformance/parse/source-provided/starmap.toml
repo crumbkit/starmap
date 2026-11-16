@@ -1,0 +1,7 @@
+[variables.SHELF_PORT]
+purpose = "The port the catalogue listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "provided"
+bind = { provided = "host/port", process = "api", name = "catalogue" }

@@ -1,0 +1,4 @@
+description = "The effect and check sentences parse and are written after the purpose."
+
+[expect]
+digest = "sha256:a17b570a30d22d49ee46269cc714221c8e8d7e2d31d351f839955aaecc924332"

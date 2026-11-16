@@ -1,0 +1,12 @@
+description = "The refusals follow the file's order of variables, and the families come last."
+
+[environment]
+SHELF_DB_URL_EU = "eu.example"
+SHELF_PORT = "80a"
+
+[expect]
+refused = [
+  { variable = "SHELF_PORT", code = "starmap::variable::invalid" },
+  { variable = "LIBRARY_URL", code = "starmap::variable::missing" },
+  { variable = "SHELF_DB_URL_EU", code = "starmap::variable::invalid" },
+]

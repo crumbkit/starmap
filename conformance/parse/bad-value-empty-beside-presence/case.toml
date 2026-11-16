@@ -1,0 +1,4 @@
+description = "An empty field beside presence = true is refused."
+
+[expect]
+problems = ["starmap::spec::bad_value"]

@@ -1,0 +1,4 @@
+description = "An unset table whose rule is the same in both modes has the canonical form of the word."
+
+[expect]
+digest = "sha256:6560e3c6676ac4f5d38c5547ddcab3e1125c2da64d87eeec660852a93f47c540"

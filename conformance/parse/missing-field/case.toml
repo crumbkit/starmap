@@ -1,0 +1,4 @@
+description = "A variable without a purpose is refused."
+
+[expect]
+problems = ["starmap::spec::missing_field"]

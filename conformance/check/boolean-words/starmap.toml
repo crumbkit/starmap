@@ -1,0 +1,56 @@
+[variables.SHELF_FLAG_1]
+purpose = "Turns on catalogue feature 1."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_FLAG_2]
+purpose = "Turns on catalogue feature 2."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_FLAG_3]
+purpose = "Turns on catalogue feature 3."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_FLAG_4]
+purpose = "Turns on catalogue feature 4."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_FLAG_5]
+purpose = "Turns on catalogue feature 5."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_FLAG_6]
+purpose = "Turns on catalogue feature 6."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_FLAG_7]
+purpose = "Turns on catalogue feature 7."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_FLAG_8]
+purpose = "Turns on catalogue feature 8."
+type = "boolean"
+unset = "optional"
+show = "shown"
+source = "setting"
+

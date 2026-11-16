@@ -1,0 +1,4 @@
+description = "A group keeps its members in the file's order and is written before the variables."
+
+[expect]
+digest = "sha256:9e9ee70ae2b5272b8090a7d6f97cdfd81a908615b7afff99bb8efdc8e2953be4"

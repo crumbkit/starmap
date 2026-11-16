@@ -1,0 +1,9 @@
+description = "A lower case name and its upper case form are two variables."
+
+[environment]
+https_proxy = "http://lower.example/"
+HTTPS_PROXY = "http://upper.example/"
+
+[expect]
+mode = "local"
+values = { https_proxy = "http://lower.example/", HTTPS_PROXY = "http://upper.example/" }

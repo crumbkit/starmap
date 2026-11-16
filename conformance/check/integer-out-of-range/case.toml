@@ -1,0 +1,9 @@
+description = "A whole number outside the range is invalid."
+
+[environment]
+SHELF_PAGE_SIZE = "101"
+
+[expect]
+refused = [
+  { variable = "SHELF_PAGE_SIZE", code = "starmap::variable::invalid" },
+]

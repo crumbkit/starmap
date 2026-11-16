@@ -1,0 +1,5 @@
+description = "A group whose members are all unset passes."
+
+[expect]
+mode = "local"
+values = {}

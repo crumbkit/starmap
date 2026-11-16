@@ -1,0 +1,4 @@
+description = "A declared variable that is a member of a family is refused."
+
+[expect]
+problems = ["starmap::spec::bad_family"]

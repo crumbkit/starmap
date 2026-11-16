@@ -1,0 +1,4 @@
+description = "The string type table without a pattern has the canonical form of the word string."
+
+[expect]
+digest = "sha256:1b60bdf87a02bb37fdac556069da4ad13c706740d5201c23283299ba03a9b0ef"

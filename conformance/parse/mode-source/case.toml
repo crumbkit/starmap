@@ -1,0 +1,4 @@
+description = "A mode variable that is a secret is refused."
+
+[expect]
+problems = ["starmap::spec::mode_source"]

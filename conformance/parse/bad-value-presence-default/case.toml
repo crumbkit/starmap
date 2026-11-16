@@ -1,0 +1,4 @@
+description = "presence = true beside a default is refused."
+
+[expect]
+problems = ["starmap::spec::bad_value"]

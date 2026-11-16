@@ -1,0 +1,8 @@
+[variables.SHELF_PORT]
+check = "The port must be above 1024."
+source = "setting"
+show = "shown"
+type = "port"
+unset = { default = "8080" }
+effect = "The catalogue listens on 8080."
+purpose = "The port the catalogue listens on."

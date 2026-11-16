@@ -1,0 +1,9 @@
+description = "A spelling matches exactly, so YES is invalid where the list holds yes."
+
+[environment]
+SHELF_DEBUG = "YES"
+
+[expect]
+refused = [
+  { variable = "SHELF_DEBUG", code = "starmap::variable::invalid" },
+]

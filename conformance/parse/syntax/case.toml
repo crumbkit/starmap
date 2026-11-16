@@ -1,0 +1,4 @@
+description = "A file that is not TOML is refused."
+
+[expect]
+problems = ["starmap::spec::syntax"]

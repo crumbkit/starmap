@@ -1,0 +1,4 @@
+description = "A boolean type table with its own spellings parses, and its default is one of them."
+
+[expect]
+digest = "sha256:e5a685a0059d71adc5a42c1981b64282f6874a3f7f80f83c5b86e39abd8b11c9"

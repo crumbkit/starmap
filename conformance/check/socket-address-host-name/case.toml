@@ -1,0 +1,9 @@
+description = "A host name with a port is not an IP socket address."
+
+[environment]
+SHELF_LISTEN = "localhost:8080"
+
+[expect]
+refused = [
+  { variable = "SHELF_LISTEN", code = "starmap::variable::invalid" },
+]

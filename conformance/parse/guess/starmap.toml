@@ -1,0 +1,6 @@
+[variables.SHELF_PORT]
+purpose = "?"
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"

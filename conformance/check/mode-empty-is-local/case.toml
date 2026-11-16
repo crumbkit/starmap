@@ -1,0 +1,8 @@
+description = "An empty mode value counts as unset, so it decides local mode."
+
+[environment]
+SHELF_STAGE = ""
+
+[expect]
+mode = "local"
+values = {}

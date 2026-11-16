@@ -1,0 +1,6 @@
+description = "A required variable that reads its presence is missing when it is absent."
+
+[expect]
+refused = [
+  { variable = "NO_COLOR", code = "starmap::variable::missing" },
+]

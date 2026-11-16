@@ -37,7 +37,9 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
 - `{ url = { schemes = ["postgres", "postgresql"] } }` is a URL whose scheme
   is one of the listed schemes. Each scheme is written in lower case, and a
   value's scheme matches in any case. `{ url = {} }` means the same as
-  `url`.
+  `url`. A url value reaches the child process serialized as the WHATWG URL
+  Standard writes it, so `HTTPS://Library.Example` arrives as
+  `https://library.example/`.
 - `{ string = { pattern = "[0-9a-f]{40}" } }` is Unicode text that the
   pattern matches as a whole. `{ string = {} }` is the same type as the word
   `string`, which takes any Unicode text.
@@ -49,6 +51,10 @@ The field takes one of the words `path`, `port`, `url`, `socket-address`,
   text in an encoding, whose length after decoding is exactly `length`, or
   at least `min-length` when the table sets that key instead. A bytes table
   takes exactly one of the two lengths.
+
+The word `socket-address` takes only an IP address and a port, such as
+`127.0.0.1:8080` or `[::1]:8080`, and refuses a host name, such as
+`localhost:8080`.
 
 The word `boolean` reads the eight words `1`, `true`, `yes` and `on` as
 true and `0`, `false`, `no` and `off` as false, in any mix of ASCII case,
@@ -80,7 +86,9 @@ value or its decoded size. A shown value is held decoded, as `Value::Bytes`,
 and is written back in its encoding's one spelling: lower case hex, padded
 base64 or unpadded base64url. A shown value therefore reaches the child
 process in that spelling, so a value written in upper case hex arrives in
-lower case, and padded base64url arrives without its padding.
+lower case, and padded base64url arrives without its padding. A withheld
+value reaches the child process as it was set, so a withheld value written
+in upper case hex arrives in upper case.
 
 A generated variable may have a bytes type. Its first lookup creates as many
 random bytes as the type's `length` gives, or its `min-length` when the type
@@ -847,3 +855,166 @@ tables out, so an edit to a tool table never changes a file's digest, and
 `starmap explain`, `check`, `diff` and `init` print the same output for a
 file with tool tables as for the same file without them. starmap never
 merges a pointer's tool tables into those of the file it names.
+
+## canonical form
+
+The canonical form of a `starmap.toml` is the TOML text that
+`Spec::to_toml` writes, and the [digest](#digest) is its hash. Two files
+that differ only in layout, comments, the order of fields, string quoting,
+tool tables or the spelling of equal values have the same canonical form.
+Another implementation writes the same bytes by the rules below, and the
+`parse` [conformance cases](#conformance-case) compare its output with
+`canonical.toml` byte for byte.
+
+The text is UTF-8 with `\n` line endings. It holds these tables in this
+order, each only when the file declares something that goes in it:
+
+1. `[mode]`, with `variable` and then `production`, whose values keep the
+   file's order.
+2. One `[enumerations.<name>]` table for each named enumeration, in name
+   order. Each value of the enumeration is a key, in the file's order, and
+   its description is the key's value.
+3. One `[groups.<name>]` table for each group, in name order, whose
+   `variables` lists the members in the file's order.
+4. One `[families.<prefix>]` table for each family, in prefix order, with
+   the fields of a variable and then, for a listed family, `keys` in key
+   order.
+5. One `[variables.<name>]` table for each variable, in the file's order.
+
+Name order, prefix order and key order are the byte order of the text. The
+form writes no header for `[enumerations]`, `[groups]`, `[families]` or
+`[variables]` themselves, and it writes no comments and no tool tables.
+Each table is its header line, such as `[variables.SHELF_PORT]`, followed by
+one `key = value` line for each field. An empty line comes before each
+header except the first. Every line ends with `\n`, the last one included,
+and a file that declares nothing has the empty text as its canonical form.
+
+A variable's fields, and a family's, come in this order:
+
+| Field | When the form writes it |
+| --- | --- |
+| `purpose` | Always. |
+| `effect` | When the file states one. |
+| `check` | When the file states one. |
+| `type` | Always. |
+| `presence` | As `presence = true`, only when it is true. |
+| `empty` | As `empty = "value"`, only when it is `value`. |
+| `unset` | Always. |
+| `show` | Always. |
+| `source` | Always. |
+| `bind` | When the variable has one. |
+| `bytes` | For a generated variable whose type is not bytes, always, and as `bytes = 32` when the file states no count. |
+| `keys` | For a listed family. |
+
+A type is written as its word when it has one, so `{ path = { absolute =
+false } }`, `{ url = {} }` and `{ string = {} }` are written `path`, `url`
+and `string`. Every other type is an inline table: `{ path = { absolute =
+true } }`, `{ integer = { min = 1, max = 100 } }`, `{ enumeration =
+"log-level" }` for a named enumeration, `{ enumeration = ["dev", "prod"] }`
+for an inline one, `{ bytes = { encoding = "hex", length = 32 } }` with
+`min-length` in place of `length` for a smallest length, `{ url = { schemes
+= ["postgres", "postgresql"] } }`, `{ string = { pattern = "[0-9a-f]{40}" }
+}` and `{ boolean = { true = ["1", "yes"], false = ["0", "no"] } }`. Each
+list keeps the file's order.
+
+An unset rule without a default whose production rule equals its local rule
+is written as the word `required` or `optional`. Any other rule is an
+inline table that starts with `default` or `local` and ends with
+`production` when the production rule differs from the local one, as in
+`{ default = "8080" }`, `{ default = "8080", production = "required" }` and
+`{ local = "optional", production = "required" }`. A default of any type
+other than path is written as the text that the variable's type gives the
+child for that value, so the default `YES` of the word `boolean` is written
+`true`, and an upper case hex default of a bytes type is written in lower
+case.
+
+A path default is written from the path's components, as Rust's
+`Path::components` reads them on Unix. A run of `/` separators becomes one
+`/`, a trailing `/` is dropped, a `.` component is dropped unless it is the
+first component of a relative path, and a `..` component is kept. So
+`data//books/` and `data/./books` are written `data/books`, `./data` stays
+`./data`, and `data/../books` stays `data/../books`. The child receives a
+path default exactly as the file spells it, so the child of `data//books/`
+gets `data//books/` and the child of `/./data` gets `/./data`, while the
+canonical form writes them from their components as `data/books` and
+`/data`. On Windows starmap joins the components with `\`, so there a path
+default that has more than one component has a different canonical form.
+
+A bind is an inline table. A setting's is `{ path = "<template>" }`. A
+secret's is `{ one-password = "<reference>" }`, followed by `cache = false`
+only when the bind keeps the value out of every cache, so `cache = true` is
+left out. A provided variable's is `{ provided = "<host>/<kind>" }`
+followed by its qualifiers in key order.
+
+Each value is written in one spelling. An integer is written in decimal,
+with `-` before a negative one, and a boolean as `true` or `false`. An array
+is written as `["dev", "prod"]`, with `, ` between its elements and no
+space inside the brackets. An inline table is written as `{ min = 1, max =
+100 }`, with one space inside each brace and `, ` between its entries. Each
+`=` has one space on each side.
+
+A string is written in the first of these forms that fits it. A control
+character here is one of U+0000 to U+001F, or U+007F.
+
+1. `"..."`, when the text holds no `"`, no `\`, no newline and no control
+   character other than tab. A tab is written as `\t`.
+2. `'...'`, when the text holds no `'`, no newline and no control character
+   other than tab. The text is written as it is, so a text that holds `"`
+   or `\` and no `'` is written as a literal string, as in
+   `'The directory, such as "C:\shelf", that holds the catalogue.'`.
+3. `"""..."""`, when the text holds no `\`, no run of three or more `"`, and
+   no control character other than tab and newline. A tab is written as
+   `\t`. So a text that holds both kinds of quote and no `\` is written
+   as in `"""The reader's "home" shelf."""`.
+4. `'''...'''`, when the text holds no run of three or more `'` and no control
+   character other than tab and newline. The text is written as it is, as
+   in `'''The reader's "home" directory, such as C:\home.'''`.
+5. `"..."` with escapes, or `"""..."""` with escapes when the text holds a
+   newline. The escapes are `\\` for a backslash, `\b`, `\t`, `\f` and
+   `\r`, `\n` in a `"..."` string, `\"` for each `"` in a `"..."` string
+   and for each `"` that would make a run of three in a `"""..."""` string,
+   and `\u` followed by four upper case hex digits for every other control
+   character.
+
+In forms 3, 4 and 5, a text that holds a newline is written with a newline
+right after the opening `"""` or `'''`, and each newline of the text is
+written as a newline.
+
+A key is written bare when it is not empty and holds only ASCII letters,
+digits, `-` and `_`, as every variable name, prefix, field name, group name
+and enumeration name is. Any other key, such as an enumeration value that
+holds a `.`, is written as `"..."` when it holds no `"`, no `\` and no
+control character other than tab, as `'...'` when it holds no `'` and no
+control character other than tab, and otherwise as `"..."` with the escapes
+of form 5.
+
+## digest
+
+The digest of a `starmap.toml` is `sha256:` followed by the 64 lower case
+hex digits of the SHA-256 hash of the UTF-8 bytes of its
+[canonical form](#canonical-form), the final `\n` included. Files with the
+same canonical form have the same digest. Reordering the variables changes
+the digest, because the canonical form keeps the variables in the file's
+order. Layout, comments, the order of fields, string quoting and tool
+tables do not change it. A file that declares nothing has the digest of
+the empty text,
+`sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+The Rust API names it `starmap::Digest`, and `Spec::digest` returns it. A
+pointer has no digest of its own.
+
+## conformance case
+
+A conformance case is one directory under the repository's `conformance/`
+directory that pins one result of the `starmap.toml` format. A `parse` case
+gives a file and its digest and canonical form, or the codes of the
+problems that refuse it. A `check` case gives a file and an environment,
+and the mode and the text each variable gives the child, or the variable
+and code of each refusal. Messages and spans are not part of a case, so
+another implementation may word and place them for itself.
+[The conformance README](../conformance/README.md) gives the layout, which
+is version 1, and how to run the cases from another language. starmap's
+test suite runs every case, and a test fails when a `starmap::spec::*` code
+other than `starmap::spec::too_large` has no `parse` case. The
+[canonical form](#canonical-form) and [digest](#digest) entries give the
+rules that the digest cases check, and the README gives the order in which
+the parser reports problems.

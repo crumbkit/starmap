@@ -1,0 +1,8 @@
+description = "A variable that reads its presence is set by an empty value, which reaches the child."
+
+[environment]
+NO_COLOR = ""
+
+[expect]
+mode = "local"
+values = { NO_COLOR = "" }

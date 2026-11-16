@@ -1,0 +1,4 @@
+description = "A default that does not fit the type is refused."
+
+[expect]
+problems = ["starmap::spec::bad_default"]

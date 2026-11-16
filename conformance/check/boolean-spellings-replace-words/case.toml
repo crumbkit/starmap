@@ -1,0 +1,9 @@
+description = "A boolean with its own spellings refuses a boolean word it does not list."
+
+[environment]
+SHELF_DEBUG = "true"
+
+[expect]
+refused = [
+  { variable = "SHELF_DEBUG", code = "starmap::variable::invalid" },
+]

@@ -1,0 +1,4 @@
+description = "A generated string takes its byte count from its bytes field."
+
+[expect]
+digest = "sha256:05527588206f5222ff32e3c4b10f5b696e1771848235750907e61267bfb4e785"

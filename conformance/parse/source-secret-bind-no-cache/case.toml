@@ -1,0 +1,4 @@
+description = "A one-password bind with cache = false keeps the key in the canonical form."
+
+[expect]
+digest = "sha256:e1c64bbba04a6d77b5d980dfd043966abab3aafd5b50675eba4c144f92c3f42c"

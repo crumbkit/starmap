@@ -1,0 +1,14 @@
+[enumerations.log-level]
+debug = "Logs every request."
+info = "Logs each request once."
+
+[enumerations.reader-mode]
+browse = "Lists books."
+borrow = "Lends a book."
+
+[variables.READER_MODE]
+purpose = "What the reader does."
+type = { enumeration = "reader-mode" }
+unset = { default = "borrow" }
+show = "shown"
+source = "setting"

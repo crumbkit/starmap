@@ -1,0 +1,4 @@
+description = "A relative default of an absolute path type is refused."
+
+[expect]
+problems = ["starmap::spec::bad_default"]

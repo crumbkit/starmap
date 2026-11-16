@@ -1,0 +1,4 @@
+description = "A pointer that also declares variables is refused."
+
+[expect]
+problems = ["starmap::spec::pointer_declares"]

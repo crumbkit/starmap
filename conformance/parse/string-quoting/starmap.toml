@@ -1,0 +1,27 @@
+[variables.SHELF_LABEL]
+purpose = "The label the catalogue shows on its \"front\" shelf."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_DATA_DIR]
+purpose = "The directory, such as \"C:\\shelf\\data\", that holds the catalogue."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_HOME]
+purpose = "The reader's \"home\" shelf."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_HOME_DIR]
+purpose = "The reader's \"home\" directory, such as C:\\home."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"

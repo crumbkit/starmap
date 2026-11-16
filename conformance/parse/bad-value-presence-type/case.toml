@@ -1,0 +1,4 @@
+description = "presence = true beside a type other than boolean is refused."
+
+[expect]
+problems = ["starmap::spec::bad_value"]

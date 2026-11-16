@@ -1,0 +1,4 @@
+description = "A boolean variable that reads its presence parses."
+
+[expect]
+digest = "sha256:de9dfa864c5b7f6f1450ff27a135cffd861f5b193d5612f10581eaff58b98289"

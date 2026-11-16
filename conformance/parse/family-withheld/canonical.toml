@@ -1,0 +1,7 @@
+[families.SHELF_TOKEN]
+purpose = "The token of one partner, keyed by the partner."
+type = "string"
+empty = "value"
+unset = "optional"
+show = "withheld"
+source = "inherited"

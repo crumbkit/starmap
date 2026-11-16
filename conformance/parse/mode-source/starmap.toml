@@ -1,0 +1,10 @@
+[mode]
+variable = "SHELF_ENV"
+production = ["prod"]
+
+[variables.SHELF_ENV]
+purpose = "Selects local or production behaviour."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "secret"

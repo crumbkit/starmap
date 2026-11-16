@@ -1,0 +1,8 @@
+description = "A url reaches the child as the WHATWG URL Standard serializes it."
+
+[environment]
+LIBRARY_URL = "HTTPS://Library.Example"
+
+[expect]
+mode = "local"
+values = { LIBRARY_URL = "https://library.example/" }

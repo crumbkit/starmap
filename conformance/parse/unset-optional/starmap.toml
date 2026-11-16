@@ -1,0 +1,6 @@
+[variables.LIBRARY_URL]
+purpose = "The address of the library service."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"

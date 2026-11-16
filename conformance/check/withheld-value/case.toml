@@ -1,0 +1,8 @@
+description = "A withheld value reaches the child as it was set."
+
+[environment]
+LIBRARY_TOKEN = "lib-token-1234"
+
+[expect]
+mode = "local"
+values = { LIBRARY_TOKEN = "lib-token-1234" }

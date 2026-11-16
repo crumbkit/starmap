@@ -1,0 +1,4 @@
+description = "A purpose that holds a double quote, a backslash or both kinds of quote is written in the quoting the canonical form chooses."
+
+[expect]
+digest = "sha256:672bb423ad768f31d60268e90b41afb0c9b687798f08013f5fa6769045ebc70c"

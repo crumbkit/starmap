@@ -1,0 +1,4 @@
+description = "A generated string without bytes holds 32 bytes, which the canonical form writes."
+
+[expect]
+digest = "sha256:a27c145b026089b937b0d74206937f3ca009b16489b21d73080464e3dbe35301"

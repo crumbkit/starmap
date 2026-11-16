@@ -1,0 +1,9 @@
+description = "A url whose scheme is not listed is invalid."
+
+[environment]
+LIBRARY_DATABASE_URL = "mysql://db.example/library"
+
+[expect]
+refused = [
+  { variable = "LIBRARY_DATABASE_URL", code = "starmap::variable::invalid" },
+]

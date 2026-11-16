@@ -1,0 +1,4 @@
+description = "A mode table names its variable and its production values."
+
+[expect]
+digest = "sha256:fda3ae9a955d7c1f0510f69db3fa656ee7ce7969c26aa55ea05f710946ed7952"

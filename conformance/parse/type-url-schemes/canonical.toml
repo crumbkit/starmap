@@ -1,0 +1,6 @@
+[variables.LIBRARY_DATABASE_URL]
+purpose = "The database of the library."
+type = { url = { schemes = ["postgres", "postgresql"] } }
+unset = "required"
+show = "shown"
+source = "setting"

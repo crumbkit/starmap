@@ -1,0 +1,4 @@
+description = "An unset table with a default and a production rule parses."
+
+[expect]
+digest = "sha256:0db815aac1b2f297f4f6d399e50ae98f30d4805fea87224cceace1cc821ca2d8"

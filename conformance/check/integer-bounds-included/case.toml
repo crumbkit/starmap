@@ -1,0 +1,9 @@
+description = "An integer range includes its min and its max."
+
+[environment]
+SHELF_PAGE_SIZE = "100"
+SHELF_OFFSET = "-12"
+
+[expect]
+mode = "local"
+values = { SHELF_PAGE_SIZE = "100", SHELF_OFFSET = "-12" }

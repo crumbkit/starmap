@@ -1,0 +1,4 @@
+description = "A boolean spelling listed for both true and false is refused."
+
+[expect]
+problems = ["starmap::spec::empty_enumeration"]

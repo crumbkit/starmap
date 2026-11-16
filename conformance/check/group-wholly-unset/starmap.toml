@@ -1,0 +1,23 @@
+[groups.mirror]
+variables = ["SHELF_MIRROR_ACCOUNT", "SHELF_MIRROR_KEY", "SHELF_MIRROR_REGION"]
+
+[variables.SHELF_MIRROR_ACCOUNT]
+purpose = "The account at the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.SHELF_MIRROR_KEY]
+purpose = "The key of the account at the mirror."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "setting"
+
+[variables.SHELF_MIRROR_REGION]
+purpose = "The region of the catalogue mirror."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"

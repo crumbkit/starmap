@@ -1,0 +1,4 @@
+description = "A provided variable with qualifiers parses, and the canonical form writes the qualifiers in name order."
+
+[expect]
+digest = "sha256:7bf519829fd70e699d5c1322d918b5d55ef863a4573222d079e31cb581967b9b"

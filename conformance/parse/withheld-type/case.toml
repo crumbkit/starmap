@@ -1,0 +1,4 @@
+description = "A withheld variable with the type port is refused."
+
+[expect]
+problems = ["starmap::spec::withheld_type"]

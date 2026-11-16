@@ -1,0 +1,4 @@
+description = "A bytes type in base64url parses."
+
+[expect]
+digest = "sha256:ea3b6c1d25d689a1c0a8e90fb0a5fd9624a8b268305e39086362ee62bff72b7c"

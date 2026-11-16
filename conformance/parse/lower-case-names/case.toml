@@ -1,0 +1,4 @@
+description = "Names keep their case, so a file may declare a lower case name and its upper case form."
+
+[expect]
+digest = "sha256:9c42d71d596aa6ae47d47f032e20affc010312f19ba7ef260e19060ed13f1715"

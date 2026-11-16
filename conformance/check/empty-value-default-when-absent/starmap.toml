@@ -1,0 +1,7 @@
+[variables.READER_GREETING]
+purpose = "The greeting the reader sees."
+type = "string"
+unset = { default = "Welcome." }
+show = "shown"
+source = "setting"
+empty = "value"

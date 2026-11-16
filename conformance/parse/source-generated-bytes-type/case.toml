@@ -1,0 +1,4 @@
+description = "A generated variable with a bytes type takes its length from the type."
+
+[expect]
+digest = "sha256:69a732a667c29b075057b6d4871796aa88a3d64cca9417303966dccf540e3eaf"

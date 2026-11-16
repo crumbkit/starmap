@@ -1,0 +1,11 @@
+description = "A member whose key a listed family does not list is refused."
+
+[environment]
+SHELF_DB_URL_EU = "https://eu.example/"
+SHELF_DB_URL_US = "https://us.example/"
+SHELF_DB_URL_APAC = "https://apac.example/"
+
+[expect]
+refused = [
+  { variable = "SHELF_DB_URL_APAC", code = "starmap::family::unlisted_key" },
+]

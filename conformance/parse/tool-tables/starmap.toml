@@ -1,0 +1,27 @@
+[tool.codegen]
+module = "settings"
+
+[tool.lint]
+strict = true
+
+[mode]
+variable = "SHELF_ENV"
+production = ["prod", "production"]
+
+[variables.SHELF_ENV]
+purpose = "Selects local or production behaviour."
+type = { enumeration = ["dev", "prod", "production"] }
+unset = { default = "dev" }
+show = "shown"
+source = "setting"
+tool.codegen = { field = "env" }
+
+[variables.LIBRARY_TOKEN]
+purpose = "The token the library service accepts."
+type = "string"
+unset = { local = "optional", production = "required" }
+show = "withheld"
+source = "setting"
+
+[variables.LIBRARY_TOKEN.tool.codegen]
+field = "token"

@@ -1,0 +1,4 @@
+description = "A bytes type whose length is over 1024 is refused."
+
+[expect]
+problems = ["starmap::spec::bad_bytes"]

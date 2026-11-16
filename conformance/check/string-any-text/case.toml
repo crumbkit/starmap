@@ -1,0 +1,8 @@
+description = "A string takes any Unicode text."
+
+[environment]
+READER_NAME = "Åsa Lindqvist ✓"
+
+[expect]
+mode = "local"
+values = { READER_NAME = "Åsa Lindqvist ✓" }

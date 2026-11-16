@@ -1,0 +1,9 @@
+description = "A pattern must match the whole value, so a longer value is invalid."
+
+[environment]
+SHELF_REVISION = "0a1b2c3d4"
+
+[expect]
+refused = [
+  { variable = "SHELF_REVISION", code = "starmap::variable::invalid" },
+]

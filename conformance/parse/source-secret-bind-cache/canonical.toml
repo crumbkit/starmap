@@ -1,0 +1,7 @@
+[variables.LIBRARY_TOKEN]
+purpose = "The token the library service accepts."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+bind = { one-password = "op://shelf/library/token" }

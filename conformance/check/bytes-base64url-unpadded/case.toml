@@ -1,0 +1,8 @@
+description = "A shown base64url value reaches the child without its padding."
+
+[environment]
+SHELF_KEY = "3q2-7w=="
+
+[expect]
+mode = "local"
+values = { SHELF_KEY = "3q2-7w" }

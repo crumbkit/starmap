@@ -1,0 +1,5 @@
+description = "A variable that reads its presence and is absent gives the child nothing."
+
+[expect]
+mode = "local"
+values = {}

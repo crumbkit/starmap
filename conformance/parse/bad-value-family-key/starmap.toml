@@ -1,0 +1,7 @@
+[families.SHELF_DB_URL]
+purpose = "The database of one region, keyed by its code."
+type = "url"
+unset = "optional"
+show = "shown"
+source = "setting"
+keys = ["eu"]

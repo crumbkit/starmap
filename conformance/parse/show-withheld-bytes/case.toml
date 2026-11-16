@@ -1,0 +1,4 @@
+description = "A withheld variable may have a bytes type."
+
+[expect]
+digest = "sha256:f23abc0e3319c52b15c2c30978e0eefc7b23efe638b9b5edb3ccc3b8fb672351"

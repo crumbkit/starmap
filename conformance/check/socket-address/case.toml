@@ -1,0 +1,8 @@
+description = "An IP socket address fits."
+
+[environment]
+SHELF_LISTEN = "127.0.0.1:8080"
+
+[expect]
+mode = "local"
+values = { SHELF_LISTEN = "127.0.0.1:8080" }

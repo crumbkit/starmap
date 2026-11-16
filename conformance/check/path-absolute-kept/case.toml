@@ -1,0 +1,8 @@
+description = "An absolute value of an absolute path type reaches the child."
+
+[environment]
+SHELF_DATA_DIR = "/var/shelf"
+
+[expect]
+mode = "local"
+values = { SHELF_DATA_DIR = "/var/shelf" }

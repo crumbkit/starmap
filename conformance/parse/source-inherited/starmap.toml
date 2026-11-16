@@ -1,0 +1,6 @@
+[variables.HOME]
+purpose = "The home directory of the person who runs the shelf."
+type = "path"
+unset = "required"
+show = "shown"
+source = "inherited"

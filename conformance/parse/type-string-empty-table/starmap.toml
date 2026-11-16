@@ -1,0 +1,6 @@
+[variables.READER_NAME]
+purpose = "The name the reader sees."
+type = { string = {} }
+unset = "optional"
+show = "shown"
+source = "setting"

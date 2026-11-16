@@ -1,0 +1,4 @@
+description = "A family may be withheld with the type string, and may have an empty field."
+
+[expect]
+digest = "sha256:af617bd12570a46efba2b74bb61d8def1ecbe8a862fec21c7b4c26eea20875e0"

@@ -1,0 +1,8 @@
+description = "A url's scheme matches the listed schemes in any case."
+
+[environment]
+LIBRARY_DATABASE_URL = "POSTGRES://db.example/library"
+
+[expect]
+mode = "local"
+values = { LIBRARY_DATABASE_URL = "postgres://db.example/library" }

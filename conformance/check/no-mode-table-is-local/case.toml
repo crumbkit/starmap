@@ -1,0 +1,5 @@
+description = "A file without a mode table runs in local mode."
+
+[expect]
+mode = "local"
+values = { SHELF_PORT = "8080" }

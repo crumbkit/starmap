@@ -1,0 +1,4 @@
+description = "A variable with empty = \"value\" parses, and the canonical form writes the field after the type."
+
+[expect]
+digest = "sha256:4f760978a3b6e9369ddb7dc2df9c5ffc1eac6041d0d6687c4b4a2d095f57a9e7"

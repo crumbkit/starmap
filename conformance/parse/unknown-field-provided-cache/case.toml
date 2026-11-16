@@ -1,0 +1,4 @@
+description = "A provided bind does not take cache."
+
+[expect]
+problems = ["starmap::spec::unknown_field"]

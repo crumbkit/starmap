@@ -1,0 +1,9 @@
+description = "A base64 value without its padding is invalid."
+
+[environment]
+SHELF_KEY = "3q2+7wA"
+
+[expect]
+refused = [
+  { variable = "SHELF_KEY", code = "starmap::variable::invalid" },
+]

@@ -1,0 +1,4 @@
+description = "A one-password bind with cache = true has the canonical form of a bind without cache."
+
+[expect]
+digest = "sha256:0f877b56d0dd6ff298104511065feddb3ad26c922c6b5d77e73b084f09222661"

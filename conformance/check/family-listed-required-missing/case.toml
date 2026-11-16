@@ -1,0 +1,9 @@
+description = "Each unset member of a required listed family is missing."
+
+[environment]
+SHELF_DB_URL_US = "https://us.example/"
+
+[expect]
+refused = [
+  { variable = "SHELF_DB_URL_EU", code = "starmap::variable::missing" },
+]

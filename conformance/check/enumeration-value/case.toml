@@ -1,0 +1,8 @@
+description = "A listed value fits an enumeration."
+
+[environment]
+READER_MODE = "borrow"
+
+[expect]
+mode = "local"
+values = { READER_MODE = "borrow" }
