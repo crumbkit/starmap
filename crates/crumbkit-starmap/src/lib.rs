@@ -106,20 +106,32 @@ pub fn environment(
     spec: &str,
     vars: &[(OsString, OsString)],
 ) -> Result<Listing<Listed>, EnvironmentFailure> {
-    let tool = run.command().get_name().to_owned();
-    listing(&tool, spec, vars)
+    let command = run.command();
+    listing(command.get_name(), uses_usage(command), spec, vars)
+}
+
+/// Returns whether the tool uses `crumbkit-usage`, which the commands it
+/// mounts under `self` show: `usage`, `runs` and `figures` are all its.
+fn uses_usage(command: &clap::Command) -> bool {
+    command.find_subcommand("self").is_some_and(|group| {
+        group
+            .get_subcommands()
+            .any(|command| matches!(command.get_name(), "usage" | "runs" | "figures"))
+    })
 }
 
 /// Returns the listing of `tool`'s variables in `spec` and crumbkit's, with
-/// the values in `vars`.
+/// the values in `vars`. The variables of `crumbkit-usage` are in it when
+/// `usage` says the tool uses that crate.
 fn listing(
     tool: &str,
+    usage: bool,
     spec: &str,
     vars: &[(OsString, OsString)],
 ) -> Result<Listing<Listed>, EnvironmentFailure> {
     let failed = |error| EnvironmentFailure { error };
     let spec = Spec::parse(spec).map_err(failed)?;
-    let crumbkit = crumbkit_variables::spec(tool).map_err(failed)?;
+    let crumbkit = crumbkit_variables::spec(tool, usage).map_err(failed)?;
     let own = rows(&spec, vars);
     // A variable that the tool declares itself keeps the tool's declaration.
     let declared: Vec<String> = own.iter().map(|row| row.name().to_owned()).collect();
@@ -134,7 +146,7 @@ fn listing(
         .collect();
     Ok(Listing::from_all(rows, None)
         .described("variables")
-        .note("Values come from this process's environment, and nothing is resolved. Each variable owned by crumbkit is read by every crumbkit tool."))
+        .note("Values come from this process's environment, and nothing is resolved. Each variable owned by crumbkit is read by the crumbkit crate in every tool, or by crumbkit-usage in a tool that mounts its commands."))
 }
 
 /// Returns the rows of every variable of `spec`, in its order.

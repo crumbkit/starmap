@@ -11,9 +11,10 @@ The command reads the tool's own process environment and resolves nothing. A
 bind is named and never read, and the value of a withheld variable has no
 text. It also lists the variables that the `crumbkit` crate reads in every
 tool, `<TOOL>_OUTPUT_BUDGET`, `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` and
-`TERM`, each with the owner `crumbkit` in its `owner` column. The variables that
-only `crumbkit-usage` reads are not listed, because a tool that does not use
-that crate never reads them. A variable that the tool declares itself keeps the tool's
+`TERM`, each with the owner `crumbkit` in its `owner` column. When the tool
+mounts a command of `crumbkit-usage` under `self` (`usage`, `runs` or
+`figures`), the list also holds the variables that crate reads:
+`<TOOL>_PROGRAM`, `XDG_STATE_HOME`, `TRACEPARENT` and `TRACESTATE`. A variable that the tool declares itself keeps the tool's
 declaration.
 
 A tool adds an `environment` resource with a `list` verb that takes no

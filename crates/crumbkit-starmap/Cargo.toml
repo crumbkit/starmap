@@ -17,12 +17,14 @@ include = ["src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 starmap = { workspace = true }
 # `derive` writes the `Row` and `Failure` impls of the command's document.
 crumbkit = { workspace = true, features = ["derive"] }
+# The command reads the clap command tree of the tool, which `Run` returns, to
+# see whether the tool mounts the commands of crumbkit-usage.
+clap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 schemars = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-# The mount test derives the parser of a tool that mounts the command. The
-# workspace entry enables only `std`.
+# The mount test derives the parser of a tool that mounts the command.
 clap = { workspace = true, features = ["derive"] }
 # `std` reads the JSON documents that the tests compare.
 serde_json = { workspace = true, features = ["std"] }

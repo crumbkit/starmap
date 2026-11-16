@@ -2,7 +2,7 @@ use std::ffi::OsString;
 
 use serde_json::{Value, json};
 
-use super::{EnvironmentFailure, listing};
+use super::{EnvironmentFailure, listing, uses_usage};
 
 /// The example spec of a tool named shelf.
 const SHELF: &str = include_str!("../../starmap/tests/example/starmap.toml");
@@ -16,11 +16,17 @@ const EMPTY: &str = include_str!("../../starmap/tests/example/empty.toml");
 /// Returns the JSON rows that `self environment list` prints for `tool` with
 /// the declaration `spec` and `vars` as the process environment.
 fn rows(tool: &str, spec: &str, vars: &[(&str, &str)]) -> Vec<Value> {
+    rows_of(tool, true, spec, vars)
+}
+
+/// Returns the JSON rows for a tool that does or does not use
+/// `crumbkit-usage`, according to `usage`.
+fn rows_of(tool: &str, usage: bool, spec: &str, vars: &[(&str, &str)]) -> Vec<Value> {
     let vars: Vec<(OsString, OsString)> = vars
         .iter()
         .map(|(name, value)| (OsString::from(name), OsString::from(value)))
         .collect();
-    let listing = listing(tool, spec, &vars).unwrap();
+    let listing = listing(tool, usage, spec, &vars).unwrap();
     match serde_json::to_value(&listing).unwrap() {
         Value::Array(rows) => rows,
         other => panic!("the listing serialises as an array, not {other}"),
@@ -158,6 +164,60 @@ fn crumbkits_variables_start_with_the_tools_name() {
 }
 
 #[test]
+fn a_tool_that_uses_crumbkit_usage_lists_its_variables_as_crumbkits() {
+    let rows = rows_of("shelf", true, SHELF, &[("SHELF_PROGRAM", "flightdeck")]);
+    let program = find(&rows, "SHELF_PROGRAM");
+
+    assert_eq!(program["owner"], "crumbkit");
+    assert_eq!(program["state"], "set");
+    assert_eq!(find(&rows, "TRACEPARENT")["owner"], "crumbkit");
+}
+
+#[test]
+fn a_tool_without_crumbkit_usage_lists_only_the_five_variables_of_the_crumbkit_crate() {
+    let rows = rows_of("shelf", false, SHELF, &[]);
+    let owned: Vec<&str> = rows
+        .iter()
+        .filter(|row| row["owner"] == "crumbkit")
+        .map(|row| row["name"].as_str().unwrap())
+        .collect();
+
+    assert_eq!(
+        owned,
+        [
+            "SHELF_OUTPUT_BUDGET",
+            "NO_COLOR",
+            "CLICOLOR",
+            "CLICOLOR_FORCE",
+            "TERM"
+        ]
+    );
+}
+
+/// Returns a command with the commands `names` under `self`.
+fn tool_with(names: &[&'static str]) -> clap::Command {
+    let group = names
+        .iter()
+        .fold(clap::Command::new("self"), |group, name| {
+            group.subcommand(clap::Command::new(*name))
+        });
+    clap::Command::new("shelf").subcommand(group)
+}
+
+#[test]
+fn a_tool_that_mounts_a_command_of_crumbkit_usage_under_self_uses_it() {
+    for name in ["usage", "runs", "figures"] {
+        assert!(uses_usage(&tool_with(&[name])), "{name}");
+    }
+}
+
+#[test]
+fn a_tool_that_mounts_none_of_them_does_not_use_crumbkit_usage() {
+    assert!(!uses_usage(&tool_with(&["environment", "skills"])));
+    assert!(!uses_usage(&clap::Command::new("shelf")));
+}
+
+#[test]
 fn an_output_budget_that_is_not_a_number_of_bytes_is_invalid() {
     let rows = rows("shelf", SHELF, &[("SHELF_OUTPUT_BUDGET", "plenty")]);
 
@@ -187,7 +247,7 @@ fn colour_variables_are_set_by_any_non_empty_value() {
 
 #[test]
 fn a_declaration_that_does_not_parse_is_a_failure() {
-    let failure: EnvironmentFailure = listing("shelf", "[variables.X", &[]).unwrap_err();
+    let failure: EnvironmentFailure = listing("shelf", true, "[variables.X", &[]).unwrap_err();
 
     assert!(
         failure

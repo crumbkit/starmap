@@ -5,10 +5,11 @@ use regex::Regex;
 
 use super::spec;
 
-/// The crumbkit crates whose reads of the environment happen in every
-/// tool: the core crate. `crumbkit-usage` reads more, but only in a tool
-/// that records usage, so the list leaves its variables out.
-const CRATES: &[&str] = &["crumbkit"];
+/// The crumbkit crate whose reads happen in every tool.
+const CORE: &str = "crumbkit";
+
+/// The crumbkit crate whose reads happen only in a tool that uses it.
+const USAGE: &str = "crumbkit-usage";
 
 /// A variable that the crates read and the listing leaves out, with why.
 const LEFT_OUT: &[(&str, &str)] = &[
@@ -27,6 +28,10 @@ const LEFT_OUT: &[(&str, &str)] = &[
     (
         "BASH_COMPLETION_USER_DIR",
         "only `completion install` reads it",
+    ),
+    (
+        "WT_SESSION",
+        "only the Windows build of the usage log reads it",
     ),
     (
         "SHELF_COMPLETE",
@@ -93,43 +98,73 @@ fn sources(dir: &Path) -> Vec<String> {
     texts
 }
 
-/// Returns the text of every production file of the crumbkit crates at the
-/// versions that Cargo.lock holds.
-fn crumbkit_sources() -> Vec<String> {
-    CRATES
-        .iter()
-        .flat_map(|name| {
-            let version = locked_version(name);
-            sources(&registry_source(name, &version).join("src"))
-        })
-        .collect()
+/// Returns the text of every production file of the crate `name` at the
+/// version that Cargo.lock holds.
+fn crate_sources(name: &str) -> Vec<String> {
+    let version = locked_version(name);
+    sources(&registry_source(name, &version).join("src"))
 }
 
-/// Returns the name of each variable that the list declares, without the
-/// start that the tool's name gives to some.
-fn declared() -> Vec<String> {
+/// Returns the name of each variable that the list declares for a tool with
+/// or without `crumbkit-usage`, without the start that the tool's name gives
+/// to some.
+fn declared(usage: bool) -> Vec<String> {
     let prefix = format!("{}_", TOOL.to_uppercase());
-    spec(TOOL)
+    spec(TOOL, usage)
         .unwrap()
         .variables()
         .map(|(name, _)| name.as_str().trim_start_matches(&prefix).to_owned())
         .collect()
 }
 
+/// Returns the name of each variable that only `crumbkit-usage` adds.
+fn usage_only() -> Vec<String> {
+    let core = declared(false);
+    declared(true)
+        .into_iter()
+        .filter(|name| !core.contains(name))
+        .collect()
+}
+
 #[test]
-fn every_variable_in_the_list_appears_in_crumbkits_source() {
-    let sources = crumbkit_sources();
-    for name in declared() {
+fn every_variable_of_the_crumbkit_crate_appears_in_its_source() {
+    let sources = crate_sources(CORE);
+    for name in declared(false) {
         let literal = format!("\"{name}\"");
         assert!(
             sources.iter().any(|text| text.contains(&literal)),
-            "{name} is declared and no crumbkit source names it, so the list is out of date"
+            "{name} is declared and the {CORE} source names none, so the list is out of date"
         );
     }
 }
 
 #[test]
-fn every_variable_that_crumbkit_reads_is_in_the_list_or_left_out_with_a_reason() {
+fn every_variable_that_only_crumbkit_usage_adds_appears_in_its_source() {
+    let sources = crate_sources(USAGE);
+    let added = usage_only();
+    assert!(!added.is_empty());
+    for name in added {
+        let literal = format!("\"{name}\"");
+        assert!(
+            sources.iter().any(|text| text.contains(&literal)),
+            "{name} is declared and the {USAGE} source names none, so the list is out of date"
+        );
+    }
+}
+
+#[test]
+fn every_variable_that_the_crumbkit_crate_reads_is_declared_or_left_out_with_a_reason() {
+    every_read_is_declared_or_left_out(CORE, &declared(false));
+}
+
+#[test]
+fn every_variable_that_crumbkit_usage_reads_is_declared_or_left_out_with_a_reason() {
+    every_read_is_declared_or_left_out(USAGE, &declared(true));
+}
+
+/// Checks that each variable the crate `krate` reads is in `declared` or in
+/// `LEFT_OUT`.
+fn every_read_is_declared_or_left_out(krate: &str, declared: &[String]) {
     // A read through a call with a literal, or through a constant whose name
     // ends in VARIABLE, such as `const VARIABLE: &str = "OUTPUT_BUDGET";`.
     let read = Regex::new(concat!(
@@ -137,8 +172,7 @@ fn every_variable_that_crumbkit_reads_is_in_the_list_or_left_out_with_a_reason()
         r#"|const\s+[A-Z_]*VARIABLE\s*:\s*&(?:'static\s+)?str\s*=\s*"([A-Za-z_][A-Za-z0-9_]*)""#,
     ))
     .unwrap();
-    let declared = declared();
-    for text in crumbkit_sources() {
+    for text in crate_sources(krate) {
         for found in read.captures_iter(&text) {
             let name = found
                 .get(1)
@@ -147,7 +181,7 @@ fn every_variable_that_crumbkit_reads_is_in_the_list_or_left_out_with_a_reason()
             assert!(
                 declared.iter().any(|declared| declared == name)
                     || LEFT_OUT.iter().any(|(left_out, _)| left_out == &name),
-                "crumbkit reads {name}: declare it in TEMPLATE, or add it to LEFT_OUT with a reason"
+                "{krate} reads {name}: declare it in CORE or USAGE, or add it to LEFT_OUT with a reason"
             );
         }
     }
@@ -155,23 +189,43 @@ fn every_variable_that_crumbkit_reads_is_in_the_list_or_left_out_with_a_reason()
 
 #[test]
 fn the_list_names_the_variables_that_start_with_the_tools_name() {
-    let names: Vec<String> = spec(TOOL)
+    let names: Vec<String> = spec(TOOL, true)
         .unwrap()
         .variables()
         .map(|(name, _)| name.as_str().to_owned())
         .collect();
 
     assert!(names.contains(&"SHELF_OUTPUT_BUDGET".to_owned()));
+    assert!(names.contains(&"SHELF_PROGRAM".to_owned()));
     assert!(names.contains(&"NO_COLOR".to_owned()));
+}
+
+#[test]
+fn a_tool_without_crumbkit_usage_has_only_the_five_variables_of_the_crumbkit_crate() {
+    let mut names = declared(false);
+    names.sort();
+
+    assert_eq!(
+        names,
+        [
+            "CLICOLOR",
+            "CLICOLOR_FORCE",
+            "NO_COLOR",
+            "OUTPUT_BUDGET",
+            "TERM"
+        ]
+    );
 }
 
 #[test]
 fn a_tool_name_with_a_dash_or_a_leading_digit_gives_variable_names_a_shell_accepts() {
     for (tool, budget) in [
+        ("my-tool", "MY_TOOL_PROGRAM"),
+        ("2fa", "_2FA_PROGRAM"),
         ("my-tool", "MY_TOOL_OUTPUT_BUDGET"),
         ("2fa", "_2FA_OUTPUT_BUDGET"),
     ] {
-        let spec = spec(tool).unwrap();
+        let spec = spec(tool, true).unwrap();
         assert!(
             spec.variables().any(|(name, _)| name.as_str() == budget),
             "{tool} should declare {budget}"
