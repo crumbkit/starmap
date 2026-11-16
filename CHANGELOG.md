@@ -5,7 +5,7 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-### Added
+## [0.4.1](https://github.com/crumbkit/starmap/compare/v0.4.0...v0.4.1) - 2026-11-16### Added
 
 - `starmap check --src <DIR>` scans the source directory it names in place of
   the default directories, so an application whose root `starmap.toml` sits

@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
@@ -77,14 +77,14 @@ snapbox = { version = "1.2.2", default-features = false }
 # starmap checks. Each entry gives a version beside the path, because
 # cargo-deny treats a path dependency without a version as a wildcard, and
 # the release pull request moves both versions with the workspace version.
-starmap = { version = "0.4.0", path = "crates/starmap" }
-starmap-derive = { version = "0.4.0", path = "crates/starmap-derive" }
-starmap-resolve = { version = "0.4.0", path = "crates/starmap-resolve" }
+starmap = { version = "0.4.1", path = "crates/starmap" }
+starmap-derive = { version = "0.4.1", path = "crates/starmap-derive" }
+starmap-resolve = { version = "0.4.1", path = "crates/starmap-resolve" }
 
 # crumbkit-starmap gives a crumbkit tool that derives `starmap::Env` the
 # built-in `self environment list`, and starmap-cli shares its row type so
 # that `starmap explain` and the built-in print the same columns.
-crumbkit-starmap = { version = "0.4.0", path = "crates/crumbkit-starmap" }
+crumbkit-starmap = { version = "0.4.1", path = "crates/crumbkit-starmap" }
 
 # syn, quote and proc-macro2 build starmap-derive, the `Env` and
 # `Enumeration` derives behind starmap's `derive` feature. The entries enable
