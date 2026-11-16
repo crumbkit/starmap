@@ -3,7 +3,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use clap::builder::NonEmptyStringValueParser;
+use clap::builder::{NonEmptyStringValueParser, TypedValueParser as _};
 use clap::{Args, Parser, Subcommand};
 use crumbkit::commands::{COMMANDS_LIST, CommandsList};
 use crumbkit::completion::{
@@ -85,6 +85,10 @@ const HELP: Help = Help::new()
             .examples(&[
                 Example::new(&[], "Check starmap.toml in the current directory"),
                 Example::new(&["--json"], "Print the result of the check as JSON"),
+                Example::new(
+                    &["--src", "api/src"],
+                    "Scan api/src in place of the default source directories",
+                ),
             ])
             .effects(Effects::read_only())
             .document(CHECK),
@@ -232,6 +236,13 @@ pub(crate) enum Verb {
     /// crate of a .rs file that check reads lacks a disallowed-methods
     /// entry for std::env::var, var_os, vars or vars_os. starmap init
     /// --clippy adds the entries.
+    ///
+    /// check scans src beside the spec, or the directories that a pointer
+    /// lists. --src DIR scans the directory it names in place of those, and
+    /// takes several directories, separated by commas or by repeating
+    /// the option. A path is read from the current directory
+    /// and printed as typed. A named directory that does not exist fails,
+    /// where a missing default src has no reads.
     Check(CheckArgs),
     /// Describe each declared variable and the value it has in this shell.
     Explain(ExplainArgs),
@@ -374,6 +385,10 @@ pub(crate) struct CheckArgs {
     /// The file that holds the spec.
     #[command(flatten)]
     pub(crate) file: SpecFile,
+
+    /// Scan this source directory, in place of the default directories; separate several with commas or repeat the option
+    #[arg(long, value_name = "DIR", value_delimiter = ',', action = clap::ArgAction::Append, value_parser = NonEmptyStringValueParser::new().map(PathBuf::from))]
+    pub(crate) src: Vec<PathBuf>,
 }
 
 /// The arguments of `starmap explain`.

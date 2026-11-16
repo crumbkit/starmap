@@ -85,9 +85,12 @@ A read whose name format! builds from a name, an underscore and one trailing pla
 
 check also fails when the clippy.toml that Clippy reads for the crate of a .rs file that check reads lacks a disallowed-methods entry for std::env::var, var\_os, vars or vars\_os. starmap init --clippy adds the entries.
 
+check scans src beside the spec, or the directories that a pointer lists. --src DIR scans the directory it names in place of those, and takes several directories, separated by commas or by repeating the option. A path is read from the current directory and printed as typed. A named directory that does not exist fails, where a missing default src has no reads.
+
 ### Arguments
 
 - `--spec <FILE>`: Read the spec from this file. Default: `starmap.toml`.
+- `--src <DIR>`: Scan this source directory, in place of the default directories; separate several with commas or repeat the option. Takes more than one value.
 
 ### Examples
 
@@ -101,6 +104,12 @@ Print the result of the check as JSON.
 
 ```sh
 starmap check --json
+```
+
+Scan api/src in place of the default source directories.
+
+```sh
+starmap check --src api/src
 ```
 
 Effects: read-only, closed-world.

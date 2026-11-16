@@ -199,3 +199,78 @@ fn the_json_names_each_check_without_a_sentence_and_each_sentence_without_a_chec
         json!(["SHELF_REGION"])
     );
 }
+
+#[test]
+fn a_root_spec_with_reads_only_in_api_src_reports_them_when_src_names_that_directory() {
+    starmap(&[
+        "check",
+        "--spec",
+        "rooted/starmap.toml",
+        "--src",
+        "rooted/api/src",
+    ])
+    .code(0)
+    .stdout_eq("rooted/starmap.toml declares 1 variable, and rooted/api/src reads it.\n");
+}
+
+#[test]
+fn a_root_spec_without_src_scans_only_the_default_directory_and_finds_no_reads() {
+    starmap(&["check", "--spec", "rooted/starmap.toml"])
+        .code(0)
+        .stdout_eq("rooted/starmap.toml declares 1 variable, and rooted/src reads none of them.\n");
+}
+
+#[test]
+fn an_undeclared_read_in_a_directory_that_src_names_fails_at_its_place_as_typed() {
+    let run = starmap(&[
+        "check",
+        "--spec",
+        "rooted-undeclared/starmap.toml",
+        "--src",
+        "rooted-undeclared/api/src",
+        "--json",
+    ])
+    .code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(document["data"]["undeclared"], json!(["SHELF_THEME"]));
+    assert_eq!(
+        document["failures"][0]["fields"]["at"],
+        "rooted-undeclared/api/src/main.rs:6"
+    );
+}
+
+#[test]
+fn several_src_options_replace_the_default_and_the_sentence_names_each() {
+    starmap(&[
+        "check",
+        "--spec",
+        "rooted/starmap.toml",
+        "--src",
+        "rooted/api/src",
+        "--src",
+        "rooted/api",
+    ])
+    .code(0)
+    .stdout_eq(
+        "rooted/starmap.toml declares 1 variable, and rooted/api/src and rooted/api read it.\n",
+    );
+}
+
+#[test]
+fn a_src_directory_that_is_missing_fails_as_a_source_failure_naming_it() {
+    starmap(&[
+        "check",
+        "--spec",
+        "rooted/starmap.toml",
+        "--src",
+        "rooted/nowhere",
+    ])
+    .code(1)
+    .stdout_eq("")
+    .stderr_eq(file!["golden/check-src-missing.stderr"]);
+}
+
+#[test]
+fn an_empty_src_value_is_a_usage_error() {
+    starmap(&["check", "--src", ""]).code(2);
+}

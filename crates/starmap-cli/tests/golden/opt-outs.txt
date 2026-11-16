@@ -1,4 +1,4 @@
-starmap has 14 opt-outs from the conventions.
+starmap has 15 opt-outs from the conventions.
 
 examples/run: starmap self usage
   Reason: The output names the day the report starts, which changes every day, and tests/usage.rs checks the usage log instead.
@@ -17,6 +17,11 @@ examples/run: starmap init --dry-run
 
 examples/run: starmap diff main
   Reason: Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+examples/run: starmap check --src api/src
+  Reason: The example directory has no api/src, and check fails on a named directory that is missing, so tests/check.rs runs --src against fixtures that have one.
   Cost: The example is not run, so help can show an example that fails.
   Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
 

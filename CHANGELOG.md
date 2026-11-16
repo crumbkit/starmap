@@ -5,6 +5,15 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+
+- `starmap check --src <DIR>` scans the source directory it names in place of
+  the default directories, so an application whose root `starmap.toml` sits
+  beside code in `api/src` can check its reads. The option takes several
+  directories, separated by commas or by repeating it. A path is read from
+  the current directory and printed as typed, and a named directory that does
+  not exist fails with `starmap::source::unreadable`.
+
 ### Changed
 
 - The `starmap` command uses crumbkit 0.5.0. `init` prints its next step on

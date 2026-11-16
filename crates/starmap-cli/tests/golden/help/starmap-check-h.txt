@@ -4,11 +4,13 @@ Usage: starmap check [OPTIONS]
 
 Options:
       --spec <FILE>  Read the spec from this file [default: starmap.toml]
+      --src <DIR>    Scan this source directory, in place of the default directories; separate several with commas or repeat the option
   -h, --help         Print help (see more with '--help')
 
 Examples:
   starmap check
   starmap check --json
+  starmap check --src api/src
 
 Effects: read-only, closed-world.
 Global flags: --json, --no-input. `starmap check --help` describes them.

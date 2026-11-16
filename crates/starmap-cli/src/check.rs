@@ -254,10 +254,19 @@ pub(crate) fn check(
         families,
         unresolved,
         rust,
-    } = scan::scan_all(&located.src)?;
+    } = if args.src.is_empty() {
+        scan::scan_all(&located.src)?
+    } else {
+        scan::scan_named(&args.src)?
+    };
     let bindings = starmap::capture(&spec, vars);
     let (mode, note) = mode::decide(&spec, &bindings);
-    let src = Dirs(&located.src);
+    let dirs = if args.src.is_empty() {
+        &located.src
+    } else {
+        &args.src
+    };
+    let src = Dirs(dirs);
     let mut notes = vec![note];
     let mut checks_without_sentence = Vec::new();
     for (name, at) in &checks {
@@ -337,9 +346,9 @@ pub(crate) fn check(
         checks_without_sentence,
         sentences_without_check,
         unresolved,
-        src: Dirs(&located.src).to_string(),
-        src_verb: Dirs(&located.src).verb("reads", "read"),
-        scanned_nothing: Dirs(&located.src).is_empty(),
+        src: src.to_string(),
+        src_verb: src.verb("reads", "read"),
+        scanned_nothing: src.is_empty(),
         spec: file,
         mode: mode.into(),
     };

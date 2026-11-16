@@ -56,6 +56,10 @@ const INIT_RUNS_ELSEWHERE: &str = "The example directory holds starmap.toml, whi
 /// failure that needs git.
 const DIFF_NEEDS_GIT: &str = "Each example runs in a fresh copy of the example directory, which is not a git repository, so tests/diff.rs builds a repository with a committed spec and pins diff's output and its revision failures there.";
 
+/// The reason that the example of `check --src` does not run in the example
+/// directory, which has no `api/src`, where a named directory must exist.
+const SRC_NEEDS_DIR: &str = "The example directory has no api/src, and check fails on a named directory that is missing, so tests/check.rs runs --src against fixtures that have one.";
+
 /// The `starmap` command's opt-outs from crumbkit's conventions, which
 /// every check below reads.
 const ALLOW: &[Allow] = &[
@@ -67,6 +71,7 @@ const ALLOW: &[Allow] = &[
     Allow::example("init", &[], INIT_RUNS_ELSEWHERE),
     Allow::example("init", &["--dry-run"], INIT_RUNS_ELSEWHERE),
     Allow::example("diff", &["main"], DIFF_NEEDS_GIT),
+    Allow::example("check", &["--src", "api/src"], SRC_NEEDS_DIR),
     Allow::example("run", &["--", "cargo", "run"], RUN_RESOLVES),
     Allow::untwinned(STARTS[25], RUN_TWINS),
     Allow::untwinned(STARTS[26], RUN_TWINS),
