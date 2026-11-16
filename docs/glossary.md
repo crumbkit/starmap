@@ -922,19 +922,23 @@ is written as the word `required` or `optional`. Any other rule is an
 inline table that starts with `default` or `local` and ends with
 `production` when the production rule differs from the local one, as in
 `{ default = "8080" }`, `{ default = "8080", production = "required" }` and
-`{ local = "optional", production = "required" }`. A default is written as
-the text that the variable's type gives the child for that value, so the
-default `YES` of the word `boolean` is written `true`, and an upper case
-hex default of a bytes type is written in lower case.
+`{ local = "optional", production = "required" }`. A default of any type
+other than path is written as the text that the variable's type gives the
+child for that value, so the default `YES` of the word `boolean` is written
+`true`, and an upper case hex default of a bytes type is written in lower
+case.
 
 A path default is written from the path's components, as Rust's
 `Path::components` reads them on Unix. A run of `/` separators becomes one
 `/`, a trailing `/` is dropped, a `.` component is dropped unless it is the
-first component of a relative path, and a `..` component is kept. So `data//books/` and
-`data/./books` are written `data/books`, `./data` stays `./data`, and
-`data/../books` stays `data/../books`. On Windows starmap joins the
-components with `\`, so there a path default that has more than one
-component has a different canonical form.
+first component of a relative path, and a `..` component is kept. So
+`data//books/` and `data/./books` are written `data/books`, `./data` stays
+`./data`, and `data/../books` stays `data/../books`. The child receives a
+path default exactly as the file spells it, so the child of `data//books/`
+gets `data//books/` and the child of `/./data` gets `/./data`, while the
+canonical form writes them from their components as `data/books` and
+`/data`. On Windows starmap joins the components with `\`, so there a path
+default that has more than one component has a different canonical form.
 
 A bind is an inline table. A setting's is `{ path = "<template>" }`. A
 secret's is `{ one-password = "<reference>" }`, followed by `cache = false`
@@ -989,9 +993,11 @@ of form 5.
 The digest of a `starmap.toml` is `sha256:` followed by the 64 lower case
 hex digits of the SHA-256 hash of the UTF-8 bytes of its
 [canonical form](#canonical-form), the final `\n` included. Files with the
-same canonical form have the same digest, so reordering the variables
-changes it, and layout, comments, the order of fields, string quoting and
-tool tables do not. A file that declares nothing has the digest of the empty text,
+same canonical form have the same digest. Reordering the variables changes
+the digest, because the canonical form keeps the variables in the file's
+order. Layout, comments, the order of fields, string quoting and tool
+tables do not change it. A file that declares nothing has the digest of
+the empty text,
 `sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
 The Rust API names it `starmap::Digest`, and `Spec::digest` returns it. A
 pointer has no digest of its own.

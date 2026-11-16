@@ -36,8 +36,8 @@ A runner refuses an entry at the root of `conformance/` other than
 directory such as `chek` fails. It also refuses a case directory that lacks
 a file the layout needs, that holds a file the layout does not name, or
 whose `case.toml` holds a key the layout does not name. A mistyped case
-then fails instead of passing with nothing checked. A runner reports every failing case in one run, by its
-path.
+then fails instead of passing with nothing checked. A runner reports every
+failing case in one run, by its path.
 
 ## case.toml
 
@@ -102,7 +102,10 @@ A variable reports its problems in this order, and a family reports them in
 the same order:
 
 1. A key that is not a variable name, or not a family prefix.
-2. A value that is not a table, after which the entry reports nothing more.
+2. A value that is not a table. A family reports nothing more after this
+   step. A variable still reports the family-membership step (step 7), so
+   `variables.SHELF_DB_URL = 5` beside `[families.SHELF_DB]` gives
+   `starmap::spec::bad_value` and then `starmap::spec::bad_family`.
 3. Each key of the table that the entry does not take, in the file's order.
    A family does not take `presence`.
 4. The fields `purpose`, `effect`, `check`, `type`, `show`, `unset`,
