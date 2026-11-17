@@ -715,6 +715,10 @@
           "description": "Where the variable's value comes from, with the kind of its bind.",
           "type": "string"
         },
+        "source_kind": {
+          "description": "The source as an object: its kind and, when it has a bind, the bind's kind.",
+          "$ref": "#/$defs/SourceKind"
+        },
         "state": {
           "description": "Where the value comes from: `set` when this shell sets the variable, `default` when it leaves the variable unset and the default applies, `unset` when the variable has no value, and `invalid` when this shell sets a value that does not fit the type. The same state as `value.state`, at the top level.",
           "$ref": "#/$defs/State"
@@ -723,9 +727,17 @@
           "description": "The type of the variable's value, such as port or integer 1..=100.",
           "type": "string"
         },
+        "type_name": {
+          "description": "The one word that names the type, such as `port`, `enumeration` or `url`; `boolean` for a variable that reads its presence, and `other` for a type a later starmap adds. The `type` text holds the range, pattern, choices and empty-value note.",
+          "$ref": "#/$defs/TypeName"
+        },
         "unset": {
           "description": "What happens when the variable has no value, in local mode and, when it differs, in production.",
           "type": "string"
+        },
+        "unset_rule": {
+          "description": "The unset rule as an object: the rule in local mode and, when it differs, the rule in production.",
+          "$ref": "#/$defs/UnsetRule"
         },
         "value": {
           "description": "The variable's value in this shell, or its default; a withheld value prints as eight dots and has no text in JSON.",
@@ -766,6 +778,110 @@
         "value"
       ]
     },
+    "Rule": {
+      "description": "What happens when a variable has no value in one mode.",
+      "oneOf": [
+        {
+          "description": "The application refuses to start.",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "required"
+            }
+          },
+          "required": [
+            "rule"
+          ]
+        },
+        {
+          "description": "The application runs without the value.",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "optional"
+            }
+          },
+          "required": [
+            "rule"
+          ]
+        },
+        {
+          "description": "The default applies.",
+          "type": "object",
+          "properties": {
+            "default": {
+              "description": "The default's text, as an environment would hold it.",
+              "type": "string"
+            },
+            "rule": {
+              "type": "string",
+              "const": "default"
+            }
+          },
+          "required": [
+            "rule",
+            "default"
+          ]
+        }
+      ]
+    },
+    "SourceKind": {
+      "description": "A variable's source as an object: its kind and the kind of its bind.",
+      "type": "object",
+      "properties": {
+        "bind": {
+          "description": "The kind of the variable's bind, such as `path`, `1Password` or\n`multiverse/port`; left out for a variable without one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Where the value comes from.",
+          "$ref": "#/$defs/SourceWord"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "SourceWord": {
+      "description": "The one word that names where a variable's value comes from.",
+      "oneOf": [
+        {
+          "description": "A setting that the person or the deployment chooses.",
+          "type": "string",
+          "const": "setting"
+        },
+        {
+          "description": "A secret.",
+          "type": "string",
+          "const": "secret"
+        },
+        {
+          "description": "Random bytes that a tool generates.",
+          "type": "string",
+          "const": "generated"
+        },
+        {
+          "description": "A value that the operating system or the shell sets.",
+          "type": "string",
+          "const": "inherited"
+        },
+        {
+          "description": "A value that a provider supplies.",
+          "type": "string",
+          "const": "provided"
+        },
+        {
+          "description": "A source that a later release of starmap adds.",
+          "type": "string",
+          "const": "other"
+        }
+      ]
+    },
     "State": {
       "description": "Where a variable's value comes from in this shell.",
       "oneOf": [
@@ -789,6 +905,85 @@
           "type": "string",
           "const": "invalid"
         }
+      ]
+    },
+    "TypeName": {
+      "description": "The one word that names a variable's type, from a closed list.",
+      "oneOf": [
+        {
+          "description": "A path, relative or absolute.",
+          "type": "string",
+          "const": "path"
+        },
+        {
+          "description": "A TCP or UDP port.",
+          "type": "string",
+          "const": "port"
+        },
+        {
+          "description": "A URL, with or without a list of schemes.",
+          "type": "string",
+          "const": "url"
+        },
+        {
+          "description": "An IP socket address.",
+          "type": "string",
+          "const": "socket_address"
+        },
+        {
+          "description": "A boolean, with or without its own spellings, or a variable that\nreads its presence.",
+          "type": "string",
+          "const": "boolean"
+        },
+        {
+          "description": "An integer in a range.",
+          "type": "string",
+          "const": "integer"
+        },
+        {
+          "description": "One of a list of choices, named or inline.",
+          "type": "string",
+          "const": "enumeration"
+        },
+        {
+          "description": "A string, with or without a pattern.",
+          "type": "string",
+          "const": "string"
+        },
+        {
+          "description": "Bytes in an encoding.",
+          "type": "string",
+          "const": "bytes"
+        },
+        {
+          "description": "A type that a later release of starmap adds.",
+          "type": "string",
+          "const": "other"
+        }
+      ]
+    },
+    "UnsetRule": {
+      "description": "A variable's unset rule as an object. Its JSON holds the local rule and,\nonly when it differs, the production rule, as the `unset` text does.",
+      "type": "object",
+      "properties": {
+        "local": {
+          "description": "The rule in local mode.",
+          "$ref": "#/$defs/Rule"
+        },
+        "production": {
+          "description": "The rule in production mode; left out when it equals the local rule.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rule"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "local"
       ]
     }
   }

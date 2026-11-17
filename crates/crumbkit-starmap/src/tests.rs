@@ -256,3 +256,29 @@ fn a_declaration_that_does_not_parse_is_a_failure() {
         "{failure}"
     );
 }
+
+#[test]
+fn each_listed_variable_has_its_type_name_unset_rule_and_source_kind() {
+    let rows = rows("shelf", SHELF, &[]);
+    let token = find(&rows, "SHELF_MIRROR_TOKEN");
+    let port = find(&rows, "SHELF_PORT");
+
+    assert_eq!(token["type_name"], "string");
+    assert_eq!(
+        token["unset_rule"],
+        json!({ "local": { "rule": "optional" }, "production": { "rule": "required" } })
+    );
+    assert_eq!(
+        token["source_kind"],
+        json!({ "kind": "secret", "bind": "1Password" })
+    );
+    assert_eq!(port["type_name"], "port");
+    assert_eq!(
+        port["unset_rule"],
+        json!({ "local": { "rule": "required" } })
+    );
+    assert_eq!(
+        port["source_kind"],
+        json!({ "kind": "provided", "bind": "multiverse/port" })
+    );
+}

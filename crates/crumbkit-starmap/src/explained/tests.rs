@@ -703,3 +703,292 @@ fn a_port_that_is_not_unicode_is_marked_invalid() {
         "80\u{fffd} (invalid)"
     );
 }
+
+/// Returns the JSON row of the one shown variable `SHELF_X`, whose type,
+/// unset rule and source lines are `fields`, with no value in the shell.
+fn one_variable(fields: &str) -> serde_json::Value {
+    variable_shown_as("shown", fields)
+}
+
+/// Returns the JSON row of `SHELF_X` with the `show` field `show` and the
+/// other lines `fields`, with no value in the shell.
+fn variable_shown_as(show: &str, fields: &str) -> serde_json::Value {
+    let spec = Spec::parse(&format!(
+        "[mode]\nvariable = \"SHELF_ENV\"\nproduction = [\"prod\"]\n\n\
+         [variables.SHELF_ENV]\npurpose = \"The mode.\"\n\
+         type = {{ enumeration = [\"dev\", \"prod\"] }}\nunset = {{ default = \"dev\" }}\n\
+         show = \"shown\"\nsource = \"setting\"\n\n\
+         [variables.SHELF_X]\npurpose = \"The variable.\"\nshow = \"{show}\"\n{fields}\n"
+    ))
+    .unwrap();
+    let bindings = starmap::capture(&spec, Vec::<(OsString, OsString)>::new());
+    serde_json::to_value(row(&spec, &bindings, "SHELF_X".parse().unwrap()).unwrap()).unwrap()
+}
+
+#[test]
+fn each_type_has_a_one_word_type_name_beside_its_type_text() {
+    let cases = [
+        ("\"path\"", "path", "path"),
+        ("{ path = { absolute = true } }", "absolute path", "path"),
+        ("\"port\"", "port", "port"),
+        ("\"url\"", "url", "url"),
+        (
+            "{ url = { schemes = [\"postgres\"] } }",
+            "url (postgres)",
+            "url",
+        ),
+        ("\"socket-address\"", "ip socket address", "socket_address"),
+        ("\"boolean\"", "boolean", "boolean"),
+        (
+            "{ boolean = { true = [\"yes\"], false = [\"no\"] } }",
+            "boolean (yes for true and no for false)",
+            "boolean",
+        ),
+        (
+            "{ integer = { min = 1, max = 100 } }",
+            "integer 1..=100",
+            "integer",
+        ),
+        (
+            "{ enumeration = [\"a\", \"b\"] }",
+            "one of a, b",
+            "enumeration",
+        ),
+        ("\"string\"", "string", "string"),
+        (
+            "{ string = { pattern = \"[a-z]+\" } }",
+            "string matching [a-z]+",
+            "string",
+        ),
+        (
+            "{ bytes = { encoding = \"hex\", length = 4 } }",
+            "4 bytes as hex",
+            "bytes",
+        ),
+    ];
+    for (ty, text, name) in cases {
+        let json = one_variable(&format!(
+            "type = {ty}\nunset = \"optional\"\nsource = \"setting\""
+        ));
+        assert_eq!(json["type"], text, "{ty}");
+        assert_eq!(json["type_name"], name, "{ty}");
+    }
+}
+
+#[test]
+fn a_named_enumeration_and_an_empty_value_note_leave_the_type_name_one_word() {
+    let named = serde_json::to_value(log_level_row("SHELF_LOG_LEVEL")).unwrap();
+    let empty = debug_row(
+        "type = \"boolean\"\nempty = \"value\"\nunset = { default = \"false\" }",
+        None,
+    );
+
+    assert_eq!(named["type"], "log-level: one of debug, info, warn");
+    assert_eq!(named["type_name"], "enumeration");
+    assert_eq!(empty["type"], "boolean; an empty value is a value");
+    assert_eq!(empty["type_name"], "boolean");
+}
+
+#[test]
+fn a_variable_that_reads_its_presence_has_the_type_name_boolean() {
+    let json = one_variable(
+        "type = \"boolean\"\npresence = true\nunset = \"optional\"\nsource = \"setting\"",
+    );
+
+    assert_eq!(json["type"], "boolean (true when set to any value)");
+    assert_eq!(json["type_name"], "boolean");
+}
+
+#[test]
+fn an_unset_rule_that_is_the_same_in_both_modes_names_only_the_local_rule() {
+    let cases = [
+        (
+            "\"required\"",
+            "required",
+            serde_json::json!({ "rule": "required" }),
+        ),
+        (
+            "\"optional\"",
+            "optional",
+            serde_json::json!({ "rule": "optional" }),
+        ),
+        (
+            "{ default = \"8080\" }",
+            "default 8080",
+            serde_json::json!({ "rule": "default", "default": "8080" }),
+        ),
+    ];
+    for (unset, text, rule) in cases {
+        let json = one_variable(&format!(
+            "type = \"port\"\nunset = {unset}\nsource = \"setting\""
+        ));
+        assert_eq!(json["unset"], text, "{unset}");
+        assert_eq!(
+            json["unset_rule"],
+            serde_json::json!({ "local": rule }),
+            "{unset}"
+        );
+    }
+}
+
+#[test]
+fn an_unset_rule_that_differs_in_production_names_both_rules() {
+    let optional = one_variable(
+        "type = \"string\"\nunset = { local = \"optional\", production = \"required\" }\n\
+         source = \"setting\"",
+    );
+    let default = one_variable(
+        "type = \"port\"\nunset = { default = \"8080\", production = \"required\" }\n\
+         source = \"setting\"",
+    );
+
+    assert_eq!(optional["unset"], "optional; production required");
+    assert_eq!(
+        optional["unset_rule"],
+        serde_json::json!({ "local": { "rule": "optional" }, "production": { "rule": "required" } })
+    );
+    assert_eq!(default["unset"], "default 8080; production required");
+    assert_eq!(
+        default["unset_rule"],
+        serde_json::json!({
+            "local": { "rule": "default", "default": "8080" },
+            "production": { "rule": "required" },
+        })
+    );
+}
+
+#[test]
+fn each_source_has_a_kind_and_names_the_kind_of_its_bind() {
+    let cases = [
+        (
+            "source = \"setting\"",
+            "setting",
+            serde_json::json!({ "kind": "setting" }),
+        ),
+        (
+            "source = \"setting\"\nbind = { path = \"{workspace}/x\" }",
+            "setting, path bind",
+            serde_json::json!({ "kind": "setting", "bind": "path" }),
+        ),
+        (
+            "source = \"secret\"",
+            "secret",
+            serde_json::json!({ "kind": "secret" }),
+        ),
+        (
+            "source = \"secret\"\nbind = { one-password = \"op://Personal/shelf/token\" }",
+            "secret, 1Password",
+            serde_json::json!({ "kind": "secret", "bind": "1Password" }),
+        ),
+        (
+            "source = \"generated\"",
+            "generated",
+            serde_json::json!({ "kind": "generated" }),
+        ),
+        (
+            "source = \"inherited\"",
+            "inherited",
+            serde_json::json!({ "kind": "inherited" }),
+        ),
+        (
+            "source = \"provided\"\nbind = { provided = \"multiverse/port\", process = \"api\" }",
+            "provided multiverse/port",
+            serde_json::json!({ "kind": "provided", "bind": "multiverse/port" }),
+        ),
+    ];
+    for (source, text, kind) in cases {
+        let show = if text.starts_with("secret") || text == "generated" {
+            "withheld"
+        } else {
+            "shown"
+        };
+        let json = variable_shown_as(
+            show,
+            &format!("type = \"string\"\nunset = \"optional\"\n{source}"),
+        );
+        assert_eq!(json["source"], text, "{source}");
+        assert_eq!(json["source_kind"], kind, "{source}");
+    }
+}
+
+#[test]
+fn the_structured_fields_are_in_no_column() {
+    use crumbkit::Row;
+
+    for field in ["type_name", "unset_rule", "source_kind"] {
+        assert!(!super::Explained::COLUMNS.contains(&field), "{field}");
+        assert!(!super::Explained::LONG_COLUMNS.contains(&field), "{field}");
+    }
+}
+
+/// Returns the JSON schema of [`super::Explained`].
+fn explained_schema() -> serde_json::Value {
+    serde_json::to_value(schemars::schema_for!(super::Explained)).unwrap()
+}
+
+/// Returns every string that a `const` or `enum` keyword in `schema` names.
+fn named_words(schema: &serde_json::Value) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut stack = vec![schema];
+    while let Some(value) = stack.pop() {
+        match value {
+            serde_json::Value::Object(object) => {
+                if let Some(serde_json::Value::String(word)) = object.get("const") {
+                    words.push(word.clone());
+                }
+                if let Some(serde_json::Value::Array(list)) = object.get("enum") {
+                    words.extend(
+                        list.iter()
+                            .filter_map(|word| word.as_str().map(str::to_owned)),
+                    );
+                }
+                stack.extend(object.values());
+            }
+            serde_json::Value::Array(list) => stack.extend(list),
+            _ => {}
+        }
+    }
+    words.sort();
+    words
+}
+
+#[test]
+fn the_schema_declares_the_closed_lists_of_the_structured_fields() {
+    let schema = explained_schema();
+    let properties = &schema["properties"];
+    let definitions = &schema["$defs"];
+
+    assert_eq!(properties["type_name"]["$ref"], "#/$defs/TypeName");
+    assert_eq!(properties["unset_rule"]["$ref"], "#/$defs/UnsetRule");
+    assert_eq!(properties["source_kind"]["$ref"], "#/$defs/SourceKind");
+    assert_eq!(
+        named_words(&definitions["TypeName"]),
+        [
+            "boolean",
+            "bytes",
+            "enumeration",
+            "integer",
+            "other",
+            "path",
+            "port",
+            "socket_address",
+            "string",
+            "url"
+        ]
+    );
+    assert_eq!(
+        named_words(&definitions["Rule"]),
+        ["default", "optional", "required"]
+    );
+    assert_eq!(
+        named_words(&definitions["SourceWord"]),
+        [
+            "generated",
+            "inherited",
+            "other",
+            "provided",
+            "secret",
+            "setting"
+        ]
+    );
+}

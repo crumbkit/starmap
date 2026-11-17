@@ -68,12 +68,18 @@ row_types! {
     #[serde(rename = "type")]
     #[row(column)]
     kind: String,
+    /// The one word that names the type, such as `port`, `enumeration` or `url`; `boolean` for a variable that reads its presence, and `other` for a type a later starmap adds. The `type` text holds the range, pattern, choices and empty-value note.
+    type_name: TypeName,
     /// What happens when the variable has no value, in local mode and, when it differs, in production.
     #[row(column)]
     unset: String,
+    /// The unset rule as an object: the rule in local mode and, when it differs, the rule in production.
+    unset_rule: UnsetRule,
     /// Where the variable's value comes from, with the kind of its bind.
     #[row(column)]
     source: String,
+    /// The source as an object: its kind and, when it has a bind, the bind's kind.
+    source_kind: SourceKind,
     /// The variable's value in this shell, or its default; a withheld value prints as eight dots and has no text in JSON.
     #[row(column)]
     value: Cell,
@@ -270,8 +276,11 @@ pub fn row(spec: &Spec, bindings: &Bindings, name: Name) -> Option<Explained> {
     Some(Explained {
         state: value.state(),
         kind: explained_kind(variable),
+        type_name: TypeName::of(variable),
         unset: unset_text(variable),
+        unset_rule: UnsetRule::of(variable),
         source: source_text(variable.source()),
+        source_kind: SourceKind::of(variable.source()),
         value,
         show: variable.show().to_string(),
         bind: bind_text(variable.source()),
@@ -413,6 +422,169 @@ fn type_text(ty: &Type) -> String {
         Type::Bytes(rule) => rule.to_string(),
         // A type that a later release of starmap adds.
         _ => "another type".to_owned(),
+    }
+}
+
+/// The one word that names a variable's type, from a closed list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TypeName {
+    /// A path, relative or absolute.
+    Path,
+    /// A TCP or UDP port.
+    Port,
+    /// A URL, with or without a list of schemes.
+    Url,
+    /// An IP socket address.
+    SocketAddress,
+    /// A boolean, with or without its own spellings, or a variable that
+    /// reads its presence.
+    Boolean,
+    /// An integer in a range.
+    Integer,
+    /// One of a list of choices, named or inline.
+    Enumeration,
+    /// A string, with or without a pattern.
+    String,
+    /// Bytes in an encoding.
+    Bytes,
+    /// A type that a later release of starmap adds.
+    Other,
+}
+
+impl TypeName {
+    /// Returns the type name of `variable`, which is `boolean` when the
+    /// variable reads its presence, as [`kind_text`] says.
+    #[must_use]
+    pub(crate) fn of(variable: &Variable) -> Self {
+        if variable.presence() {
+            return Self::Boolean;
+        }
+        match variable.value_type() {
+            Type::Path { .. } => Self::Path,
+            Type::Port => Self::Port,
+            Type::Url { .. } => Self::Url,
+            Type::SocketAddress => Self::SocketAddress,
+            Type::Boolean { .. } => Self::Boolean,
+            Type::Integer(_) => Self::Integer,
+            Type::Enumeration(_) => Self::Enumeration,
+            Type::String { .. } => Self::String,
+            Type::Bytes(_) => Self::Bytes,
+            // A type that a later release of starmap adds, whose text is
+            // `another type`.
+            _ => Self::Other,
+        }
+    }
+}
+
+/// A variable's unset rule as an object. Its JSON holds the local rule and,
+/// only when it differs, the production rule, as the `unset` text does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub(crate) struct UnsetRule {
+    /// The rule in local mode.
+    local: Rule,
+    /// The rule in production mode; left out when it equals the local rule.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    production: Option<Rule>,
+}
+
+/// What happens when a variable has no value in one mode.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(tag = "rule", rename_all = "lowercase")]
+pub(crate) enum Rule {
+    /// The application refuses to start.
+    Required,
+    /// The application runs without the value.
+    Optional,
+    /// The default applies.
+    Default {
+        /// The default's text, as an environment would hold it.
+        default: String,
+    },
+}
+
+impl Rule {
+    /// Returns the rule of `unset`.
+    fn of(unset: &Unset) -> Self {
+        match unset {
+            Unset::Required => Self::Required,
+            Unset::Optional => Self::Optional,
+            Unset::Default(value) => Self::Default {
+                default: value_text(value),
+            },
+        }
+    }
+}
+
+impl UnsetRule {
+    /// Returns the unset rule of `variable`.
+    #[must_use]
+    pub(crate) fn of(variable: &Variable) -> Self {
+        let local = variable.unset().in_mode(Mode::Local);
+        let production = variable.unset().in_mode(Mode::Production);
+        Self {
+            local: Rule::of(local),
+            production: (local != production).then(|| Rule::of(production)),
+        }
+    }
+}
+
+/// A variable's source as an object: its kind and the kind of its bind.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub(crate) struct SourceKind {
+    /// Where the value comes from.
+    kind: SourceWord,
+    /// The kind of the variable's bind, such as `path`, `1Password` or
+    /// `multiverse/port`; left out for a variable without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bind: Option<String>,
+}
+
+/// The one word that names where a variable's value comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum SourceWord {
+    /// A setting that the person or the deployment chooses.
+    Setting,
+    /// A secret.
+    Secret,
+    /// Random bytes that a tool generates.
+    Generated,
+    /// A value that the operating system or the shell sets.
+    Inherited,
+    /// A value that a provider supplies.
+    Provided,
+    /// A source that a later release of starmap adds.
+    Other,
+}
+
+impl SourceKind {
+    /// Returns the source kind of `source`, which agrees with
+    /// [`source_text`].
+    #[must_use]
+    pub(crate) fn of(source: &Source) -> Self {
+        let (kind, bind) = match source {
+            Source::Setting { bind } => (
+                SourceWord::Setting,
+                bind.as_ref().map(|_| "path".to_owned()),
+            ),
+            Source::Secret { bind } => (
+                SourceWord::Secret,
+                bind.as_ref().and_then(|bind| match bind.reference() {
+                    SecretRef::OnePassword(_) => Some("1Password".to_owned()),
+                    // A reference that a later release of starmap adds.
+                    _ => None,
+                }),
+            ),
+            Source::Generated { .. } => (SourceWord::Generated, None),
+            Source::Inherited => (SourceWord::Inherited, None),
+            Source::Provided(reference) => {
+                (SourceWord::Provided, Some(reference.kind().to_string()))
+            }
+            // A source that a later release of starmap adds.
+            _ => (SourceWord::Other, None),
+        };
+        Self { kind, bind }
     }
 }
 
