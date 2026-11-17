@@ -372,7 +372,7 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
 ];
 
 /// The settings of the recovery check.
-const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, &[codes::ALL])
+const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, codes::ALL)
     .starts(STARTS)
     .unprovoked(UNPROVOKED);
 
@@ -443,7 +443,7 @@ const PAIRS: &[Twin<'static>] = &[
 ];
 
 /// The settings of the twin check.
-const TWINS: Twins<'_> = Twins::new(EXAMPLES, &[codes::ALL])
+const TWINS: Twins<'_> = Twins::new(EXAMPLES, codes::ALL)
     .pairs(PAIRS)
     .unprovoked(UNPROVOKED);
 

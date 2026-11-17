@@ -14,7 +14,7 @@ use crumbkit::help::{Effects, Example, Goal, Group, Help, Leaf};
 use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
 use crumbkit::tool::{Exit, Failures};
 use crumbkit::{Call, DryRun, NoInput, Tool, ViewFlags};
-use crumbkit_skills::{Skill, check_leaf, install_leaf, print_leaf};
+use crumbkit_skills::{Skill, skills_command};
 use crumbkit_usage::{SELF_USAGE, SelfUsage};
 use starmap::Name;
 use starmap_resolve::WorkspaceName;
@@ -149,9 +149,9 @@ const HELP: Help = Help::new()
             .examples(&[Example::new(&[], "Report the findings of the last 7 days")])
             .effects(Effects::read_only())
             .document(SELF_USAGE),
-        install_leaf(&["skills", "install"]),
-        check_leaf(&["skills", "check"]),
-        print_leaf(&["skills", "print"]),
+        StarmapSkills::install_leaf(&["skills", "install"]),
+        StarmapSkills::check_leaf(&["skills", "check"]),
+        StarmapSkills::print_leaf(&["skills", "print"]),
         Leaf::new(&["completion", "install"])
             .examples(&[
                 Example::new(
@@ -180,6 +180,12 @@ const HELP: Help = Help::new()
             .effects(Effects::read_only())
             .document(COMPLETION_PRINT),
     ]);
+
+skills_command!(
+    /// The commands for starmap's skill.
+    pub StarmapSkills,
+    "starmap"
+);
 
 /// starmap's agent skill, which `starmap skills install` writes into the
 /// agent skills directories.
@@ -293,7 +299,7 @@ pub(crate) enum Verb {
     Skills {
         /// What to do with the skill.
         #[command(subcommand)]
-        command: crumbkit_skills::SkillsCommand,
+        command: StarmapSkills,
     },
     /// Set up starmap's completion in a shell.
     Completion {

@@ -101,7 +101,7 @@ where
                 Ok::<_, crumbkit::Error>(crumbkit_usage::findings(&mut output, &TOOL, &args));
             crumbkit::finish(output, crumbkit_usage::SELF_USAGE, result)
         }
-        Verb::Skills { command } => crumbkit_skills::run(output, &[SKILL], &command),
+        Verb::Skills { command } => crumbkit_skills::run(output, &[SKILL], command),
         Verb::Completion { command } => match command {
             CompletionCommand::Install(args) => {
                 let result = crumbkit::completion::install(Cli::command, &args);
