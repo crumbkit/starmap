@@ -5,6 +5,26 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- Each row of `starmap explain --json --full` and of a tool's
+  `self environment list --json --full` gains three fields that hold the
+  type, unset rule and source as data, so a reader does not parse the
+  `type`, `unset` and `source` text. `type_name` is one word: `path`,
+  `port`, `url`, `socket_address`, `boolean`, `integer`, `enumeration`,
+  `string`, `bytes`, or `other` for a type a later starmap adds; a variable
+  that reads its presence is `boolean`. `unset_rule` is
+  `{"local": RULE, "production": RULE}`, where `production` is left out
+  when it equals `local`, and a rule is `{"rule": "required"}`,
+  `{"rule": "optional"}` or `{"rule": "default", "default": "8080"}`.
+  `source_kind` is `{"kind": KIND, "bind": BIND}`, where the kind is
+  `setting`, `secret`, `generated`, `inherited`, `provided` or `other`, and
+  `bind` names the kind of the bind, such as `path`, `1Password` or
+  `multiverse/port`, and is left out without one. The fields appear only in
+  JSON, so the tables and the `type`, `unset` and `source` text do not
+  change.
+
 ## [0.4.1](https://github.com/crumbkit/starmap/compare/v0.4.0...v0.4.1) - 2026-11-16### Added
 
 - `starmap check --src <DIR>` scans the source directory it names in place of

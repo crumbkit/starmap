@@ -140,3 +140,26 @@ fn explain_of_named_variables_leaves_the_built_in_names_out() {
     let stderr = String::from_utf8_lossy(&run.get_output().stderr).into_owned();
     assert!(!stderr.contains("--only-declared"), "{stderr}");
 }
+
+#[test]
+fn explain_json_full_holds_the_type_name_unset_rule_and_source_kind() {
+    let state = tempfile::tempdir().unwrap();
+    let run = starmap(
+        state.path(),
+        &["explain", "SHELF_DATABASE", "--json", "--full"],
+        &[],
+    )
+    .success();
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    let row = &document["data"][0];
+
+    assert_eq!(row["type_name"], "path");
+    assert_eq!(
+        row["unset_rule"],
+        json!({ "local": { "rule": "default", "default": "books.db" } })
+    );
+    assert_eq!(
+        row["source_kind"],
+        json!({ "kind": "setting", "bind": "path" })
+    );
+}
