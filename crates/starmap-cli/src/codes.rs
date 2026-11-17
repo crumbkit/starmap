@@ -5,124 +5,130 @@
 use crumbkit::Code;
 
 /// No file is at the spec path.
-pub const SPEC_NOT_FOUND: Code<'static> = Code::new("starmap", "spec", "not_found");
+pub const SPEC_NOT_FOUND: Code<'static> = Code::from_spelling("starmap::spec::not_found");
 /// The spec file exists and cannot be read, such as a directory.
-pub const SPEC_UNREADABLE: Code<'static> = Code::new("starmap", "spec", "unreadable");
+pub const SPEC_UNREADABLE: Code<'static> = Code::from_spelling("starmap::spec::unreadable");
 /// `init` finds a file at the spec path already.
-pub const SPEC_EXISTS: Code<'static> = Code::new("starmap", "spec", "exists");
+pub const SPEC_EXISTS: Code<'static> = Code::from_spelling("starmap::spec::exists");
 /// `init` cannot create or write the spec file.
-pub const SPEC_UNWRITABLE: Code<'static> = Code::new("starmap", "spec", "unwritable");
+pub const SPEC_UNWRITABLE: Code<'static> = Code::from_spelling("starmap::spec::unwritable");
 /// The spec file is over 256 KiB.
-pub const SPEC_TOO_LARGE: Code<'static> = Code::new("starmap", "spec", "too_large");
+pub const SPEC_TOO_LARGE: Code<'static> = Code::from_spelling("starmap::spec::too_large");
 /// The spec file is not valid TOML, or not UTF-8 text.
-pub const SPEC_SYNTAX: Code<'static> = Code::new("starmap", "spec", "syntax");
+pub const SPEC_SYNTAX: Code<'static> = Code::from_spelling("starmap::spec::syntax");
 /// A table holds a key that starmap does not know.
-pub const SPEC_UNKNOWN_FIELD: Code<'static> = Code::new("starmap", "spec", "unknown_field");
+pub const SPEC_UNKNOWN_FIELD: Code<'static> = Code::from_spelling("starmap::spec::unknown_field");
 /// A table lacks a key it needs.
-pub const SPEC_MISSING_FIELD: Code<'static> = Code::new("starmap", "spec", "missing_field");
+pub const SPEC_MISSING_FIELD: Code<'static> = Code::from_spelling("starmap::spec::missing_field");
 /// A value has the wrong TOML type or is not one its key takes.
-pub const SPEC_BAD_VALUE: Code<'static> = Code::new("starmap", "spec", "bad_value");
+pub const SPEC_BAD_VALUE: Code<'static> = Code::from_spelling("starmap::spec::bad_value");
 /// A variable name is not ASCII letters, digits and underscores.
-pub const SPEC_BAD_NAME: Code<'static> = Code::new("starmap", "spec", "bad_name");
+pub const SPEC_BAD_NAME: Code<'static> = Code::from_spelling("starmap::spec::bad_name");
 /// A value still ends in the `?` that `starmap init` wrote.
-pub const SPEC_GUESS: Code<'static> = Code::new("starmap", "spec", "guess");
+pub const SPEC_GUESS: Code<'static> = Code::from_spelling("starmap::spec::guess");
 /// A default does not fit the variable's type.
-pub const SPEC_BAD_DEFAULT: Code<'static> = Code::new("starmap", "spec", "bad_default");
+pub const SPEC_BAD_DEFAULT: Code<'static> = Code::from_spelling("starmap::spec::bad_default");
 /// An integer's minimum is above its maximum.
-pub const SPEC_BAD_RANGE: Code<'static> = Code::new("starmap", "spec", "bad_range");
+pub const SPEC_BAD_RANGE: Code<'static> = Code::from_spelling("starmap::spec::bad_range");
 /// A string's pattern is over 1024 bytes or does not compile.
-pub const SPEC_BAD_PATTERN: Code<'static> = Code::new("starmap", "spec", "bad_pattern");
+pub const SPEC_BAD_PATTERN: Code<'static> = Code::from_spelling("starmap::spec::bad_pattern");
 /// An enumeration or a url type's scheme list has no values, or repeats one.
-pub const SPEC_EMPTY_ENUMERATION: Code<'static> = Code::new("starmap", "spec", "empty_enumeration");
+pub const SPEC_EMPTY_ENUMERATION: Code<'static> =
+    Code::from_spelling("starmap::spec::empty_enumeration");
 /// A secret or generated variable is shown.
-pub const SPEC_SHOWN_SECRET: Code<'static> = Code::new("starmap", "spec", "shown_secret");
+pub const SPEC_SHOWN_SECRET: Code<'static> = Code::from_spelling("starmap::spec::shown_secret");
 /// A withheld variable has a type other than string, with or without a
 /// pattern.
-pub const SPEC_WITHHELD_TYPE: Code<'static> = Code::new("starmap", "spec", "withheld_type");
+pub const SPEC_WITHHELD_TYPE: Code<'static> = Code::from_spelling("starmap::spec::withheld_type");
 /// A withheld variable has a default.
-pub const SPEC_WITHHELD_DEFAULT: Code<'static> = Code::new("starmap", "spec", "withheld_default");
+pub const SPEC_WITHHELD_DEFAULT: Code<'static> =
+    Code::from_spelling("starmap::spec::withheld_default");
 /// A bind does not fit the variable's source.
-pub const SPEC_BIND_MISMATCH: Code<'static> = Code::new("starmap", "spec", "bind_mismatch");
+pub const SPEC_BIND_MISMATCH: Code<'static> = Code::from_spelling("starmap::spec::bind_mismatch");
 /// `bytes` lies outside 16 to 1024, or is on a variable that is not
 /// generated.
-pub const SPEC_BAD_BYTES: Code<'static> = Code::new("starmap", "spec", "bad_bytes");
+pub const SPEC_BAD_BYTES: Code<'static> = Code::from_spelling("starmap::spec::bad_bytes");
 /// A path template names an unknown placeholder.
 pub const SPEC_UNKNOWN_PLACEHOLDER: Code<'static> =
-    Code::new("starmap", "spec", "unknown_placeholder");
+    Code::from_spelling("starmap::spec::unknown_placeholder");
 /// `[mode]` names a variable the file does not declare.
-pub const SPEC_MODE_UNDECLARED: Code<'static> = Code::new("starmap", "spec", "mode_undeclared");
+pub const SPEC_MODE_UNDECLARED: Code<'static> =
+    Code::from_spelling("starmap::spec::mode_undeclared");
 /// The mode variable is not a setting or inherited variable.
-pub const SPEC_MODE_SOURCE: Code<'static> = Code::new("starmap", "spec", "mode_source");
+pub const SPEC_MODE_SOURCE: Code<'static> = Code::from_spelling("starmap::spec::mode_source");
 /// A file points to another file with `spec` and declares variables too.
-pub const SPEC_POINTER_DECLARES: Code<'static> = Code::new("starmap", "spec", "pointer_declares");
+pub const SPEC_POINTER_DECLARES: Code<'static> =
+    Code::from_spelling("starmap::spec::pointer_declares");
 /// A pointer names a file that is a pointer too.
-pub const SPEC_POINTER_CHAIN: Code<'static> = Code::new("starmap", "spec", "pointer_chain");
+pub const SPEC_POINTER_CHAIN: Code<'static> = Code::from_spelling("starmap::spec::pointer_chain");
 /// A variable's type names an enumeration the file does not declare.
 pub const SPEC_ENUMERATION_UNDECLARED: Code =
-    Code::new("starmap", "spec", "enumeration_undeclared");
+    Code::from_spelling("starmap::spec::enumeration_undeclared");
 /// A group lists a variable the file does not declare.
-pub const SPEC_GROUP_UNDECLARED: Code<'static> = Code::new("starmap", "spec", "group_undeclared");
+pub const SPEC_GROUP_UNDECLARED: Code<'static> =
+    Code::from_spelling("starmap::spec::group_undeclared");
 /// A group lists fewer than two variables, repeats one, shares one with
 /// another group, or lists one with a default or a generated value.
-pub const SPEC_BAD_GROUP: Code<'static> = Code::new("starmap", "spec", "bad_group");
+pub const SPEC_BAD_GROUP: Code<'static> = Code::from_spelling("starmap::spec::bad_group");
 /// A family has a default, is open and required, lists no keys, repeats or
 /// overlong keys, has a source that needs a bind per member, or shares a
 /// member with a variable or another family.
-pub const SPEC_BAD_FAMILY: Code<'static> = Code::new("starmap", "spec", "bad_family");
+pub const SPEC_BAD_FAMILY: Code<'static> = Code::from_spelling("starmap::spec::bad_family");
 /// `explain` names a variable that the spec does not declare.
-pub const VARIABLE_UNKNOWN: Code<'static> = Code::new("starmap", "variable", "unknown");
+pub const VARIABLE_UNKNOWN: Code<'static> = Code::from_spelling("starmap::variable::unknown");
 /// `check` finds source code that reads a variable the spec does not
 /// declare.
-pub const VARIABLE_UNDECLARED: Code<'static> = Code::new("starmap", "variable", "undeclared");
+pub const VARIABLE_UNDECLARED: Code<'static> = Code::from_spelling("starmap::variable::undeclared");
 /// `check` finds source code that builds a variable's name with `format!`
 /// from a prefix that the spec declares no family for.
-pub const FAMILY_UNDECLARED: Code<'static> = Code::new("starmap", "family", "undeclared");
+pub const FAMILY_UNDECLARED: Code<'static> = Code::from_spelling("starmap::family::undeclared");
 /// A file or directory under `src` cannot be read as Rust source.
-pub const SOURCE_UNREADABLE: Code<'static> = Code::new("starmap", "source", "unreadable");
+pub const SOURCE_UNREADABLE: Code<'static> = Code::from_spelling("starmap::source::unreadable");
 /// `check` finds that the application's clippy.toml does not disallow a
 /// method of the standard library that reads the environment.
-pub const CLIPPY_UNBANNED: Code<'static> = Code::new("starmap", "clippy", "unbanned");
+pub const CLIPPY_UNBANNED: Code<'static> = Code::from_spelling("starmap::clippy::unbanned");
 /// The application's clippy.toml cannot be read, is over 256 KiB, is not
 /// UTF-8 text or valid TOML, or its `disallowed-methods` is not an array.
-pub const CLIPPY_INVALID: Code<'static> = Code::new("starmap", "clippy", "invalid");
+pub const CLIPPY_INVALID: Code<'static> = Code::from_spelling("starmap::clippy::invalid");
 /// `init` cannot create or write the application's clippy.toml.
-pub const CLIPPY_UNWRITABLE: Code<'static> = Code::new("starmap", "clippy", "unwritable");
+pub const CLIPPY_UNWRITABLE: Code<'static> = Code::from_spelling("starmap::clippy::unwritable");
 /// `diff` runs in a directory that is not in a git repository.
-pub const REVISION_NO_REPOSITORY: Code<'static> = Code::new("starmap", "revision", "no_repository");
+pub const REVISION_NO_REPOSITORY: Code<'static> =
+    Code::from_spelling("starmap::revision::no_repository");
 /// `diff` names a revision that names no commit.
-pub const REVISION_NOT_FOUND: Code<'static> = Code::new("starmap", "revision", "not_found");
+pub const REVISION_NOT_FOUND: Code<'static> = Code::from_spelling("starmap::revision::not_found");
 /// git cannot start, or cannot read the revision that `diff` names.
-pub const REVISION_UNREADABLE: Code<'static> = Code::new("starmap", "revision", "unreadable");
+pub const REVISION_UNREADABLE: Code<'static> = Code::from_spelling("starmap::revision::unreadable");
 
 /// `.env` sets a secret or generated variable, which only a bind supplies.
-pub const DOTENV_SECRET: Code<'static> = Code::new("starmap", "dotenv", "secret");
+pub const DOTENV_SECRET: Code<'static> = Code::from_spelling("starmap::dotenv::secret");
 /// `.env` holds a line that the `.env` format does not allow.
-pub const DOTENV_SYNTAX: Code<'static> = Code::new("starmap", "dotenv", "syntax");
+pub const DOTENV_SYNTAX: Code<'static> = Code::from_spelling("starmap::dotenv::syntax");
 /// `.env` exists and cannot be read, or is over 256 KiB.
-pub const DOTENV_UNREADABLE: Code<'static> = Code::new("starmap", "dotenv", "unreadable");
+pub const DOTENV_UNREADABLE: Code<'static> = Code::from_spelling("starmap::dotenv::unreadable");
 /// `--set` gives a value to a secret or generated variable.
-pub const VARIABLE_SECRET: Code<'static> = Code::new("starmap", "variable", "secret");
+pub const VARIABLE_SECRET: Code<'static> = Code::from_spelling("starmap::variable::secret");
 /// A required variable has no value in the run's mode.
-pub const VARIABLE_MISSING: Code<'static> = Code::new("starmap", "variable", "missing");
+pub const VARIABLE_MISSING: Code<'static> = Code::from_spelling("starmap::variable::missing");
 /// A variable's value does not fit its type.
-pub const VARIABLE_INVALID: Code<'static> = Code::new("starmap", "variable", "invalid");
+pub const VARIABLE_INVALID: Code<'static> = Code::from_spelling("starmap::variable::invalid");
 /// A variable is unset, and other members of its group are set.
-pub const GROUP_INCOMPLETE: Code<'static> = Code::new("starmap", "group", "incomplete");
+pub const GROUP_INCOMPLETE: Code<'static> = Code::from_spelling("starmap::group::incomplete");
 /// A variable's name is the prefix of a listed family and a key that the
 /// family does not list.
-pub const FAMILY_UNLISTED_KEY: Code<'static> = Code::new("starmap", "family", "unlisted_key");
+pub const FAMILY_UNLISTED_KEY: Code<'static> = Code::from_spelling("starmap::family::unlisted_key");
 /// No provider of a provided variable's kind is present, and nothing else
 /// gives it a value.
-pub const BIND_NO_PROVIDER: Code<'static> = Code::new("starmap", "bind", "no_provider");
+pub const BIND_NO_PROVIDER: Code<'static> = Code::from_spelling("starmap::bind::no_provider");
 /// A path bind names a place that `run` has no directory for.
-pub const BIND_NO_PLACE: Code<'static> = Code::new("starmap", "bind", "no_place");
+pub const BIND_NO_PLACE: Code<'static> = Code::from_spelling("starmap::bind::no_place");
 /// A required secret has no bind, no value in the shell and no saved
 /// value, and no person can type it.
-pub const SECRET_UNBOUND: Code<'static> = Code::new("starmap", "secret", "unbound");
+pub const SECRET_UNBOUND: Code<'static> = Code::from_spelling("starmap::secret::unbound");
 /// A secret store could not return a secret: it is locked, has no such
 /// item, was refused, is missing on this platform, failed, or did not
 /// answer in time. The message names which.
-pub const SECRET_UNREADABLE: Code<'static> = Code::new("starmap", "secret", "unreadable");
+pub const SECRET_UNREADABLE: Code<'static> = Code::from_spelling("starmap::secret::unreadable");
 
 /// Every code above.
 pub const ALL: &[Code<'static>] = &[

@@ -1,4 +1,4 @@
-Print this tool's skill
+Print starmap's skill
 
 Usage: starmap skills print [OPTIONS]
 
@@ -14,6 +14,6 @@ Options:
 
 Examples:
   starmap skills print
-          Print the skill
+          Print starmap's skill
 
 Effects: read-only, closed-world.

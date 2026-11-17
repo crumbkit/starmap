@@ -22,7 +22,7 @@ pub use crate::explained::{
 /// The failure code of a tool whose embedded declaration does not parse.
 /// The derive of `starmap::Env` refuses such a declaration when it builds the
 /// tool, so only a hand-written call of [`environment`] reaches it.
-pub const SPEC_INVALID: Code<'static> = Code::new("crumbkit", "environment", "spec_invalid");
+pub const SPEC_INVALID: Code<'static> = Code::from_spelling("crumbkit::environment::spec_invalid");
 
 /// The document that `self environment list` prints: one row for each
 /// variable that the tool declares, and one for each variable that crumbkit
