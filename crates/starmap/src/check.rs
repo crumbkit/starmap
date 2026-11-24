@@ -252,23 +252,19 @@ pub(crate) fn check_with(
     };
     let held: Vec<Holding<'_>> = spec
         .variables()
-        .map(|(name, variable)| {
-            let (result, origin) = hold(variable, bindings.get(name), mode);
-            (name, variable, result, origin)
-        })
+        .map(|(name, variable)| (name, variable, hold(variable, bindings.get(name), mode)))
         .collect();
     let incomplete: Vec<Option<Problem>> = held
         .iter()
-        .map(|(name, _, result, _)| match result {
+        .map(|(name, _, result)| match result {
             Ok(held_value) if !is_set(held_value.as_ref()) => incomplete(spec, &held, name),
             _ => None,
         })
         .collect();
-    let origins: Vec<Origin> = held.iter().map(|(.., origin)| *origin).collect();
     let mut entries = Vec::new();
     // Each finding with the place of its variable in the spec.
     let mut findings = Vec::new();
-    for (place, ((name, variable, result, _), incomplete)) in
+    for (place, ((name, variable, result), incomplete)) in
         held.into_iter().zip(incomplete).enumerate()
     {
         match (result, incomplete) {
@@ -314,11 +310,11 @@ pub(crate) fn check_with(
         };
         if let Err(reason) = (rule.run)(&environment, &name) {
             let problem = Problem::Rejected { reason };
-            // The rule read the bound value only when the binding supplied
-            // the held value, so only then does the finding quote it.
+            // The rule read the bound value only when reading it gave a
+            // value; otherwise it read the default, which is never quoted.
             let bound = bindings
                 .get(&name)
-                .filter(|_| origins.get(place) == Some(&Origin::Binding));
+                .filter(|bound| matches!(read(variable, bound), Ok(Some(_))));
             findings.push((place, finding(&name, variable, bound, problem)));
         }
     }
@@ -393,24 +389,8 @@ fn check_family(
 }
 
 /// One declared variable with the result of holding its value: the value,
-/// `None` when it stays unset, or the problem that stops the check, and
-/// where a held value came from.
-type Holding<'a> = (
-    &'a Name,
-    &'a Variable,
-    Result<Option<Held>, Problem>,
-    Origin,
-);
-
-/// Where a variable's held value came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Origin {
-    /// The bound value, read in the variable's type.
-    Binding,
-    /// The variable's unset rule, such as its default, because the variable
-    /// is unbound or its bound value counts as unset.
-    Unset,
-}
+/// `None` when it stays unset, or the problem that stops the check.
+type Holding<'a> = (&'a Name, &'a Variable, Result<Option<Held>, Problem>);
 
 /// Returns the finding of `name`, which is unset, when its group is partly
 /// set: the group, and each member that `held` holds a value for.
@@ -420,7 +400,7 @@ fn incomplete(spec: &Spec, held: &[Holding<'_>], name: &Name) -> Option<Problem>
         .variables()
         .iter()
         .filter(|member| {
-            held.iter().any(|(held, _, result, _)| {
+            held.iter().any(|(held, _, result)| {
                 held == member && matches!(result, Ok(value) if is_set(value.as_ref()))
             })
         })
@@ -438,27 +418,22 @@ fn is_set(held: Option<&Held>) -> bool {
 }
 
 /// Holds the checked value of `variable` in `mode`, or `None` when it stays
-/// unset, with where the value came from. An optional variable that reads
-/// its presence and is unbound holds its absence, which reads as false. A
-/// problem in reading the bound value comes from the binding, and any other
-/// result comes from the unset rule.
-fn hold(
-    variable: &Variable,
-    bound: Option<&Bound>,
-    mode: Mode,
-) -> (Result<Option<Held>, Problem>, Origin) {
-    match bound.map(|bound| read(variable, bound)).transpose() {
-        Err(problem) => return (Err(problem), Origin::Binding),
-        Ok(Some(Some(held))) => return (Ok(Some(held)), Origin::Binding),
-        Ok(_) => {}
+/// unset. An optional variable that reads its presence and is unbound holds
+/// its absence, which reads as false.
+fn hold(variable: &Variable, bound: Option<&Bound>, mode: Mode) -> Result<Option<Held>, Problem> {
+    if let Some(held) = bound
+        .map(|bound| read(variable, bound))
+        .transpose()?
+        .flatten()
+    {
+        return Ok(Some(held));
     }
-    let result = match variable.unset().in_mode(mode) {
+    match variable.unset().in_mode(mode) {
         Unset::Required => Err(Problem::Missing { mode }),
         Unset::Optional if variable.presence() => Ok(Some(Held::Presence(None))),
         Unset::Optional => Ok(None),
         Unset::Default(value) => Ok(Some(Held::Shown(value.clone()))),
-    };
-    (result, Origin::Unset)
+    }
 }
 
 /// Returns the finding of `variable`, called `name`, whose bound value is
