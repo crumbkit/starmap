@@ -150,8 +150,11 @@ pub(crate) fn list(methods: &[&str]) -> String {
 pub(crate) fn open(spec: &Path, dirs: &[PathBuf]) -> Vec<Result<Ban, ClippyFailure>> {
     let beside = spec.parent().unwrap_or(Path::new(""));
     let base = lexical(beside);
-    // A file that is a symbolic link is named as its target, whose path
-    // may start with the spec's directory only once its links resolve.
+    // `find` canonicalizes every file it finds, so when the spec's
+    // directory is reached through a symbolic link, a found file starts
+    // with the canonical form of that directory and not with `base`.
+    // Without this fallback, even an ordinary clippy.toml beside such a
+    // spec would print as an absolute path.
     let resolved = files::canonical(&base).unwrap_or_else(|_| base.clone());
     let mut crates: Vec<PathBuf> = Vec::new();
     for dir in dirs {
