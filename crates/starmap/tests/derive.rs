@@ -694,6 +694,66 @@ fn a_default_that_fails_the_check_refuses_the_load() {
     );
 }
 
+/// A struct whose check refuses a state directory outside `/srv`, which
+/// refuses the default `/var/lib/shelf` of `state.toml`.
+#[derive(Debug, starmap::Env)]
+#[starmap(spec = "tests/example/state.toml")]
+struct ServedState {
+    #[starmap("SHELF_STATE_DIR", check = under_srv)]
+    #[expect(dead_code, reason = "the test reads the struct only to see it refused")]
+    state_dir: PathBuf,
+}
+
+/// Refuses a directory outside `/srv`.
+#[expect(
+    clippy::ptr_arg,
+    reason = "a field's check takes a reference to the field's type, which is PathBuf"
+)]
+fn under_srv(directory: &PathBuf) -> Result<(), String> {
+    if directory.starts_with("/srv") {
+        Ok(())
+    } else {
+        Err("the state directory must be under /srv".to_owned())
+    }
+}
+
+/// Returns the text and the first finding of the refused read of
+/// `ServedState` from `pairs`, or `None` when the read does not refuse.
+fn served_state_refusal(pairs: &[(&str, &str)]) -> Option<(String, starmap::Finding)> {
+    let Err(error) = ServedState::from_vars(vars(pairs)) else {
+        return None;
+    };
+    let ReadError::Refused(refusals) = &error else {
+        return None;
+    };
+    let finding = refusals.iter().next()?.clone();
+    Some((error.to_string(), finding))
+}
+
+#[test]
+fn a_check_that_refuses_the_default_of_a_relative_path_does_not_quote_the_relative_path() {
+    let (text, finding) = served_state_refusal(&[("SHELF_STATE_DIR", "state")])
+        .expect("the check refuses the directory");
+
+    assert_eq!(
+        text,
+        "SHELF_STATE_DIR: the state directory must be under /srv"
+    );
+    assert_eq!(finding.value, None);
+}
+
+#[test]
+fn a_check_that_refuses_a_bound_value_quotes_that_value() {
+    let (text, finding) = served_state_refusal(&[("SHELF_STATE_DIR", "/var/tmp/shelf")])
+        .expect("the check refuses the directory");
+
+    assert_eq!(
+        text,
+        "SHELF_STATE_DIR: the state directory must be under /srv (the value is \"/var/tmp/shelf\")"
+    );
+    assert!(finding.value.is_some());
+}
+
 /// A struct over a spec of families.
 #[derive(Debug, starmap::Env)]
 #[starmap(spec = "tests/example/regions.toml")]

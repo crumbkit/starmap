@@ -1,0 +1,8 @@
+# A spec whose absolute path variable has a default, for the struct test of
+# a check that refuses the default a relative value falls back to.
+[variables.SHELF_STATE_DIR]
+purpose = "The directory that holds shelf's state."
+type = { path = { absolute = true } }
+unset = { default = "/var/lib/shelf" }
+show = "shown"
+source = "setting"

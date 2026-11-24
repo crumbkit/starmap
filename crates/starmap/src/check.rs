@@ -310,7 +310,11 @@ pub(crate) fn check_with(
         };
         if let Err(reason) = (rule.run)(&environment, &name) {
             let problem = Problem::Rejected { reason };
-            let bound = bindings.get(&name);
+            // The rule read the bound value only when reading it gave a
+            // value; otherwise it read the default, which is never quoted.
+            let bound = bindings
+                .get(&name)
+                .filter(|bound| matches!(read(variable, bound), Ok(Some(_))));
             findings.push((place, finding(&name, variable, bound, problem)));
         }
     }

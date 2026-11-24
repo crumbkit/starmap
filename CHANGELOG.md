@@ -27,6 +27,11 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- When a field's own check refuses the default that a variable falls back
+  to, because its bound value counts as unset, the refusal no longer quotes
+  the bound value. A relative path bound to a variable whose type says
+  `absolute = true` was quoted, although the check read the default.
+  `Finding::value` is `None` for such a refusal.
 - `starmap check` and `starmap init --clippy` now name and edit the
   `clippy.toml` that Clippy reads for a workspace member whose directory
   is a symbolic link, which is the file above the link, in place of the
