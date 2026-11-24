@@ -802,6 +802,13 @@ those names, and starmap does too. starmap does not read
 `CLIPPY_CONF_DIR`, so an application that sets it keeps the entries in the
 file that this search finds as well.
 
+starmap follows the crate's path as Cargo names it, without resolving
+symbolic links in it, because Clippy walks up the manifest directory that
+Cargo gives it in the same way. When a workspace member's directory is a
+symbolic link to a directory elsewhere, starmap looks for the
+`clippy.toml` above the link, where Clippy reads it, and not above the
+directory that the link leads to.
+
 The search for a `clippy.toml` stops at the repository's root, which is
 the nearest directory at or above the crate's directory that holds `.git`.
 Without a repository, the search stops at the root of the crate's Cargo

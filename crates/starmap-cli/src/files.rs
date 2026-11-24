@@ -3,7 +3,7 @@
 
 use std::fs::{self, File};
 use std::io::{self, Read as _, Write as _};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 #[cfg(test)]
 mod tests;
@@ -131,4 +131,29 @@ pub(crate) fn is_file(path: &Path) -> bool {
 /// Returns the I/O error of a path that does not exist or cannot be read.
 pub(crate) fn canonical(path: &Path) -> io::Result<PathBuf> {
     fs::canonicalize(path)
+}
+
+/// Returns the absolute path of `path` with each `.` dropped and each `..`
+/// resolved by removing the component before it, without following any
+/// symbolic link, as Cargo forms a crate's `CARGO_MANIFEST_DIR`. A
+/// relative path starts at the working directory, and a `..` at the root
+/// stays at the root.
+///
+/// # Errors
+///
+/// Returns the I/O error of a relative path when the working directory
+/// cannot be read, and an error for an empty path.
+pub(crate) fn lexical(path: &Path) -> io::Result<PathBuf> {
+    let absolute = std::path::absolute(path)?;
+    let mut lexical = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                lexical.pop();
+            }
+            component => lexical.push(component),
+        }
+    }
+    Ok(lexical)
 }
