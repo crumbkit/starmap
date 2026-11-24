@@ -34,7 +34,7 @@ getrandom = { version = "0.4.3", default-features = false, optional = true }
 # to the socket without blocking past a deadline, all without unsafe code,
 # for the `agent` feature. `user` gives the uid calls, `socket` the socket
 # calls, `poll` the wait for a connection and `fs` the close-on-exec flag.
-nix = { version = "0.31.3", default-features = false, features = ["user", "socket", "poll", "fs"], optional = true }
+nix = { version = "0.32.0", default-features = false, features = ["user", "socket", "poll", "fs"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # landlock asks the running kernel whether its Landlock can deny a
