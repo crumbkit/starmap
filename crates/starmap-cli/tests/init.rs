@@ -217,6 +217,52 @@ fn init_refuses_a_clippy_toml_that_is_a_symbolic_link_to_no_file_and_writes_noth
     assert!(!dir.path().join("missing.toml").exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn init_with_clippy_edits_the_clippy_toml_above_a_member_crate_that_is_a_symbolic_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir(root.join(".git")).unwrap();
+    copy_tree(Path::new(EXAMPLE_SRC), &root.join("shared/app/src"));
+    fs::write(
+        root.join("shared/app/Cargo.toml"),
+        "[package]\nname = \"shelf\"\n",
+    )
+    .unwrap();
+    let ws = root.join("ws");
+    fs::create_dir_all(ws.join("crates")).unwrap();
+    fs::write(
+        ws.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/app\"]\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink("../../shared/app", ws.join("crates/app")).unwrap();
+    fs::write(
+        ws.join("starmap.toml"),
+        "spec = \"environment.toml\"\nsrc = [\"crates/app/src\"]\n",
+    )
+    .unwrap();
+    fs::copy(EXAMPLE_SPEC, ws.join("environment.toml")).unwrap();
+    fs::copy(UNBANNED, ws.join("clippy.toml")).unwrap();
+    let shared = fs::read_to_string(UNBANNED).unwrap();
+    fs::write(root.join("shared/clippy.toml"), &shared).unwrap();
+
+    // Clippy reads ws/clippy.toml for the crate, which lacks the entries.
+    let run = starmap(&ws, &["check", "--json"]).code(1);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(document["failures"][0]["code"], "starmap::clippy::unbanned");
+
+    starmap(&ws, &["init", "--clippy"]).success();
+
+    let written = fs::read_to_string(ws.join("clippy.toml")).unwrap();
+    snapbox::assert_data_eq!(written, file!["golden/init/clippy-added.toml"]);
+    assert_eq!(
+        fs::read_to_string(root.join("shared/clippy.toml")).unwrap(),
+        shared
+    );
+    starmap(&ws, &["check"]).success();
+}
+
 #[test]
 fn init_leaves_a_clippy_toml_above_the_repository_as_it_is_and_writes_one_inside() {
     let above = tempfile::tempdir().unwrap();

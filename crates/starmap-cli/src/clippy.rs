@@ -137,15 +137,28 @@ pub(crate) fn list(methods: &[&str]) -> String {
 /// and any other file has an absolute path. A file that is a symbolic
 /// link is named as the file that the link leads to.
 ///
+/// The paths of the source directories and of the spec are lexical, as
+/// [`files::lexical`] forms them: starmap walks up each directory as its
+/// path names it and follows no symbolic link in it, as Clippy does with
+/// the manifest directory that Cargo gives it. A crate whose directory is
+/// a symbolic link therefore reads the file above the link, where Clippy
+/// reads it.
+///
 /// A file is an `Err` when it cannot be read, is over 256 KiB, is not
 /// UTF-8 text or valid TOML, or sets `disallowed-methods` to a value that
 /// is not an array. A symbolic link that leads to no file cannot be read.
 pub(crate) fn open(spec: &Path, dirs: &[PathBuf]) -> Vec<Result<Ban, ClippyFailure>> {
     let beside = spec.parent().unwrap_or(Path::new(""));
-    let base = canonical(beside);
+    let base = lexical(beside);
+    // `find` canonicalizes every file it finds, so when the spec's
+    // directory is reached through a symbolic link, a found file starts
+    // with the canonical form of that directory and not with `base`.
+    // Without this fallback, even an ordinary clippy.toml beside such a
+    // spec would print as an absolute path.
+    let resolved = files::canonical(&base).unwrap_or_else(|_| base.clone());
     let mut crates: Vec<PathBuf> = Vec::new();
     for dir in dirs {
-        let dir = canonical(dir);
+        let dir = lexical(dir);
         let krate = dir
             .ancestors()
             .find(|above| files::is_file(&above.join("Cargo.toml")))
@@ -157,7 +170,10 @@ pub(crate) fn open(spec: &Path, dirs: &[PathBuf]) -> Vec<Result<Ban, ClippyFailu
     let mut found: Vec<(PathBuf, bool)> = Vec::new();
     for krate in crates {
         let (file, exists) = find(&krate, &base);
-        let file = match file.strip_prefix(&base) {
+        let below = file
+            .strip_prefix(&base)
+            .or_else(|_| file.strip_prefix(&resolved));
+        let file = match below {
             Ok(below) => beside.join(below),
             Err(_) => file,
         };
@@ -171,21 +187,24 @@ pub(crate) fn open(spec: &Path, dirs: &[PathBuf]) -> Vec<Result<Ban, ClippyFailu
         .collect()
 }
 
-/// Returns the absolute path of the directory `dir` with every symbolic
-/// link resolved, where an empty path is the working directory. A
-/// directory that cannot be resolved keeps the path given.
-fn canonical(dir: &Path) -> PathBuf {
+/// Returns the lexical path of the directory `dir`, as
+/// [`files::lexical`] forms it, where an empty path is the working
+/// directory. When the working directory cannot be read, a relative `dir`
+/// keeps the path given.
+fn lexical(dir: &Path) -> PathBuf {
     let dir = if dir.as_os_str().is_empty() {
         Path::new(".")
     } else {
         dir
     };
-    files::canonical(dir).unwrap_or_else(|_| dir.to_path_buf())
+    files::lexical(dir).unwrap_or_else(|_| dir.to_path_buf())
 }
 
 /// Returns the configuration file that Clippy reads for the crate in the
 /// directory `krate`, and whether it exists. `krate` and `base`, the
-/// directory of the spec, have every symbolic link resolved.
+/// directory of the spec, are lexical paths, so the search walks up the
+/// directories that the paths name and follows no symbolic link in them,
+/// as Clippy does.
 ///
 /// The search stays inside a root, which is the nearest directory at or
 /// above `krate` that holds `.git`. Without one, the root is the nearest
@@ -224,9 +243,10 @@ fn find(krate: &Path, base: &Path) -> (PathBuf, bool) {
 
 /// Reports whether the Cargo.toml in `dir` has a `[workspace]` table,
 /// which makes `dir` the root of a Cargo workspace. A Cargo.toml that
-/// cannot be read or parsed, or is over 256 KiB, counts as having none, so
-/// the search for a clippy.toml then stops nearer the crate, and Cargo
-/// itself reports the manifest.
+/// cannot be read or parsed, or is over 256 KiB, counts as having no
+/// `[workspace]` table, so the search for the root continues to the next
+/// directory above whose Cargo.toml has one, or stays at the crate's
+/// directory when none has. Cargo itself reports the manifest.
 fn is_workspace(dir: &Path) -> bool {
     files::read_capped(&dir.join("Cargo.toml"), MAX_BYTES)
         .ok()

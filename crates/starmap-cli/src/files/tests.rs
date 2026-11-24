@@ -1,7 +1,9 @@
 use std::fs;
 use std::io::ErrorKind;
 
-use super::{read_capped, replace, rust_files, write_new};
+use std::path::Path;
+
+use super::{lexical, read_capped, replace, rust_files, write_new};
 
 #[test]
 fn a_replaced_file_holds_the_new_text_and_no_other_file_is_left() {
@@ -92,4 +94,37 @@ fn replacing_a_symbolic_link_writes_the_file_it_names_and_keeps_the_link_and_the
     let mode = fs::metadata(&target).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o640);
     assert_eq!(fs::read_dir(dir.path().join("shared")).unwrap().count(), 1);
+}
+
+#[test]
+fn the_lexical_path_drops_each_dot_and_resolves_each_dot_dot_against_the_component_before_it() {
+    assert_eq!(
+        lexical(Path::new("/ws/./crates/../shared/app/.")).unwrap(),
+        Path::new("/ws/shared/app")
+    );
+    assert_eq!(lexical(Path::new("/../ws/..")).unwrap(), Path::new("/"));
+}
+
+#[test]
+fn the_lexical_path_of_a_relative_path_starts_at_the_working_directory() {
+    // std::path::absolute joins a relative path to the working directory
+    // and resolves no `..`.
+    let crates = std::path::absolute("crates").unwrap();
+    let here = crates.parent().unwrap();
+    assert_eq!(lexical(Path::new("src/../crates")).unwrap(), crates);
+    assert_eq!(lexical(Path::new(".")).unwrap(), here);
+}
+
+#[cfg(unix)]
+#[test]
+fn the_lexical_path_leaves_a_symbolic_link_unresolved() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(dir.path()).unwrap();
+    fs::create_dir_all(root.join("shared/app")).unwrap();
+    fs::create_dir(root.join("ws")).unwrap();
+    std::os::unix::fs::symlink("../shared/app", root.join("ws/app")).unwrap();
+    assert_eq!(
+        lexical(&root.join("ws/app/./src")).unwrap(),
+        root.join("ws/app/src")
+    );
 }

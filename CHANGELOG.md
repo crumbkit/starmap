@@ -32,6 +32,10 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the bound value. A relative path bound to a variable whose type says
   `absolute = true` was quoted, although the check read the default.
   `Finding::value` is `None` for such a refusal.
+- `starmap check` and `starmap init --clippy` now name and edit the
+  `clippy.toml` that Clippy reads for a workspace member whose directory
+  is a symbolic link, which is the file above the link, in place of the
+  file above the directory the link leads to.
 
 ## [0.4.1](https://github.com/crumbkit/starmap/compare/v0.4.0...v0.4.1) - 2026-11-16### Added
 

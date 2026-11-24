@@ -383,6 +383,64 @@ fn a_file_that_is_a_symbolic_link_is_named_as_the_file_it_leads_to() {
     );
 }
 
+/// Builds the layout of review 4 under `root`: a repository whose
+/// workspace in `ws` lists the member `crates/app`, which is a symbolic
+/// link to `shared/app`.
+#[cfg(unix)]
+fn linked_member(root: &Path) {
+    fs::create_dir(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join("ws/crates")).unwrap();
+    fs::write(
+        root.join("ws/Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/app\"]\n",
+    )
+    .unwrap();
+    crates(root, &["shared/app"]);
+    fs::create_dir_all(root.join("shared/app/src")).unwrap();
+    std::os::unix::fs::symlink("../../shared/app", root.join("ws/crates/app")).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_member_crate_reached_through_a_symbolic_link_reads_the_clippy_toml_above_the_link() {
+    let (_dir, root) = root();
+    linked_member(&root);
+    fs::write(root.join("ws/clippy.toml"), "").unwrap();
+    fs::write(root.join("shared/clippy.toml"), "").unwrap();
+    // Clippy walks up from ws/crates/app as Cargo names it, so it reads
+    // ws/clippy.toml.
+    assert_eq!(
+        found(&root, "ws/starmap.toml", &["ws/crates/app/src"]),
+        [("ws/clippy.toml".to_owned(), true)]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_member_crate_reached_through_a_symbolic_link_with_no_clippy_toml_gains_one_where_clippy_reads()
+{
+    let (_dir, root) = root();
+    linked_member(&root);
+    assert_eq!(
+        found(&root, "ws/starmap.toml", &["ws/crates/app/src"]),
+        [("ws/clippy.toml".to_owned(), false)]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_linked_file_below_a_spec_whose_path_has_a_symbolic_link_starts_as_the_spec_does() {
+    let (_dir, root) = root();
+    fs::create_dir_all(root.join("real/shared")).unwrap();
+    fs::create_dir_all(root.join("real/src")).unwrap();
+    fs::write(root.join("real/shared/lints.toml"), "").unwrap();
+    std::os::unix::fs::symlink("shared/lints.toml", root.join("real/clippy.toml")).unwrap();
+    std::os::unix::fs::symlink("real", root.join("link")).unwrap();
+    let bans = open(&root.join("link/starmap.toml"), &[root.join("link/src")]);
+    let files: Vec<PathBuf> = bans.into_iter().map(|ban| ban.unwrap().file).collect();
+    assert_eq!(files, [root.join("link/shared/lints.toml")]);
+}
+
 #[test]
 fn no_file_is_opened_when_no_source_directory_holds_rust() {
     let dir = tempfile::tempdir().unwrap();
