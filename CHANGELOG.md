@@ -25,6 +25,14 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   JSON, so the tables and the `type`, `unset` and `source` text do not
   change.
 
+### Fixed
+
+- When a field's own check refuses the default that a variable falls back
+  to, because its bound value counts as unset, the refusal no longer quotes
+  the bound value. A relative path bound to a variable whose type says
+  `absolute = true` was quoted, although the check read the default.
+  `Finding::value` is `None` for such a refusal.
+
 ## [0.4.1](https://github.com/crumbkit/starmap/compare/v0.4.0...v0.4.1) - 2026-11-16### Added
 
 - `starmap check --src <DIR>` scans the source directory it names in place of
