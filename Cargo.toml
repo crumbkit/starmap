@@ -27,7 +27,7 @@ clap = { version = "4.6.7", default-features = false, features = ["std"] }
 # Standard, which browsers and most HTTP clients follow. Its default `std`
 # feature adds only file-path conversions and socket address lookup, which
 # starmap does not use.
-url = { version = "2.5.8", default-features = false }
+url = { version = "2.5.9", default-features = false }
 
 # regex matches the value of a string variable against the pattern its type
 # states. Its syntax is close to RE2's, and matching takes time linear in the
