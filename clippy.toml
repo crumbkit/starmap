@@ -26,9 +26,12 @@ disallowed-methods = [
     { path = "std::env::set_current_dir", reason = "pass the directory to the operation instead" },
     # BASE-24: a secret's text is read only in the files that the BASE-24
     # binding of rust-standards.toml lists.
+    # Each starmap path names the module that defines the method, because
+    # clippy resolves a path inside its own crate only through that module,
+    # never through the `pub use` in lib.rs.
     { path = "secrecy::ExposeSecret::expose_secret", reason = "read a secret through starmap::Secret::expose", allow-invalid = true },
-    { path = "starmap::Secret::expose", reason = "expose a secret only in a file that the BASE-24 binding lists", allow-invalid = true },
-    { path = "starmap::SecretBytes::expose", reason = "expose a secret's bytes only in a file that the BASE-24 binding lists", allow-invalid = true },
+    { path = "starmap::secret::Secret::expose", reason = "expose a secret only in a file that the BASE-24 binding lists", allow-invalid = true },
+    { path = "starmap::secret::SecretBytes::expose", reason = "expose a secret's bytes only in a file that the BASE-24 binding lists", allow-invalid = true },
     { path = "starmap_resolve::agent::protocol::hits", reason = "BASE-24: the Hits writer reads every value it sends, so only the agent crate's caller that the BASE-24 binding lists may call it", allow-invalid = true },
     # BASE-7
     { path = "std::process::exit", reason = "return the exit code from main so destructors run" },

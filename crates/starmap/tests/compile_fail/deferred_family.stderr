@@ -19,6 +19,8 @@ error[E0277]: starmap cannot read a variable into `Deferred<starmap::url::Url>`
 note: required by a bound in `starmap::Field::of_family`
   --> src/field.rs
    |
+   | impl Field {
+...
    |     pub const fn of_family<T: FieldType>(prefix: &'static str, rust_type: &'static str) -> Self {
    |                               ^^^^^^^^^ required by this bound in `Field::of_family`
 

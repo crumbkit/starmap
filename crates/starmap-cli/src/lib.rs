@@ -41,7 +41,7 @@ use crate::cli::{CommandsCommand, CompletionCommand, SKILL, SchemasCommand, Self
 /// the exit code. `crumbkit::finish` prints the result or the failure in
 /// the format that the output flags choose, and returns the exit code.
 #[doc(hidden)]
-#[must_use]
+#[must_use = "the exit code reports how the command ended, so return it from main"]
 pub fn run<I, T>(args: I, vars: Vec<(OsString, OsString)>) -> ExitCode
 where
     I: IntoIterator<Item = T>,
