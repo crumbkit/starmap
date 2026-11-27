@@ -7,6 +7,7 @@ require_relative "test_helper"
 # expectation. conformance/README.md gives the layout and the rules.
 class ConformanceTest < Minitest::Test
   ROOT = File.expand_path("../../conformance", __dir__)
+  RUST_TESTS = File.expand_path("../../crates/starmap/tests", __dir__)
   ROOT_ENTRIES = %w[.gitattributes README.md check parse].freeze
   PARSE_FILES = %w[canonical.toml case.toml starmap.toml].freeze
   CHECK_FILES = %w[case.toml starmap.toml].freeze
@@ -32,6 +33,30 @@ class ConformanceTest < Minitest::Test
       Array(PerfectTOML.parse(File.read(File.join(dir, "case.toml"), encoding: "UTF-8")).dig("expect", "problems"))
     end
     assert_equal Starmap::Problem::CODES.values.uniq.sort - ["starmap::spec::too_large"], seen.uniq.sort
+  end
+
+  def test_every_example_spec_that_the_rust_tests_embed_parses
+    names = Dir.children(File.join(RUST_TESTS, "example")).select { |name| name.end_with?(".toml") } - %w[Cargo.toml clippy.toml]
+    failures = names.sort.filter_map do |name|
+      Starmap::Spec.parse(File.read(File.join(RUST_TESTS, "example", name), encoding: "UTF-8"))
+      nil
+    rescue Starmap::SpecError => e
+      "example/#{name}: refused with #{e.problems.map(&:code).inspect}"
+    end
+
+    assert_equal 12, names.length
+    assert_empty failures, failures.join("\n")
+  end
+
+  def test_every_problem_fixture_of_the_rust_tests_gives_the_codes_of_its_golden_in_order
+    fixtures = Dir.glob(File.join(RUST_TESTS, "spec", "*.toml"))
+    failures = fixtures.sort.filter_map do |path|
+      expected = File.read(path.sub(/\.toml\z/, ".txt"), encoding: "UTF-8").scan(/^(starmap::spec::[a-z_]+):/).flatten
+      parse_problems_failure(path, File.read(path, encoding: "UTF-8"), expected)
+    end
+
+    assert_equal 25, fixtures.length
+    assert_empty failures, failures.join("\n")
   end
 
   def test_a_file_over_the_size_limit_gives_only_too_large
@@ -70,6 +95,13 @@ class ConformanceTest < Minitest::Test
 
     text = File.read(File.join(dir, "starmap.toml"), encoding: "UTF-8")
     expect = data.fetch("expect")
+    unless [["digest"], ["problems"]].include?(expect.keys)
+      return "#{relative(dir)}: expect holds #{expect.keys.inspect}, and a parse case expects exactly one of digest and problems"
+    end
+    if expect.key?("problems") == File.exist?(File.join(dir, "canonical.toml"))
+      return "#{relative(dir)}: a case holds canonical.toml exactly when it expects a digest"
+    end
+
     if expect.key?("problems")
       parse_problems_failure(dir, text, expect.fetch("problems"))
     else
@@ -106,6 +138,8 @@ class ConformanceTest < Minitest::Test
     actual = describe(result)
     expected = data.fetch("expect")
     "#{relative(dir)}: gave #{actual.inspect}, and the case expects #{expected.inspect}" unless actual == expected
+  rescue Starmap::SpecError => e
+    "#{relative(dir)}: starmap.toml is refused with #{e.problems.map(&:code).inspect}, and a check case always parses"
   end
 
   def describe(result)

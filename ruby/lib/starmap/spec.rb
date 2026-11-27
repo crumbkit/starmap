@@ -97,7 +97,7 @@ module Starmap
     def self.load(path)
       path = File.expand_path(path)
       text = File.read(path, mode: "rb")
-      target = Parser.pointer_target(text)
+      target = Parser.pointer(text)
       return parse(text) unless target
 
       parse(File.read(File.expand_path(target, File.dirname(path)), mode: "rb"))
@@ -117,7 +117,15 @@ module Starmap
     def family(prefix) = families.find { |family| family.prefix == prefix }
     def family_of(name) = families.find { |family| family.key_of(name) }
     def group_of(name) = groups.find { |group| group.variables.include?(name) }
-    def declared?(name) = !variable(name).nil? || !family_of(name).nil?
+
+    # Whether +name+ is a declared variable, or a member of a family that is
+    # open or lists the member's key.
+    def declared?(name)
+      return true if variable(name)
+
+      family = family_of(name)
+      !family.nil? && family.lists?(family.key_of(name))
+    end
 
     # The canonical form, which docs/glossary.md describes.
     def to_toml = Canonical.write(self)

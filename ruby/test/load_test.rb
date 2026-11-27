@@ -171,4 +171,27 @@ class LoadTest < Minitest::Test
     error = assert_raises(Starmap::SpecError) { load({}) }
     assert_equal ["starmap::spec::pointer_chain"], error.problems.map(&:code)
   end
+
+  def test_a_pointer_that_also_declares_variables_is_refused_with_pointer_declares
+    File.write(File.join(@root, "real.toml"), SPEC)
+    File.write(@spec, %(spec = "real.toml"\n\n[variables.OTHER]\npurpose = "Another."\n))
+
+    error = assert_raises(Starmap::SpecError) { load({}) }
+    assert_equal ["starmap::spec::pointer_declares"], error.problems.map(&:code)
+  end
+
+  def test_a_pointer_with_a_key_a_pointer_does_not_take_is_refused
+    File.write(File.join(@root, "real.toml"), SPEC)
+    File.write(@spec, %(spec = "real.toml"\nunknown = 1\nsrc = ["app"]\ndotenv = ".env"\n\n[tool.codegen]\nname = "x"\n))
+
+    error = assert_raises(Starmap::SpecError) { load({}) }
+    assert_equal ["starmap::spec::unknown_field"], error.problems.map(&:code)
+  end
+
+  def test_a_pointer_with_an_empty_path_is_refused
+    File.write(@spec, %(spec = ""\n))
+
+    error = assert_raises(Starmap::SpecError) { load({}) }
+    assert_equal ["starmap::spec::bad_value"], error.problems.map(&:code)
+  end
 end

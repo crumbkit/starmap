@@ -13,6 +13,7 @@ module Starmap
     UNSET_FIELDS = %w[local default production].freeze
     MODE_FIELDS = %w[variable production].freeze
     GROUP_FIELDS = %w[variables].freeze
+    POINTER_FIELDS = %w[spec src dotenv tool].freeze
     DECLARING_FIELDS = %w[mode enumerations groups families variables].freeze
     BIND_KINDS = %w[provided path one-password].freeze
     PLACEHOLDERS = %w[workspace checkout home].freeze
@@ -41,13 +42,33 @@ module Starmap
     # Stands for a field that did not parse, where nil means it is absent.
     FAILED = Object.new.freeze
 
-    # Returns the path that a pointer file names, or nil for a file that is
-    # not a pointer or does not parse.
-    def self.pointer_target(text)
-      root = PerfectTOML.parse(text.dup.force_encoding(Encoding::UTF_8))
-      root["spec"] if root.is_a?(Hash) && root["spec"].is_a?(String)
-    rescue PerfectTOML::ParseError, ArgumentError
-      nil
+    # Parses a pointer file, as the Rust crate's Pointer::parse does. It
+    # returns the path that +spec+ names, or nil for a file without +spec+,
+    # and raises SpecError when the pointer also declares variables, holds a
+    # key a pointer does not take, or gives a path that is not text or is
+    # empty.
+    def self.pointer(text)
+      new.pointer(text)
+    end
+
+    def pointer(text)
+      @problems = []
+      root = toml(text) or raise SpecError, @problems
+      return nil unless root.key?("spec")
+
+      declares_too?(root)
+      root.each_key do |key|
+        next if POINTER_FIELDS.include?(key) || DECLARING_FIELDS.include?(key)
+
+        report(:unknown_field, "the pointer has the field `#{key}`, and it takes #{POINTER_FIELDS.join(", ")}")
+      end
+      target = pointer_path(root_field(root, "spec"))
+      pointer_paths(root_field(root, "src")) if root.key?("src")
+      pointer_path(root_field(root, "dotenv")) if root.key?("dotenv")
+      tools(root_field(root, "tool")) if root.key?("tool")
+      raise SpecError, @problems unless @problems.empty?
+
+      target
     end
 
     def parse(text)
@@ -118,15 +139,38 @@ module Starmap
     end
 
     def points(root)
+      return if declares_too?(root)
+
+      report(:pointer_chain, "the file has `spec`, so it points to another file, and starmap reads variables " \
+                             "only from a file that declares them")
+    end
+
+    # Reports each key of a pointer that declares, and returns whether there
+    # was one.
+    def declares_too?(root)
       found = root.keys.select { |key| DECLARING_FIELDS.include?(key) }
       found.each do |key|
         report(:pointer_declares, "the file has `spec`, so it points to another file, and it has `#{key}` too, " \
                                   "and a file either points or declares variables")
       end
-      return unless found.empty?
+      !found.empty?
+    end
 
-      report(:pointer_chain, "the file has `spec`, so it points to another file, and starmap reads variables " \
-                             "only from a file that declares them")
+    def pointer_path(field)
+      text = string(field) or return nil
+      return text unless text.empty?
+
+      report(:bad_value, "`#{field.path}` is empty, and it takes a path")
+      nil
+    end
+
+    def pointer_paths(field)
+      unless field.item.is_a?(Array)
+        wrong_type(field, "a list of paths")
+        return
+      end
+      bad = field.item.find { |value| !value.is_a?(String) || value.empty? }
+      report(:bad_value, "`#{field.path}` holds #{bad.inspect}, and each entry is a path") unless bad.nil?
     end
 
     def known(table, path, fields)

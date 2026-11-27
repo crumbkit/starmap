@@ -54,7 +54,7 @@ module Starmap
     # does not list.
     def [](name)
       name = name.to_s
-      raise Undeclared, "starmap.toml does not declare #{name}" unless declared?(name)
+      raise Undeclared, "starmap.toml does not declare #{name}" unless @spec.declared?(name)
 
       @values[name]
     end
@@ -68,13 +68,6 @@ module Starmap
     end
 
     private
-
-    def declared?(name)
-      return true if @spec.variable(name)
-
-      family = @spec.family_of(name)
-      family&.lists?(family.key_of(name)) || false
-    end
 
     def value(held)
       case held.kind

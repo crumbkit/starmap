@@ -7,12 +7,14 @@ module Starmap
   # matched. It scans app/, lib/ and config/ for literal reads of ENV, such
   # as ENV["NAME"] and ENV.fetch("NAME"), and reports each name that
   # starmap.toml does not declare. It sees only a name written as a string
-  # literal, so a read whose name is built at run time is not reported.
+  # literal, so a read whose name is built at run time is not reported. A
+  # read after a # comment marker is skipped, and a file that is not valid
+  # UTF-8 is scanned with each invalid byte replaced by U+FFFD.
   module Testing
     DIRECTORIES = %w[app lib config].freeze
     EXTENSIONS = %w[.rb .rake .erb .yml .yaml].freeze
     READ = /(?<![\w:])(?:::)?ENV(?:\[\s*(?<open>["'])(?<index>[A-Za-z_][A-Za-z0-9_]*)\k<open>\s*\]|
-             \.(?:fetch|key\?|has_key\?|include\?|member\?)\(\s*(?<quote>["'])(?<call>[A-Za-z_][A-Za-z0-9_]*)\k<quote>)/x
+             \.(?:fetch|key\?|has_key\?|include\?|member\?)(?:\(\s*|[ \t]+)(?<quote>["'])(?<call>[A-Za-z_][A-Za-z0-9_]*)\k<quote>)/x
 
     # A read of +name+ at +line+ of +path+, which is relative to the root.
     Read = Data.define(:path, :line, :name) do
@@ -29,7 +31,7 @@ module Starmap
     def undeclared_reads(root: Dir.pwd, spec: File.join(root, "starmap.toml"), allow: [])
       spec = Spec.load(spec)
       files(root).flat_map do |path|
-        reads(root, path).reject { |read| allow.include?(read.name) || declared?(spec, read.name) }
+        reads(root, path).reject { |read| allow.include?(read.name) || spec.declared?(read.name) }
       end
     end
 
@@ -50,21 +52,28 @@ module Starmap
 
     def reads(root, path)
       relative = path.delete_prefix("#{root}/")
-      File.foreach(path, encoding: "UTF-8").with_index(1).flat_map do |line, number|
-        next [] if line.match?(/\A\s*#/)
-
-        line.to_enum(:scan, READ).map do
+      text = File.binread(path).force_encoding(Encoding::UTF_8).scrub("\uFFFD")
+      text.each_line.with_index(1).flat_map do |line, number|
+        code(line).to_enum(:scan, READ).map do
           match = Regexp.last_match
           Read.new(path: relative, line: number, name: match[:index] || match[:call])
         end
       end
     end
 
-    def declared?(spec, name)
-      return true if spec.variable(name)
-
-      family = spec.family_of(name)
-      family&.lists?(family.key_of(name)) || false
+    # The line up to its first # that is outside a quoted string.
+    def code(line)
+      quote = nil
+      line.each_char.with_index do |char, index|
+        if quote
+          quote = nil if char == quote && line[index - 1] != "\\"
+        elsif ["\"", "'"].include?(char)
+          quote = char
+        elsif char == "#"
+          return line[0, index]
+        end
+      end
+      line
     end
   end
 end

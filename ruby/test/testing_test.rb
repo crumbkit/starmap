@@ -75,4 +75,24 @@ class TestingTest < Minitest::Test
     assert_includes error.message, "app/shelf.rb:1 reads SHELF_HOST"
     assert_includes error.message, "app/shelf.rb:2 reads SHELF_USER"
   end
+
+  def test_a_call_without_parentheses_is_a_read
+    write("app/shelf.rb", %(ENV.fetch "SHELF_HOST"\nENV.key? 'SHELF_USER'\n))
+
+    assert_equal %w[SHELF_HOST SHELF_USER], Starmap::Testing.undeclared_reads(root: @root).map(&:name)
+  end
+
+  def test_a_read_in_a_trailing_comment_is_skipped_and_a_hash_inside_a_string_is_not_a_comment
+    write("app/shelf.rb", %(port = 1 # ENV["SHELF_HOST"] once\nlabel = "#1"; ENV["SHELF_USER"]\n))
+
+    assert_equal ["SHELF_USER"], Starmap::Testing.undeclared_reads(root: @root).map(&:name)
+  end
+
+  def test_a_file_that_is_not_utf8_is_scanned_with_invalid_bytes_replaced
+    write("lib/latin.rb", "name = \"caf\xE9\"\nENV[\"SHELF_HOST\"]\n".b)
+
+    assert_equal([["lib/latin.rb", 2, "SHELF_HOST"]], Starmap::Testing.undeclared_reads(root: @root).map do |read|
+      [read.path, read.line, read.name]
+    end)
+  end
 end

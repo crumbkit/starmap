@@ -71,11 +71,22 @@ module Starmap
       def initialize(source)
         raise ArgumentError, "the pattern has #{source.bytesize} bytes, and the limit is #{MAX_BYTES}" if source.bytesize > MAX_BYTES
 
-        Regexp.new(source)
         @source = source
-        @whole = Regexp.new("\\A(?:#{source})\\z")
+        @whole = Pattern.compile(source)
       rescue RegexpError => e
         raise ArgumentError, e.message
+      end
+
+      # Compiles the pattern alone, so that a pattern such as a)|(b cannot
+      # close the group that anchors it, and then anchored. Ruby's warnings
+      # are silenced, because the parser reports a pattern that is refused.
+      def self.compile(source)
+        verbose = $VERBOSE
+        $VERBOSE = nil
+        Regexp.new(source)
+        Regexp.new("\\A(?:#{source})\\z")
+      ensure
+        $VERBOSE = verbose
       end
 
       def check(text)

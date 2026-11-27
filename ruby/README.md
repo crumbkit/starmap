@@ -20,7 +20,9 @@ Starmap.load!
 
 `Starmap.load!` reads `starmap.toml` in the current directory, or the file
 that `path:` names. A pointer file is followed once, to the file its
-`spec` names. The gem reads `ENV` once, so a later change to `ENV` does not
+`spec` names. A pointer that also declares variables, or that holds a key
+other than `spec`, `src`, `dotenv` and `tool`, is refused with the codes
+starmap gives. The gem reads `ENV` once, so a later change to `ENV` does not
 change `Starmap.env`.
 
 When the environment does not fit the file, `Starmap.load!` raises one
@@ -91,21 +93,34 @@ end
 `allow:` lists names that the code may read without a declaration.
 `Starmap::Testing.undeclared_reads` returns the reads in place of raising.
 The scan sees only a name written as a string literal, so it does not
-report a read whose name is built at run time.
+report a read whose name is built at run time. It finds a call with or
+without parentheses, such as `ENV.fetch "NAME"`, and skips a read after a
+`#` that is outside a quoted string. A file that is not valid UTF-8 is
+scanned with each invalid byte replaced by U+FFFD.
 
 ## Conformance
 
 The gem's tests run every case in [conformance/](../conformance), which
-the Rust crate's tests also run. For each case the gem gives the same
+the Rust crate's tests also run. They also parse the 12 example specs in
+`crates/starmap/tests/example/` and check each of the 25 problem fixtures
+in `crates/starmap/tests/spec/` against the codes its `.txt` file lists, in
+order. For each case the gem gives the same
 problem codes, canonical form and digest, or the same mode, values and
 refusals. Run them with `bundle exec rake` in this directory, which also
 runs RuboCop.
 
-The URL serialization follows the WHATWG URL Standard for absolute URLs:
-the scheme in lower case, and for `http`, `https`, `ws`, `wss`, `ftp` and
-`file` the host in lower case, the default port left out and an empty path
-written as `/`. It does not apply the standard's rules for percent-encoding
-or for internationalized host names, so such a URL may reach `Starmap.env`
-spelled differently from the text `starmap run` gives the child. A pattern
-is compiled by Ruby's regular expressions, which accept the syntax that the
-Rust `regex` crate and RE2 share.
+The url type follows the WHATWG URL Standard only for the parts that
+applications use: the scheme in lower case, and for `http`, `https`, `ws`,
+`wss`, `ftp` and `file` the host in lower case, the default port left out
+and an empty path written as `/`. On other inputs the gem can accept or
+refuse a value differently from starmap, as well as spell it differently.
+It accepts `http://1.2.3.999/` and `http://[zz]/`, which starmap refuses.
+It refuses `http:example.com` and `http://a%41.example/`, which starmap
+accepts as `http://example.com/` and `http://aa.example/`. It keeps
+`http://0x7f.1/`, which starmap writes as `http://127.0.0.1/`. Under
+`starmap run` the child already receives the text starmap wrote, which the
+gem keeps as it is, so the difference matters only for an application that
+starts without `starmap run`. `test/url_test.rb` pins these differences.
+
+A pattern is compiled by Ruby's regular expressions, which accept the
+syntax that the Rust `regex` crate and RE2 share.
