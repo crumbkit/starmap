@@ -323,7 +323,7 @@ fn scan_dir(src: &Path, presence: Presence) -> Result<Scanned, SourceFailure> {
 /// unclosed bracket or string.
 fn lines_of_reads(text: &str) -> Result<Vec<Read>, proc_macro2::LexError> {
     let mut reads = Vec::new();
-    collect(TokenStream::from_str(text)?, &mut reads);
+    collect(TokenStream::from_str(text)?, &[], &mut reads);
     // A function's reads through its sources are added when its body is
     // reached, before the reads inside the body, so the reads are put
     // back in the order of their lines.
@@ -341,20 +341,24 @@ fn is_test_file(path: &Path) -> bool {
 
 /// Adds each read in `tokens`, and in every bracket inside them, to
 /// `reads`. It skips the item that follows `#[cfg(test)]`, and the rest of
-/// the stream after an inner `#![cfg(test)]`.
-fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
+/// the stream after an inner `#![cfg(test)]`. `bounds` holds the generic
+/// parameters that the `impl` blocks around `tokens` bound by a source.
+fn collect(tokens: TokenStream, bounds: &[source::Bound], reads: &mut Vec<Read>) {
     let mut before_previous: Option<TokenTree> = None;
     let mut previous: Option<TokenTree> = None;
     let mut reader = None;
     let mut bare_env = None;
     let mut in_test_item = false;
     let mut function = Function::None;
+    let mut block = Impl::None;
     for token in tokens {
         if in_test_item {
             in_test_item = !ends_item(&token);
             continue;
         }
-        function = function.next(&token, previous.as_ref(), reads);
+        function = function.next(&token, previous.as_ref(), bounds, reads);
+        let (next, inner) = block.next(&token, previous.as_ref());
+        block = next;
         if let TokenTree::Group(group) = &token
             && is_cfg_test(group)
         {
@@ -363,6 +367,7 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
                 previous = None;
                 bare_env = None;
                 function = Function::None;
+                block = Impl::None;
                 continue;
             }
             // An inner `#![cfg(test)]` makes the rest of its module test
@@ -395,7 +400,14 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
                     ClapEnv::Field => bare_env = Some(line),
                 }
             }
-            collect(group.stream(), reads);
+            match inner {
+                Some(inner) => {
+                    let mut all = bounds.to_vec();
+                    all.extend(inner);
+                    collect(group.stream(), &all, reads);
+                }
+                None => collect(group.stream(), bounds, reads),
+            }
         }
         // A bare `env` reads the name of the field that follows its
         // attribute, after any other attribute and a visibility.
@@ -436,34 +448,87 @@ enum Function {
     None,
     /// After the word `fn`, before the function's name.
     Named,
-    /// In the header of the function with this name: the tokens after the
-    /// name, up to the body.
-    Header(String, Vec<TokenTree>),
+    /// In the header of a function: the tokens after its name, up to the
+    /// body.
+    Header(Vec<TokenTree>),
 }
 
 impl Function {
     /// Returns the state after `token`, whose predecessor is `previous`, and
     /// adds the reads through the sources of a function whose body `token`
-    /// is to `reads`. A function type such as `fn(u8)` has no name, and a
-    /// declaration without a body ends at its semicolon.
-    fn next(self, token: &TokenTree, previous: Option<&TokenTree>, reads: &mut Vec<Read>) -> Self {
+    /// is to `reads`, with the generic parameters that `bounds` names as
+    /// sources. A function type such as `fn(u8)` has no name, and a
+    /// declaration without a body ends at its semicolon. The first block
+    /// after the name is taken as the body, so a block in the header, such
+    /// as the const generic argument of `-> Buf<{ N }>`, ends the header
+    /// early and the real body's reads through sources are missed.
+    fn next(
+        self,
+        token: &TokenTree,
+        previous: Option<&TokenTree>,
+        bounds: &[source::Bound],
+        reads: &mut Vec<Read>,
+    ) -> Self {
         match (self, token) {
-            (Self::Named, TokenTree::Ident(name)) => Self::Header(name.to_string(), Vec::new()),
-            (Self::Header(name, header), TokenTree::Group(body))
+            (Self::Named, TokenTree::Ident(_)) => Self::Header(Vec::new()),
+            (Self::Header(header), TokenTree::Group(body))
                 if body.delimiter() == Delimiter::Brace =>
             {
-                reads.extend(source::reads(&name, &header, body));
+                reads.extend(source::reads(&header, body, bounds));
                 Self::None
             }
-            (Self::Header(_, _), TokenTree::Punct(punct)) if punct.as_char() == ';' => Self::None,
-            (Self::Header(name, mut header), _) => {
+            (Self::Header(_), TokenTree::Punct(punct)) if punct.as_char() == ';' => Self::None,
+            (Self::Header(mut header), _) => {
                 header.push(token.clone());
-                Self::Header(name, header)
+                Self::Header(header)
             }
             (Self::None, TokenTree::Ident(word)) if word == "fn" && !is_punct(previous, '.') => {
                 Self::Named
             }
             (Self::None | Self::Named, _) => Self::None,
+        }
+    }
+}
+
+/// Where [`collect`] is in an `impl` block, whose generic parameters that
+/// are bounded by a source make sources in its methods.
+enum Impl {
+    /// Outside an `impl` block's header.
+    None,
+    /// In the header of an `impl` block: the tokens after the word `impl`,
+    /// up to the body.
+    Header(Vec<TokenTree>),
+}
+
+impl Impl {
+    /// Returns the state after `token`, whose predecessor is `previous`, and
+    /// the bounds of the block's header when `token` is the block's body.
+    /// The word `impl` after punctuation, as in `&impl Source` or
+    /// `-> impl Source`, is a type and starts no block.
+    fn next(
+        self,
+        token: &TokenTree,
+        previous: Option<&TokenTree>,
+    ) -> (Self, Option<Vec<source::Bound>>) {
+        match (self, token) {
+            (Self::Header(header), TokenTree::Group(body))
+                if body.delimiter() == Delimiter::Brace =>
+            {
+                (Self::None, Some(source::impl_bounds(&header)))
+            }
+            (Self::Header(_), TokenTree::Punct(punct)) if punct.as_char() == ';' => {
+                (Self::None, None)
+            }
+            (Self::Header(mut header), _) => {
+                header.push(token.clone());
+                (Self::Header(header), None)
+            }
+            (Self::None, TokenTree::Ident(word))
+                if word == "impl" && !matches!(previous, Some(TokenTree::Punct(_))) =>
+            {
+                (Self::Header(Vec::new()), None)
+            }
+            (Self::None, _) => (Self::None, None),
         }
     }
 }
