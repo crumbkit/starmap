@@ -5,7 +5,7 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
+## [0.4.3](https://github.com/crumbkit/starmap/compare/v0.4.2...v0.4.3) - 2026-11-27
 ### Added
 
 - Each row of `starmap explain --json --full` and of a tool's
