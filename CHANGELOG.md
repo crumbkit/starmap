@@ -38,9 +38,12 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file above the directory the link leads to.
 - `starmap check` and `starmap init` now count the variables that an
   application reads through a source of variables, such as
-  `source.get("APP_PORT")` in the body of `Config::from_source`, and in any
-  function whose parameter's type names a type or trait ending in `Source`,
-  directly or through a generic bound. Before, check reported such an
+  `source.get("APP_PORT")` in the body of `Config::from_source`. A
+  parameter is a source when its type names a type or trait ending in
+  `Source`, directly or through a generic bound of the function or of its
+  `impl` block, and when it is a function from `&str` to an `Option` or
+  `Result` of a `String`, whose call `get("APP_PORT")` reads the variable.
+  Before, check reported such an
   application as reading only the variables it read with `std::env::var`,
   and missed an undeclared variable read through the source.
 
