@@ -7,7 +7,10 @@ and runs an application's declared environment.
 the code reads through `std::env::var`, `std::env::var_os`, the
 `#[starmap("NAME")]` field attribute and clap's `env` argument, as in
 `#[arg(env = "NAME")]`, and writes `starmap.toml` with a guess for each
-one. A bare clap `env` reads the upper-case form of its field's name. Each
+one. A bare clap `env` reads the upper-case form of its field's name. The
+scan also counts a read through a source of variables, such as
+`source.get("NAME")` in a function whose parameter's type names a type
+or trait ending in `Source`, directly or through a generic bound. Each
 guessed value ends in `?`, and `starmap check` refuses the file until
 every guess is confirmed. `starmap check` reads
 `starmap.toml` in the current directory, or the file that `--spec` names,

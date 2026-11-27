@@ -1,0 +1,5 @@
+Mode: local, because the spec has no [mode] table.
+error: source-undeclared/src/config.rs:18 reads LEDGER_REGION, which source-undeclared/starmap.toml does not declare
+  help:  declare LEDGER_REGION in source-undeclared/starmap.toml
+  help:  stop reading LEDGER_REGION
+  code:  starmap::variable::undeclared

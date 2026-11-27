@@ -1,0 +1,65 @@
+# src reads LEDGER_LOG with std::env::var, and the other eight variables
+# through Config::from_source and the functions that take its source.
+
+[variables.LEDGER_LOG]
+purpose = "The level of the log that the api process writes."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.LEDGER_PORT]
+purpose = "The port the api process listens on."
+type = "port"
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.LEDGER_HOST]
+purpose = "The address the api process binds."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.LEDGER_DATABASE_URL]
+purpose = "The database that holds the ledger."
+type = "url"
+unset = "required"
+show = "shown"
+source = "setting"
+
+[variables.LEDGER_TIMEOUT_SECONDS]
+purpose = "How many seconds a request may take before the api process ends it."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.LEDGER_POOL_SIZE]
+purpose = "How many database connections the api process keeps open."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.LEDGER_TLS_CERT]
+purpose = "The path of the certificate the api process serves."
+type = "string"
+unset = "optional"
+show = "shown"
+source = "setting"
+
+[variables.LEDGER_TLS_KEY]
+purpose = "The path of the private key of that certificate."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "setting"
+
+[variables.LEDGER_ADMIN_TOKEN]
+purpose = "The token that the admin routes require."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "setting"
