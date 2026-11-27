@@ -29,6 +29,14 @@ binaries for Apple silicon macOS, Linux and Windows.
 An application depends on `starmap` with its `derive` feature, and on
 `starmap-test` as a dev-dependency.
 
+## Ruby
+
+The [`starmap` gem](ruby) reads the same `starmap.toml` in a Ruby
+application. `Starmap.load!` checks the environment once at boot and raises
+one error that lists every finding, and the application reads typed values
+from `Starmap.env`. Its tests run every case in `conformance/`. The gem is
+not published to a registry.
+
 ## Command-line flags
 
 An application that takes a value from a flag or a variable often lets clap

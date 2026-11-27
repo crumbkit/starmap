@@ -20,6 +20,7 @@ cargo +1.89.0 check --locked --workspace --all-targets --all-features
 cargo xtask check
 ```
 
+- A change under `ruby/` also passes `bundle exec rake` there.
 - Write the test first, named as a sentence (BASE-36).
 - Give each new dependency a reason in `Cargo.toml` (BASE-23).
 - Dated decision records are frozen except Status and Children (ADR-0001).
