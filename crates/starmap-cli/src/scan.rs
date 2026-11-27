@@ -33,6 +33,11 @@
 //! between its words. The place of either read is the line of the word
 //! `env`.
 //!
+//! The scan also counts a read through a source of variables, such as
+//! `source.get("SHELF_PORT")` in the body of `Config::from_source(source:
+//! &impl Source)`, which the module [`source`] describes with what it
+//! misses.
+//!
 //! It looks inside every bracket, so a read
 //! inside a macro call counts, and comments are not tokens, so a name in a
 //! comment does not. A word after a `.` is a method of some other type, so
@@ -89,6 +94,7 @@ use starmap::Name;
 use crate::codes::SOURCE_UNREADABLE;
 use crate::files;
 
+mod source;
 #[cfg(test)]
 mod tests;
 
@@ -318,6 +324,10 @@ fn scan_dir(src: &Path, presence: Presence) -> Result<Scanned, SourceFailure> {
 fn lines_of_reads(text: &str) -> Result<Vec<Read>, proc_macro2::LexError> {
     let mut reads = Vec::new();
     collect(TokenStream::from_str(text)?, &mut reads);
+    // A function's reads through its sources are added when its body is
+    // reached, before the reads inside the body, so the reads are put
+    // back in the order of their lines.
+    reads.sort_by_key(|read| read.line);
     Ok(reads)
 }
 
@@ -338,11 +348,13 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
     let mut reader = None;
     let mut bare_env = None;
     let mut in_test_item = false;
+    let mut function = Function::None;
     for token in tokens {
         if in_test_item {
             in_test_item = !ends_item(&token);
             continue;
         }
+        function = function.next(&token, previous.as_ref(), reads);
         if let TokenTree::Group(group) = &token
             && is_cfg_test(group)
         {
@@ -350,6 +362,7 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
                 in_test_item = true;
                 previous = None;
                 bare_env = None;
+                function = Function::None;
                 continue;
             }
             // An inner `#![cfg(test)]` makes the rest of its module test
@@ -413,6 +426,45 @@ fn collect(tokens: TokenStream, reads: &mut Vec<Read>) {
             _ => None,
         };
         before_previous = previous.replace(token);
+    }
+}
+
+/// Where [`collect`] is in a function item, whose body [`source::reads`]
+/// reads for the reads through its sources.
+enum Function {
+    /// Outside a function's header.
+    None,
+    /// After the word `fn`, before the function's name.
+    Named,
+    /// In the header of the function with this name: the tokens after the
+    /// name, up to the body.
+    Header(String, Vec<TokenTree>),
+}
+
+impl Function {
+    /// Returns the state after `token`, whose predecessor is `previous`, and
+    /// adds the reads through the sources of a function whose body `token`
+    /// is to `reads`. A function type such as `fn(u8)` has no name, and a
+    /// declaration without a body ends at its semicolon.
+    fn next(self, token: &TokenTree, previous: Option<&TokenTree>, reads: &mut Vec<Read>) -> Self {
+        match (self, token) {
+            (Self::Named, TokenTree::Ident(name)) => Self::Header(name.to_string(), Vec::new()),
+            (Self::Header(name, header), TokenTree::Group(body))
+                if body.delimiter() == Delimiter::Brace =>
+            {
+                reads.extend(source::reads(&name, &header, body));
+                Self::None
+            }
+            (Self::Header(_, _), TokenTree::Punct(punct)) if punct.as_char() == ';' => Self::None,
+            (Self::Header(name, mut header), _) => {
+                header.push(token.clone());
+                Self::Header(name, header)
+            }
+            (Self::None, TokenTree::Ident(word)) if word == "fn" && !is_punct(previous, '.') => {
+                Self::Named
+            }
+            (Self::None | Self::Named, _) => Self::None,
+        }
     }
 }
 

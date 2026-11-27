@@ -36,6 +36,13 @@ the crates follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `clippy.toml` that Clippy reads for a workspace member whose directory
   is a symbolic link, which is the file above the link, in place of the
   file above the directory the link leads to.
+- `starmap check` and `starmap init` now count the variables that an
+  application reads through a source of variables, such as
+  `source.get("APP_PORT")` in the body of `Config::from_source`, and in any
+  function whose parameter's type names a type or trait ending in `Source`,
+  directly or through a generic bound. Before, check reported such an
+  application as reading only the variables it read with `std::env::var`,
+  and missed an undeclared variable read through the source.
 
 ## [0.4.1](https://github.com/crumbkit/starmap/compare/v0.4.0...v0.4.1) - 2026-11-16### Added
 

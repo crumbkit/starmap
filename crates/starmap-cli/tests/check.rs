@@ -58,6 +58,28 @@ fn a_read_of_a_member_is_declared_and_a_read_of_an_unlisted_key_is_undeclared() 
 }
 
 #[test]
+fn reads_through_config_from_source_and_the_functions_that_take_its_source_all_count() {
+    starmap(&["check", "--spec", "source/starmap.toml"])
+        .code(0)
+        .stdout_eq("source/starmap.toml declares 9 variables, and source/src reads all 9.\n")
+        .stderr_eq("Mode: local, because the spec has no [mode] table.\n");
+    let run = starmap(&["check", "--spec", "source/starmap.toml", "--json"]).code(0);
+    let document: Value = serde_json::from_slice(&run.get_output().stdout).unwrap();
+    assert_eq!(document["data"]["read"], 9);
+    assert_eq!(document["data"]["undeclared"], json!([]));
+}
+
+#[test]
+fn an_undeclared_read_through_config_from_source_is_a_failure_at_its_place() {
+    starmap(&["check", "--spec", "source-undeclared/starmap.toml"])
+        .code(1)
+        .stdout_eq(
+            "source-undeclared/starmap.toml declares 1 variable, and source-undeclared/src reads it.\n",
+        )
+        .stderr_eq(file!["golden/check-source-undeclared.stderr"]);
+}
+
+#[test]
 fn a_clap_env_attribute_is_a_read_that_passes_when_declared_and_fails_when_not() {
     starmap(&["check", "--spec", "clap/starmap.toml"])
         .code(1)
