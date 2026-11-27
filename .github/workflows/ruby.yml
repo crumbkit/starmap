@@ -1,0 +1,51 @@
+# The Ruby lane. It runs RuboCop and the tests of the starmap gem in ruby/
+# on each pull request and each push to main, on the oldest Ruby the gem
+# supports and on the newest. The gem's conformance test reads the cases
+# in conformance/, so a pull request that changes a case or the Rust
+# parser's behaviour runs it too. The map's `lanes` decision in
+# rust-standards.toml records the lane. Nothing waits for it.
+name: Ruby
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Each job grants only the permissions it needs.
+permissions: {}
+
+# A new push cancels the run for the previous push, because the newer run
+# checks the same changes and more.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruby:
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.3", "4.0"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # actions/checkout reads the repository.
+    defaults:
+      run:
+        working-directory: ruby
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # setup-ruby installs the gems that Gemfile.lock pins, with the
+      # Bundler version the lock names, and caches them.
+      - uses: ruby/setup-ruby@145243922b4465b78e04dd66294782c7de45901f # v1.345.0
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          working-directory: ruby
+          bundler-cache: true
+      - name: rubocop
+        run: bundle exec rake rubocop
+      - name: tests
+        run: bundle exec rake test

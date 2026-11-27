@@ -28,3 +28,12 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+  - package-ecosystem: bundler
+    directory: /ruby
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      bundler:
+        patterns: ["*"]

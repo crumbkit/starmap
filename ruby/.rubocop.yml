@@ -1,0 +1,35 @@
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: enable
+  SuggestExtensions: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+Layout/LineLength:
+  Max: 140
+
+# The parser, the check and the canonical form mirror the Rust crate's
+# code function for function, so that a reader can compare the order in
+# which each reports its problems and writes its output. Their methods are
+# as long as the rules they follow.
+Metrics:
+  Exclude:
+    - lib/starmap/parser.rb
+    - lib/starmap/check.rb
+    - lib/starmap/canonical.rb
+    - test/**/*.rb
+
+Metrics/MethodLength:
+  Max: 20
+
+Metrics/AbcSize:
+  Max: 25
+
+# Types holds one small class for each type of the type field.
+Metrics/ModuleLength:
+  Exclude:
+    - lib/starmap/types.rb
